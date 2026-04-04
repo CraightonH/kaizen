@@ -900,8 +900,8 @@ Plugin contract tests (run on every commit — these are the quality gate):
 | 2 — Plugin API types | ✅ Done | `src/types/plugin.ts` — `KaizenPlugin`, `PluginContext`, `Executor`, etc. |
 | 3 — Core runtime | ✅ Done | `src/core/` — loader, event bus, tool registry, bootstrap. `bun run test:core` 9/9 |
 | 4 — Executor-as-plugin refactor | ✅ Done | `core-executor-anthropic` + `core-executor-openai` (scaffold). `registerExecutor()` + `ctx.runtime.executor`. `bun run test:core` 12/12. |
-| 5 — `core-lifecycle` | ⬜ Todo | Session loop, default events, `ctx.runtime.executor` |
-| 6 — `core-ui-terminal` | ⬜ Todo | stdin/stdout I/O plugin |
+| 5 — UI provider + event architecture | ✅ Done | `core-events` (versioned vocabulary + payload types). `core-ui-terminal` (`UiProvider`/`accept()`). `core-lifecycle` (transport-agnostic session loop). Open-world events; web UI is a drop-in. `bun run test:core` 8/8. |
+| 6 — `core-ui-terminal` | ✅ Done | Implemented in Step 5 |
 | 7 — `core-cli` | ⬜ Todo | Phase 1 CLI introspection engine |
 | 8 — End-to-end MVP | ⬜ Todo | `kaizen run` with all four plugins |
 | 9 — `kaizen-plugin-noop` | ⬜ Todo | External API contract test |

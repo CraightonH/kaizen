@@ -10,6 +10,9 @@
         "ai": "^6.0.146",
         "ajv": "^8.18.0",
         "core-cli": "workspace:*",
+        "core-events": "workspace:*",
+        "core-executor-anthropic": "workspace:*",
+        "core-executor-openai": "workspace:*",
         "core-lifecycle": "workspace:*",
         "core-ui-terminal": "workspace:*",
       },
@@ -20,6 +23,30 @@
     },
     "plugins/core-cli": {
       "name": "core-cli",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.4.0",
+      },
+    },
+    "plugins/core-events": {
+      "name": "core-events",
+      "version": "1.0.0",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.4.0",
+      },
+    },
+    "plugins/core-executor-anthropic": {
+      "name": "core-executor-anthropic",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.4.0",
+      },
+    },
+    "plugins/core-executor-openai": {
+      "name": "core-executor-openai",
       "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "latest",
@@ -71,6 +98,12 @@
     "bun-types": ["bun-types@1.3.11", "", { "dependencies": { "@types/node": "*" } }, "sha512-1KGPpoxQWl9f6wcZh57LvrPIInQMn2TQ7jsgxqpRzg+l0QPOFvJVH7HmvHo/AiPgwXy+/Thf6Ov3EdVn1vOabg=="],
 
     "core-cli": ["core-cli@workspace:plugins/core-cli"],
+
+    "core-events": ["core-events@workspace:plugins/core-events"],
+
+    "core-executor-anthropic": ["core-executor-anthropic@workspace:plugins/core-executor-anthropic"],
+
+    "core-executor-openai": ["core-executor-openai@workspace:plugins/core-executor-openai"],
 
     "core-lifecycle": ["core-lifecycle@workspace:plugins/core-lifecycle"],
 

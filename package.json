@@ -26,6 +26,7 @@
     "ai": "^6.0.146",
     "ajv": "^8.18.0",
     "core-cli": "workspace:*",
+    "core-events": "workspace:*",
     "core-executor-anthropic": "workspace:*",
     "core-executor-openai": "workspace:*",
     "core-lifecycle": "workspace:*",

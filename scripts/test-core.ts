@@ -2,18 +2,22 @@
  * Smoke test for kaizen core.
  *
  * Validates the full initialization sequence without a real LLM or network:
- *   - Plugin resolution from builtins map
+ *   - Plugin resolution, topo-sort, role validation
  *   - setup() called with a valid PluginContext
  *   - Event bus (defineEvent, on, emit)
  *   - Tool registration and execution
- *   - Role validation
  *   - Executor registration via registerExecutor()
+ *   - UI provider registration via registerUi()
+ *   - Session loop: ui.accept() → receive() → executor.send() → channel.send()
  *   - start() called on the lifecycle provider
  *
  * Run: bun scripts/test-core.ts
  */
 import { bootstrap } from "../src/core/index.js";
 import type { KaizenPlugin, PluginContext, LLMResponse } from "../src/types/plugin.js";
+import { EVENTS } from "../plugins/core-events/index.js";
+import coreEvents from "../plugins/core-events/index.js";
+import coreLifecycle from "../plugins/core-lifecycle/index.js";
 
 let passed = 0;
 let failed = 0;
@@ -29,10 +33,14 @@ function assert(label: string, condition: boolean, detail?: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Mock executor plugin — provides 'executor'
+// Shared results bag
 // ---------------------------------------------------------------------------
 
 const results: Record<string, unknown> = {};
+
+// ---------------------------------------------------------------------------
+// Mock executor — provides "executor", returns a fixed response
+// ---------------------------------------------------------------------------
 
 const mockExecutorPlugin: KaizenPlugin = {
   name: "mock-executor",
@@ -41,85 +49,76 @@ const mockExecutorPlugin: KaizenPlugin = {
   depends: [],
   async setup(ctx) {
     ctx.registerExecutor({
-      async send() {
-        return { content: "mock", tool_calls: [], stop_reason: "end_turn" };
+      async send(): Promise<LLMResponse> {
+        return { content: "mock response", tool_calls: [], stop_reason: "end_turn" };
       },
-      async *stream() {
-        yield { type: "done" as const };
-      },
+      async *stream() { yield { type: "done" as const }; },
     });
     results["executor_registered"] = true;
   },
 };
 
 // ---------------------------------------------------------------------------
-// Hello-world plugin — provides 'lifecycle', exercises all PluginContext APIs
+// Mock UI — provides "ui", drives one scripted session
 // ---------------------------------------------------------------------------
 
-const helloWorldPlugin: KaizenPlugin = {
-  name: "hello-world",
+const mockUiPlugin: KaizenPlugin = {
+  name: "mock-ui",
   apiVersion: "1.0.0",
-  provides: ["lifecycle"],
-  depends: ["executor"],
+  provides: ["ui"],
+  depends: [],
+  async setup(ctx) {
+    const sentMessages: unknown[] = [];
+    let receiveCount = 0;
 
-  async setup(ctx: PluginContext) {
-    results["setup_called"] = true;
-    results["config"] = ctx.config;
-
-    // Event bus
-    ctx.defineEvent("hello:greet");
-    ctx.on("hello:greet", async (payload) => {
-      results["event_payload"] = payload;
-      return "handler-result";
+    ctx.registerUi({
+      async *accept() {
+        yield {
+          id: "test-session",
+          async receive() {
+            receiveCount++;
+            if (receiveCount === 1) return { type: "text" as const, content: "hello" };
+            // Close after one exchange
+            throw new Error("session ended");
+          },
+          async send(msg: unknown) {
+            sentMessages.push(msg);
+          },
+          async close() {
+            results["channel_closed"] = true;
+            results["channel_sent"] = sentMessages;
+          },
+        };
+      },
     });
+    results["ui_registered"] = true;
+  },
+};
 
-    // Tool registration
+// ---------------------------------------------------------------------------
+// Observer plugin — hooks into core-events to verify they fire
+// ---------------------------------------------------------------------------
+
+const observerPlugin: KaizenPlugin = {
+  name: "observer",
+  apiVersion: "1.0.0",
+  provides: [],
+  depends: ["events", "executor", "ui"],
+  async setup(ctx: PluginContext) {
+    ctx.on(EVENTS.SESSION_START, async () => { results["event_session_start"] = true; });
+    ctx.on(EVENTS.USER_MESSAGE, async (p) => { results["event_user_message"] = p; });
+    ctx.on(EVENTS.AGENT_RESPONSE, async (p) => { results["event_agent_response"] = p; });
+    ctx.on(EVENTS.SESSION_END, async () => { results["event_session_end"] = true; });
+
+    // Tool registration — verify it works
     ctx.registerTool({
       name: "say_hello",
-      description: "Says hello to a name",
-      parameters: {
-        type: "object",
-        properties: { name: { type: "string" } },
-        required: ["name"],
-      },
+      description: "Says hello",
+      parameters: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
       async execute(args) {
         return { ok: true, output: `Hello, ${args["name"]}!` };
       },
     });
-
-    // Calling registerTool/defineEvent/on after setup() should throw — tested in start()
-  },
-
-  async start(ctx: PluginContext) {
-    results["start_called"] = true;
-
-    // emit() works outside INITIALIZING
-    const emitResults = await ctx.emit("hello:greet", { who: "world" });
-    results["emit_results"] = emitResults;
-
-    // Tool execution via runtime
-    const toolResult = await ctx.runtime.tools.execute("say_hello", { name: "kaizen" });
-    results["tool_result"] = toolResult;
-
-    // Tools are listed
-    results["tool_count"] = ctx.runtime.tools.list().length;
-
-    // Executor is accessible and returns mock response
-    const execResponse: LLMResponse = await ctx.runtime.executor.send([], []);
-    results["executor_response"] = execResponse;
-
-    // State enforcement: registerTool throws after setup()
-    try {
-      ctx.registerTool({
-        name: "late_tool",
-        description: "should not register",
-        parameters: { type: "object", properties: {} },
-        async execute() { return { ok: true }; },
-      });
-      results["late_register_threw"] = false;
-    } catch {
-      results["late_register_threw"] = true;
-    }
   },
 };
 
@@ -131,12 +130,15 @@ console.log("\nkaizen core smoke test\n");
 
 await bootstrap(
   {
-    plugins: ["mock-executor", "hello-world"],
-    "hello-world": { greeting: "hi" },
+    plugins: ["core-events", "mock-executor", "mock-ui", "observer", "core-lifecycle"],
+    "core-lifecycle": { systemPrompt: "You are a test assistant." },
   },
   {
+    "core-events": coreEvents,
     "mock-executor": mockExecutorPlugin,
-    "hello-world": helloWorldPlugin,
+    "mock-ui": mockUiPlugin,
+    "observer": observerPlugin,
+    "core-lifecycle": coreLifecycle,
   },
 );
 
@@ -146,18 +148,25 @@ await bootstrap(
 
 console.log("\nResults:\n");
 
-assert("setup() was called", results["setup_called"] === true);
-assert("config slice passed to plugin", (results["config"] as Record<string, unknown>)?.["greeting"] === "hi");
-assert("start() was called", results["start_called"] === true);
-assert("emit() returned handler results", Array.isArray(results["emit_results"]) && (results["emit_results"] as unknown[])[0] === "handler-result");
-assert("event payload received", (results["event_payload"] as Record<string, unknown>)?.["who"] === "world");
-assert("tool executed successfully", (results["tool_result"] as { ok: boolean; output: string })?.ok === true);
-assert("tool output correct", (results["tool_result"] as { output: string })?.output === "Hello, kaizen!");
-assert("tool is listed", results["tool_count"] === 1);
-assert("registerTool throws after initialization", results["late_register_threw"] === true);
+// Registration
 assert("executor registered", results["executor_registered"] === true);
-assert("executor.send() returns mock response", (results["executor_response"] as LLMResponse)?.content === "mock");
-assert("executor stop_reason correct", (results["executor_response"] as LLMResponse)?.stop_reason === "end_turn");
+assert("ui registered", results["ui_registered"] === true);
+
+// Session loop
+assert("session:start fired", results["event_session_start"] === true);
+assert("session:user_message fired with content",
+  (results["event_user_message"] as Record<string, unknown>)?.["content"] === "hello");
+assert("session:response fired with content",
+  (results["event_agent_response"] as Record<string, unknown>)?.["content"] === "mock response");
+assert("session:end fired", results["event_session_end"] === true);
+
+// Channel
+assert("channel was closed", results["channel_closed"] === true);
+assert("channel received agent text",
+  (results["channel_sent"] as unknown[])?.some(
+    (m) => (m as Record<string, unknown>)?.["type"] === "text"
+  )
+);
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

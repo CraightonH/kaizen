@@ -2,6 +2,7 @@ import type { PluginContext, ToolDefinition } from "../types/plugin.js";
 import type { EventBus } from "./event-bus.js";
 import type { ToolRegistry } from "./tool-registry.js";
 import type { ExecutorRegistry } from "./executor-registry.js";
+import type { UiRegistry } from "./ui-registry.js";
 
 export type CoreState = "INITIALIZING" | "READY" | "RUNNING" | "CLOSED";
 
@@ -17,6 +18,7 @@ export function createPluginContext(
   eventBus: EventBus,
   toolRegistry: ToolRegistry,
   executorRegistry: ExecutorRegistry,
+  uiRegistry: UiRegistry,
   getState: () => CoreState,
 ): PluginContext {
   return {
@@ -36,6 +38,11 @@ export function createPluginContext(
       executorRegistry.register(impl, pluginName);
     },
 
+    registerUi(impl) {
+      assertInitializing(getState(), "register UI provider");
+      uiRegistry.register(impl, pluginName);
+    },
+
     defineEvent(name: string): void {
       assertInitializing(getState(), "define events");
       eventBus.defineEvent(name);
@@ -53,6 +60,9 @@ export function createPluginContext(
     runtime: {
       get executor() {
         return executorRegistry.get();
+      },
+      get ui() {
+        return uiRegistry.get();
       },
       tools: {
         list() {

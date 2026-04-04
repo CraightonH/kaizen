@@ -7,6 +7,7 @@ import { RESERVED_KEYS } from "./config.js";
 import type { EventBus } from "./event-bus.js";
 import type { ToolRegistry } from "./tool-registry.js";
 import type { ExecutorRegistry } from "./executor-registry.js";
+import type { UiRegistry } from "./ui-registry.js";
 import { createPluginContext, type CoreState } from "./context.js";
 
 // ---------------------------------------------------------------------------
@@ -154,6 +155,7 @@ export async function loadPlugins(
   eventBus: EventBus,
   toolRegistry: ToolRegistry,
   executorRegistry: ExecutorRegistry,
+  uiRegistry: UiRegistry,
 ): Promise<{ lifecycleProvider: KaizenPlugin; state: { current: CoreState } }> {
   const stateContainer = { current: "INITIALIZING" as CoreState };
   const getState = () => stateContainer.current;
@@ -200,6 +202,7 @@ export async function loadPlugins(
       eventBus,
       toolRegistry,
       executorRegistry,
+      uiRegistry,
       getState,
     );
 

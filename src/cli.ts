@@ -6,13 +6,13 @@
 import { bootstrap } from "./core/index.js";
 import { loadKaizenConfig } from "./core/config.js";
 
-// Static imports ensure built-ins are bundled into the compiled binary.
-// The loader checks this map before falling back to dynamic require().
+import coreEvents from "core-events";
 import coreLifecycle from "core-lifecycle";
 import coreUiTerminal from "core-ui-terminal";
 import coreCli from "core-cli";
 
 const builtins = {
+  [coreEvents.name]: coreEvents,
   [coreLifecycle.name]: coreLifecycle,
   [coreUiTerminal.name]: coreUiTerminal,
   [coreCli.name]: coreCli,

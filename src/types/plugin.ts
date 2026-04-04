@@ -4,6 +4,9 @@
  *
  * Versioning: PLUGIN_API_VERSION is the semver major version of this interface.
  * Core warns (but still loads) if a plugin's apiVersion major differs.
+ *
+ * Note: canonical event payload types (SessionContext, ToolCallContext, etc.)
+ * live in the `core-events` plugin, not here. Import them from `core-events`.
  */
 
 export const PLUGIN_API_VERSION = "1";
@@ -93,6 +96,39 @@ export interface ToolDefinition {
 }
 
 // ---------------------------------------------------------------------------
+// UI channel — typed message transport between agent and user
+// ---------------------------------------------------------------------------
+
+export type UserMessage =
+  | { type: "text"; content: string };
+
+export type AgentMessage =
+  | { type: "text";        content: string }
+  | { type: "text_delta";  content: string }
+  | { type: "tool_call";   name: string; args: Record<string, unknown> }
+  | { type: "tool_result"; name: string; ok: boolean; output: string }
+  | { type: "error";       message: string };
+
+export interface UiChannel {
+  readonly id: string;
+  /** Block until the user sends a message. Throws if the channel is closed. */
+  receive(): Promise<UserMessage>;
+  /** Send a message to the user. */
+  send(msg: AgentMessage): Promise<void>;
+  /** Cleanly close the channel from the agent side. */
+  close(): Promise<void>;
+}
+
+export interface UiProvider {
+  /**
+   * Yields one UiChannel per session.
+   * Terminal: yields one channel then stops.
+   * Web: yields a new channel per incoming connection, indefinitely.
+   */
+  accept(): AsyncIterable<UiChannel>;
+}
+
+// ---------------------------------------------------------------------------
 // Event bus
 // ---------------------------------------------------------------------------
 
@@ -110,21 +146,23 @@ export interface PluginContext {
   /** Register the executor implementation. Exactly one plugin must call this. */
   registerExecutor(impl: Executor): void;
 
-  // --- Event bus (INITIALIZING state only) ---------------------------------
-  // All three methods throw if called after setup() returns:
-  //   "Cannot register event handlers after initialization."
+  // --- UI registration (INITIALIZING state only) ---------------------------
+  /** Register the UI provider. Exactly one plugin must call this. */
+  registerUi(impl: UiProvider): void;
 
-  /** Declare a new event type. No-op with a warning if the name is already defined. */
+  // --- Event bus -----------------------------------------------------------
+
+  /** Declare a new event type. Advisory only — suppresses "unknown event" warnings. */
   defineEvent(name: string): void;
 
-  /** Subscribe to an event. May be called for events not yet defined; core warns on first emit. */
+  /** Subscribe to an event. */
   on(event: string, handler: EventHandler): void;
 
   /**
    * Fire an event. Calls ALL registered handlers serially, in initialization order.
    * Returns an array of every handler's return value (including undefined).
-   * Callers inspect the array to implement short-circuit logic — emit() never short-circuits itself.
    * If a handler throws, the error is logged and execution continues with the next handler.
+   * Emitting an undefined event warns but never blocks.
    */
   emit(event: string, payload?: unknown): Promise<unknown[]>;
 
@@ -137,11 +175,10 @@ export interface PluginContext {
   log(msg: string): void;
 
   // --- Runtime primitives --------------------------------------------------
-  // Convention: only the lifecycle plugin should drive the session loop via these.
-  // Other plugins should interact with the session through events.
 
   runtime: {
     executor: Executor;
+    ui: UiProvider;
     tools: {
       /** Returns all registered tools at the time of the call. */
       list(): ToolDefinition[];
@@ -177,10 +214,8 @@ export interface KaizenPlugin {
 
   /**
    * Called once during INITIALIZING. Register tools, define events, subscribe to events.
-   * Calling registerTool, defineEvent, on, or emit after setup() returns throws.
-   *
-   * If this plugin provides a required role and setup() throws: fatal startup error.
-   * Otherwise: error is logged, plugin is skipped, startup continues.
+   * Calling registerTool, defineEvent, on, or registerExecutor/registerUi after
+   * setup() returns throws.
    */
   setup(ctx: PluginContext): Promise<void>;
 
@@ -193,7 +228,7 @@ export interface KaizenPlugin {
 }
 
 // ---------------------------------------------------------------------------
-// Config schemas
+// Config schema
 // ---------------------------------------------------------------------------
 
 export interface KaizenConfig {
@@ -202,36 +237,3 @@ export interface KaizenConfig {
   /** Plugin config namespaces — key must match plugin.name */
   [pluginName: string]: unknown;
 }
-
-// ---------------------------------------------------------------------------
-// Default lifecycle event payload types
-// Exported here so plugin authors can import them for type-safe handlers.
-// These are the payloads emitted by core-lifecycle — not enforced by core itself.
-// ---------------------------------------------------------------------------
-
-export interface SessionContext {
-  sessionId: string;
-  config: KaizenConfig;
-}
-
-export interface ToolCallContext {
-  tool: string;
-  args: Record<string, unknown>;
-  sessionId: string;
-}
-
-export interface ResponseContext {
-  content: string;
-  sessionId: string;
-}
-
-export interface LoopContext {
-  response: LLMResponse;
-  sessionId: string;
-}
-
-/** Returned by session:loop handlers to control the session loop. */
-export type LoopSignal =
-  | { type: "continue"; prompt: string }
-  | { type: "yield" }
-  | { type: "end" };

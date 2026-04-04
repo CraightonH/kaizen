@@ -2,6 +2,7 @@ import type { KaizenConfig } from "../types/plugin.js";
 import { EventBus } from "./event-bus.js";
 import { ToolRegistry } from "./tool-registry.js";
 import { ExecutorRegistry } from "./executor-registry.js";
+import { UiRegistry } from "./ui-registry.js";
 import { loadPlugins, type Builtins } from "./loader.js";
 import { createPluginContext } from "./context.js";
 
@@ -21,6 +22,7 @@ export async function bootstrap(
   const eventBus = new EventBus();
   const toolRegistry = new ToolRegistry();
   const executorRegistry = new ExecutorRegistry();
+  const uiRegistry = new UiRegistry();
 
   const { lifecycleProvider, state } = await loadPlugins(
     kaizenConfig,
@@ -28,9 +30,9 @@ export async function bootstrap(
     eventBus,
     toolRegistry,
     executorRegistry,
+    uiRegistry,
   );
 
-  // Build a context for the lifecycle provider to use during start()
   const lifecycleConfig =
     (kaizenConfig[lifecycleProvider.name] as Record<string, unknown> | undefined) ?? {};
   const ctx = createPluginContext(
@@ -39,6 +41,7 @@ export async function bootstrap(
     eventBus,
     toolRegistry,
     executorRegistry,
+    uiRegistry,
     () => state.current,
   );
 
