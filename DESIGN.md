@@ -901,7 +901,7 @@ Plugin contract tests (run on every commit — these are the quality gate):
 | 3 — Core runtime | ✅ Done | `src/core/` — loader, event bus, tool registry, bootstrap. `bun run test:core` 9/9 |
 | 4 — Executor-as-plugin refactor | ✅ Done | `core-executor-anthropic` + `core-executor-openai` (scaffold). `registerExecutor()` + `ctx.runtime.executor`. `bun run test:core` 12/12. |
 | 5 — UI provider + event architecture | ✅ Done | `core-events` (versioned vocabulary + payload types). `core-ui-terminal` (`UiProvider`/`accept()`). `core-lifecycle` (transport-agnostic session loop). Open-world events; web UI is a drop-in. `bun run test:core` 8/8. |
-| 6 — `core-executor-debug` | ✅ Done | Interactive executor — prints messages/tools to stderr, reads LLM response from stdin. Sequential stdin sharing with `core-ui-terminal`. |
+| 6 — Executors + plugins + harness system | ✅ Done | `core-executor-debug` (interactive, event log, shared stdin). `core-executor-shell` (bash passthrough). `kaizen-plugin-timestamps` (first third-party-style observer plugin). Harness system: `harnesses/` dir, `--harness <name>` flag, `extends` in `kaizen.json`, `mergeConfigs()`. `core-ui-terminal` prompt/responsePrefix configurable. |
 | 7 — `core-cli` | ⬜ Todo | Phase 1 CLI introspection engine |
 | 8 — End-to-end MVP | ⬜ Todo | `kaizen run` with all four plugins |
 | 9 — `kaizen-plugin-noop` | ⬜ Todo | External API contract test |
