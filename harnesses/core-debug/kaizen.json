@@ -1,0 +1,15 @@
+{
+  "plugins": [
+    "core-events",
+    "core-executor-debug",
+    "kaizen-plugin-timestamps",
+    "core-ui-terminal",
+    "core-lifecycle"
+  ],
+  "core-executor-debug": {
+    "color": true
+  },
+  "core-ui-terminal": {
+    "responsePrefix": "\nagent: "
+  }
+}

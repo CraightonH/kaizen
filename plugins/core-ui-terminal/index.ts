@@ -1,29 +1,25 @@
-import * as readline from "readline";
 import { randomUUID } from "crypto";
 import type { KaizenPlugin, UiChannel, UserMessage, AgentMessage } from "../../src/types/plugin.js";
+import { readStdinLine } from "../../src/core/stdin.js";
 
-function createTerminalChannel(): UiChannel {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: false,
-  });
-
+function createTerminalChannel(opts: { prompt: string; responsePrefix: string }): UiChannel {
   return {
     id: randomUUID(),
 
-    receive(): Promise<UserMessage> {
-      return new Promise((resolve, reject) => {
-        rl.once("line", (line) => resolve({ type: "text", content: line }));
-        rl.once("close", () => reject(new Error("stdin closed")));
-      });
+    async receive(): Promise<UserMessage> {
+      process.stdout.write(opts.prompt);
+      const line = await readStdinLine();
+      if (line === "") throw new Error("stdin closed");
+      return { type: "text", content: line };
     },
 
     async send(msg: AgentMessage): Promise<void> {
-      if (msg.type === "text" || msg.type === "text_delta") {
+      if (msg.type === "text") {
+        process.stdout.write(`${opts.responsePrefix}${msg.content}`);
+      } else if (msg.type === "text_delta") {
         process.stdout.write(msg.content);
       } else if (msg.type === "tool_call") {
-        process.stdout.write(`[tool: ${msg.name}(${JSON.stringify(msg.args)})]\n`);
+        process.stdout.write(`\n[tool: ${msg.name}(${JSON.stringify(msg.args)})]\n`);
       } else if (msg.type === "tool_result") {
         process.stdout.write(`[result: ${msg.ok ? "ok" : "err"} ${msg.output}]\n`);
       } else if (msg.type === "error") {
@@ -32,7 +28,7 @@ function createTerminalChannel(): UiChannel {
     },
 
     async close(): Promise<void> {
-      rl.close();
+      // stdin lifecycle is managed by src/core/stdin.ts
     },
   };
 }
@@ -44,9 +40,12 @@ const plugin: KaizenPlugin = {
   depends: [],
 
   async setup(ctx) {
+    const prompt = (ctx.config["prompt"] as string | undefined) ?? "> ";
+    const responsePrefix = (ctx.config["responsePrefix"] as string | undefined) ?? "";
+
     ctx.registerUi({
       async *accept() {
-        yield createTerminalChannel();
+        yield createTerminalChannel({ prompt, responsePrefix });
       },
     });
   },

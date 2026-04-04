@@ -28,6 +28,9 @@
     "core-cli": "workspace:*",
     "core-events": "workspace:*",
     "core-executor-anthropic": "workspace:*",
+    "core-executor-debug": "workspace:*",
+    "core-executor-shell": "workspace:*",
+    "kaizen-plugin-timestamps": "workspace:*",
     "core-executor-openai": "workspace:*",
     "core-lifecycle": "workspace:*",
     "core-ui-terminal": "workspace:*"

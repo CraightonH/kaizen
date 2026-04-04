@@ -234,6 +234,12 @@ export interface KaizenPlugin {
 export interface KaizenConfig {
   /** npm package names, load order = array order */
   plugins: string[];
+  /**
+   * Name of a built-in or installed harness to extend.
+   * The harness provides the base plugin stack; this config overlays it.
+   * Built-ins: 'core-debug', 'core-anthropic'. Third-party: 'kaizen-harness-<name>'.
+   */
+  extends?: string;
   /** Plugin config namespaces — key must match plugin.name */
   [pluginName: string]: unknown;
 }

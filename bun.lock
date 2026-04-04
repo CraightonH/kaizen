@@ -12,9 +12,12 @@
         "core-cli": "workspace:*",
         "core-events": "workspace:*",
         "core-executor-anthropic": "workspace:*",
+        "core-executor-debug": "workspace:*",
         "core-executor-openai": "workspace:*",
+        "core-executor-shell": "workspace:*",
         "core-lifecycle": "workspace:*",
         "core-ui-terminal": "workspace:*",
+        "kaizen-plugin-timestamps": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -45,8 +48,24 @@
         "typescript": "^5.4.0",
       },
     },
+    "plugins/core-executor-debug": {
+      "name": "core-executor-debug",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.4.0",
+      },
+    },
     "plugins/core-executor-openai": {
       "name": "core-executor-openai",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.4.0",
+      },
+    },
+    "plugins/core-executor-shell": {
+      "name": "core-executor-shell",
       "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "latest",
@@ -63,6 +82,14 @@
     },
     "plugins/core-ui-terminal": {
       "name": "core-ui-terminal",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.4.0",
+      },
+    },
+    "plugins/kaizen-plugin-timestamps": {
+      "name": "kaizen-plugin-timestamps",
       "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "latest",
@@ -103,7 +130,11 @@
 
     "core-executor-anthropic": ["core-executor-anthropic@workspace:plugins/core-executor-anthropic"],
 
+    "core-executor-debug": ["core-executor-debug@workspace:plugins/core-executor-debug"],
+
     "core-executor-openai": ["core-executor-openai@workspace:plugins/core-executor-openai"],
+
+    "core-executor-shell": ["core-executor-shell@workspace:plugins/core-executor-shell"],
 
     "core-lifecycle": ["core-lifecycle@workspace:plugins/core-lifecycle"],
 
@@ -118,6 +149,8 @@
     "json-schema": ["json-schema@0.4.0", "", {}, "sha512-es94M3nTIfsEPisRafak+HDLfHXnKBhV3vU5eqPcS3flIWqcxJWgXHXiey3YrpaNsanY5ei1VoYEbOzijuq9BA=="],
 
     "json-schema-traverse": ["json-schema-traverse@1.0.0", "", {}, "sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug=="],
+
+    "kaizen-plugin-timestamps": ["kaizen-plugin-timestamps@workspace:plugins/kaizen-plugin-timestamps"],
 
     "require-from-string": ["require-from-string@2.0.2", "", {}, "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw=="],
 

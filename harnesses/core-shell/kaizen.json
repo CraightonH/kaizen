@@ -1,0 +1,11 @@
+{
+  "plugins": [
+    "core-events",
+    "core-executor-shell",
+    "core-ui-terminal",
+    "core-lifecycle"
+  ],
+  "core-executor-shell": {
+    "shell": "bash"
+  }
+}
