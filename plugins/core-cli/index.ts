@@ -2,7 +2,7 @@
 // provides: []  depends: ['lifecycle']
 // CLI introspection engine. Registers tools from --help output.
 // Handles `kaizen add <cli>`. Destructive guard via tool:before hook.
-import type { KaizenPlugin } from "kaizen/src/types/plugin.js";
+import type { KaizenPlugin } from "../../src/types/plugin.js";
 
 const plugin: KaizenPlugin = {
   name: "core-cli",

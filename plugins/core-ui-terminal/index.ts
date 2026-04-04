@@ -1,7 +1,7 @@
 // TODO: implement in Step 5 (DESIGN.md)
 // provides: ['ui']
 // Hooks session:loop (stdin readline) and response:before (stdout).
-import type { KaizenPlugin } from "kaizen/src/types/plugin.js";
+import type { KaizenPlugin } from "../../src/types/plugin.js";
 
 const plugin: KaizenPlugin = {
   name: "core-ui-terminal",

@@ -1,7 +1,7 @@
 // TODO: implement in Step 4 (DESIGN.md)
 // provides: ['lifecycle']
 // Handles __core:ready, drives the session loop, defines default event set.
-import type { KaizenPlugin } from "kaizen/src/types/plugin.js";
+import type { KaizenPlugin } from "../../src/types/plugin.js";
 
 const plugin: KaizenPlugin = {
   name: "core-lifecycle",
