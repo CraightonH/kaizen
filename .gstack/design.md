@@ -42,8 +42,10 @@ This is VS Code extensions for LLM assistants, without the IDE.
 - Open source (MIT).
 - Zero config from the user's perspective for the default use case.
 - Core is minimal: plugin loader + event bus + LLM/tool primitives. No session loop,
-  no UI, no tools — all of these are plugins. Core emits exactly one internal event
-  (`__core:ready`) and exposes raw LLM and tool execution primitives to plugins.
+  no UI, no tools — all of these are plugins. After all plugins initialize, core calls
+  `start(ctx)` on the lifecycle provider directly (no `__core:ready` event on the public
+  bus — prevents any plugin from accidentally triggering double-initialization).
+  Core exposes raw LLM and tool execution primitives to plugins.
 - MVP default stack (three built-in plugins, ships with kaizen):
     kaizen-plugin-lifecycle  — session loop
     kaizen-plugin-ui-terminal — terminal I/O (display + input)
@@ -120,6 +122,13 @@ interface KaizenPlugin {
   provides?: string[];   // capability roles this plugin fulfills (e.g. 'lifecycle', 'ui')
   depends?: string[];    // capability roles or plugin names required before setup()
   setup(ctx: PluginContext): Promise<void>;
+  start?(ctx: PluginContext): Promise<void>;
+  // start() is called by core on the lifecycle provider after all plugins are initialized.
+  // Only the lifecycle role provider should implement start(). Core finds the plugin
+  // providing role 'lifecycle' and calls plugin.start(ctx). If no lifecycle provider
+  // is loaded: fatal error "No lifecycle plugin found. Add one to kaizen.json."
+  // If the lifecycle provider does not export start(): same fatal error.
+  // Not part of the general plugin interface — only relevant for lifecycle implementors.
 }
 // Core enforces: exactly one loaded plugin per role that any plugin depends on.
 // Zero providers for a required role → fatal startup error.
@@ -132,10 +141,18 @@ interface PluginContext {
   // Tool registration (INITIALIZING state only):
   registerTool(tool: ToolDefinition): void;
 
-  // Event bus:
-  defineEvent(name: string): void;                          // declare a new event type
-  on(event: string, handler: EventHandler): void;           // subscribe (any event, typed or custom)
-  emit(event: string, payload?: unknown): Promise<unknown>; // fire event, returns first non-void result
+  // Event bus (INITIALIZING state only — all three throw if called after setup() returns):
+  defineEvent(name: string): void;                             // declare a new event type
+  on(event: string, handler: EventHandler): void;              // subscribe (any event, typed or custom)
+  emit(event: string, payload?: unknown): Promise<unknown[]>;  // fire event; calls ALL handlers serially;
+                                                               // returns array of ALL results (including void/undefined)
+  // emit() ALWAYS runs all registered handlers, even if an early handler returns non-void.
+  // Callers inspect the result array to implement their own short-circuit logic.
+  // Example: lifecycle plugin calls emit('tool:before', ctx), finds the first non-void
+  // ToolResult in the array, and skips execute() if found. response:before handlers
+  // are read-only — lifecycle ignores all return values from emit('response:before', ...).
+  // This design ensures a misbehaving plugin returning a value from response:before does
+  // not prevent other response:before handlers from running.
 
   // Plugin config and logging:
   config: Record<string, unknown>;  // plugin-specific config slice from kaizen.json
@@ -155,11 +172,16 @@ interface PluginContext {
   };
 }
 
-// If setup() throws, kaizen logs the error and skips the plugin.
-// The session continues without it. Core never crashes on plugin init failure.
-// Plugin dependency ordering: add a `depends?: string[]` field to KaizenPlugin.
+// If setup() throws:
+//   - If the plugin provides a role that another loaded plugin depends on (required-role
+//     provider): FATAL. Core surfaces the original exception immediately:
+//     "kaizen-plugin-lifecycle (provides: lifecycle) failed to initialize: <error>"
+//     The session does not start.
+//   - Otherwise (optional plugin): log the error + stack (debug), skip plugin, continue.
 // Core topologically sorts plugins before setup(). Cycles → fatal error at startup.
 // If a dependency is missing from kaizen.json, log a warning and continue.
+// on() and defineEvent() called outside setup() throw:
+//   "Cannot register event handlers after initialization."
 
 // ToolResult — returned by execute() and passed to tool:after hooks:
 interface ToolResult {
@@ -196,12 +218,11 @@ interface ToolDefinition {
 //
 //  session:start  — fires once at session open. Read-only. Cannot abort session.
 //  session:end    — fires once at session close. Read-only.
-//  tool:before    — fires before execute(). Handlers run serially in plugin init order.
-//                   If a handler returns a non-undefined ToolResult, that result is used
-//                   and execute() is skipped. Remaining tool:before handlers are NOT
-//                   called (execution short-circuits immediately). If all handlers return
-//                   undefined/void, execute() runs normally.
-//                   tool:after always fires regardless of short-circuit.
+//  tool:before    — fires before execute(). emit() calls ALL handlers; returns array of
+//                   all results. Lifecycle plugin inspects the array: if any result is a
+//                   non-undefined ToolResult, execute() is skipped and that result is used.
+//                   Remaining results are ignored. If all results are void/undefined,
+//                   execute() runs normally. tool:after always fires regardless.
 //  tool:after     — fires after execute() (or short-circuit). Receives ToolResult.
 //                   Handler may return a new ToolResult to replace it. Returning
 //                   undefined/void passes result through unchanged. Runs sequentially.
@@ -222,9 +243,11 @@ interface ToolDefinition {
 // Events are NOT defined by core. They are defined by plugins via ctx.defineEvent()
 // during setup() (INITIALIZING state). kaizen-plugin-lifecycle defines the default
 // event set. Custom plugins may define additional namespaced events.
-// ctx.on() may be called for any event name — if the event was never defined by any
-// plugin (after INITIALIZING completes), the handler is registered but fires a warning
-// on first emit: "Unknown event '<name>' — possible typo or missing plugin dependency."
+// ctx.on() must be called during setup() (INITIALIZING). Calling ctx.on() outside
+// setup() throws: "Cannot register event handlers after initialization."
+// If ctx.on() is called during INITIALIZING for an event name that was never defined
+// by any plugin, the handler is registered; on first emit of that event, core fires a
+// warning: "Unknown event '<name>' — possible typo or missing plugin dependency."
 // No duplicate event definitions: calling ctx.defineEvent() for an already-defined
 // event logs a warning and is ignored (first definition wins).
 
@@ -242,41 +265,67 @@ interface LoopContext     { response: LLMResponse; sessionId: string }
 ### Plugin Loader Contract
 
 ```
-Resolution: use require.resolve() with paths option:
-  const globalRoot = execSync('npm root -g').toString().trim()  // cross-platform
+Module system: ESM. Plugin loader uses createRequire for dynamic plugin loading:
+  import { createRequire } from 'module';
+  const require = createRequire(import.meta.url);
+
+  // execSync cached at module level with 5s timeout (called once per process):
+  import { execSync } from 'child_process';
+  const NPM_GLOBAL_ROOT = execSync('bun pm ls --global 2>/dev/null || npm root -g',
+    { timeout: 5000 }).toString().trim();
+  // Falls back to npm root -g if bun pm ls is unavailable.
+  // If both fail (timeout or not found): NPM_GLOBAL_ROOT = '' (cwd-only resolution).
+
+Resolution paths:
   require.resolve(pluginName, { paths: [
-    globalRoot,                   // global npm (npm root -g, works on Win/WSL/Mac/Linux)
-    process.cwd() + '/node_modules',  // project-local
+    NPM_GLOBAL_ROOT,                     // global (bun add --global or npm install -g)
+    process.cwd() + '/node_modules',      // project-local
   ]})
 If pluginName starts with './' or '/' or is an absolute path: treat as local file,
-require.resolve() directly. This supports private/local plugins.
+use require.resolve() directly. This supports private/local plugins.
 If resolution fails: log "Cannot find plugin '<name>'. Install it with:
-  npm install -g <name> (global) or npm install <name> (local)" and skip.
+  bun add --global <name> (global) or bun add <name> (local)" and skip.
 Module must be loaded (not re-compiled) — respects Node require.cache.
+
+IMPORTANT: Before writing the loader, run the Day 1 binary spike (Step 0 in Next Steps)
+to verify that createRequire from a compiled Bun binary correctly resolves a globally
+installed npm package. If the spike fails, revise this section before proceeding.
 
 Required shape: module.default must satisfy KaizenPlugin shape check:
   typeof default.name === 'string' && typeof default.setup === 'function'
 If shape check fails: log "Plugin <name> does not export a valid KaizenPlugin" and skip.
 
 Initialization sequence:
-1. Parse kaizen.json. Exit with error if provider or plugins fields are missing.
+1. Parse kaizen.json. Validate:
+   - Missing 'provider' → fatal error.
+   - Missing 'plugins' → fatal error.
+   - Plugin name matches reserved key ('provider', 'plugins') → skip + error log.
+   - Config array value contains null/undefined entry → fatal error:
+     "Config error: '<key>' array in '<plugin>' contains null/undefined entries. Check your kaizen.json."
 2. Resolve all plugin modules (resolution step above).
 3. Topologically sort resolved plugins by depends[]. Cycles → fatal startup error.
 4. Call plugin.setup(ctx) for each plugin, in sorted order, serially.
-   If setup() throws: log the error + stack (debug), skip plugin, continue.
-5. After all setup() calls: warn on any kaizen.json keys that no plugin claimed
+   - If the plugin provides a required role and setup() throws: FATAL. Surface original error:
+     "<plugin-name> (provides: <role>) failed to initialize: <original error message>"
+   - Otherwise: log the error + stack (debug), skip plugin, continue.
+5. After all setup() calls: role validation.
+   Zero providers for a required role → fatal: "No plugin provides role '<role>'."
+   Two+ providers for same role → fatal: "Multiple plugins provide role '<role>': X, Y."
+6. Warn on any kaizen.json keys that no plugin claimed
    (not 'provider', not 'plugins', not a loaded plugin's name).
    e.g. "Unknown config key 'kai-plugin-typo'. No plugin claimed it."
-6. Open LLM session with all registered tools.
+7. Call start(ctx) on the lifecycle provider (the plugin providing role 'lifecycle').
+   If no lifecycle provider was loaded: fatal "No lifecycle plugin found."
+   If the provider has no start() method: fatal "No lifecycle plugin found."
 
 Session state machine:
   INITIALIZING  → setup() calls running (defineEvent, on, registerTool valid here only)
-  READY         → all plugins initialized, core emits __core:ready
-  RUNNING       → lifecycle plugin has started the session loop
-  CLOSED        → lifecycle plugin has ended the session
+  READY         → all plugins initialized, role validation passed
+  RUNNING       → core called lifecycle.start(ctx); session loop is active
+  CLOSED        → lifecycle has ended the session
 
-registerTool() and defineEvent() and on() are valid in INITIALIZING only.
-Calling registerTool() outside setup() throws: "Cannot register tools after initialization."
+registerTool(), defineEvent(), and on() are valid in INITIALIZING only.
+Calling any of them outside setup() throws: "Cannot register tools/handlers after initialization."
 
 Version check: if semver major(plugin.apiVersion) != PLUGIN_API_VERSION,
 log warning: "Plugin '<name>' apiVersion <X>, core expects <Y>. Loading anyway."
@@ -746,10 +795,14 @@ Plugin contract tests (run on every commit — these are the quality gate):
 **Plugin/harness distribution:**
 - Plugins: npm package with keyword `kaizen-plugin`. `npm search kaizen-plugin`.
 - Harnesses: npm package with keyword `kaizen-harness`. `npm search kaizen-harness`.
-- `kaizen install <name>` resolves `kaizen-harness-<name>` from npm.
-- Plugin installation shells out to `npm install -g` (npm must be available for plugin
-  management; the kaizen binary itself requires no npm at runtime).
-  Phase 3: bundle minimal npm client to remove this dependency.
+- `kaizen install <name>` resolves `kaizen-harness-<name>` from npm registry.
+- Plugin installation uses `bun add --global <name>` (not `npm install -g`). Since the
+  kaizen binary embeds the Bun runtime, no external package manager is needed.
+  The binary is truly self-contained for both running and plugin management.
+  subprocess invocation: `bun add --global <name>` with `stdio: 'inherit'` (user sees
+  Bun's progress output) and a 60-second timeout. On non-zero exit code:
+  "Plugin install failed. bun exit code: N. Check the package name and your connection."
+  The timeout is configurable via `kaizen.json["install_timeout_ms"]` (default: 60000).
 
 **Release process:**
 - Tag `v*` → GitHub Actions builds all 5 platform binaries + publishes to npm.
@@ -757,23 +810,45 @@ Plugin contract tests (run on every commit — these are the quality gate):
 
 ## Next Steps
 
-1. `bun init` — project setup. Confirm `bun build --compile ./src/cli.ts --outfile kaizen`
-   produces a working binary before writing any feature code.
-2. Define interfaces in `src/types/plugin.ts`: `KaizenPlugin`, `PluginContext`,
-   `ToolDefinition`, `ToolResult`, `EventHandler`, context types. Public contract.
-3. Build core (`src/core/`): plugin loader with topo-sort + role validation, event bus
-   (`defineEvent`/`on`/`emit`), LLM primitives (`ctx.runtime.llm`), tool executor
-   (`ctx.runtime.tools`). Core emits `__core:ready` and nothing else.
-4. Write `kaizen-plugin-lifecycle` (`src/plugins/lifecycle/`): handles `__core:ready`,
-   defines default events, drives the session loop via `ctx.runtime`.
+0. **[DAY 1 SPIKE — gates everything else]** Binary + createRequire validation.
+   Write `src/spike/loader-probe.ts` (~10 lines): use `createRequire(import.meta.url)`
+   to resolve a trivially installed global npm package. Compile:
+   `bun build --compile src/spike/loader-probe.ts --outfile /tmp/kaizen-probe`
+   Run: `bun add --global some-trivial-package && /tmp/kaizen-probe`
+   If it resolves correctly: proceed. If not: `createRequire` doesn't work from compiled
+   Bun binaries and the plugin resolution model needs revision before writing the loader.
+   **Do not start Step 2 until this spike passes.**
+
+1. `bun init` — project setup. Module system: ESM. Confirm `bun build --compile ./src/cli.ts
+   --outfile kaizen` produces a working binary. (Can run in parallel with Step 0.)
+
+2. Define interfaces in `src/types/plugin.ts`: `KaizenPlugin` (including `start?`),
+   `PluginContext` (with `emit(): Promise<unknown[]>`), `ToolDefinition`, `ToolResult`,
+   `EventHandler`, context types. Public contract for plugin authors.
+
+3. Build core (`src/core/`): plugin loader with topo-sort + role validation + config
+   validation (null array entries → fatal), event bus (`defineEvent`/`on`/`emit` returns
+   `unknown[]`), LLM primitives (`ctx.runtime.llm`), tool executor (`ctx.runtime.tools`).
+   Core calls `plugin.start(ctx)` on the lifecycle provider — no `__core:ready` event.
+
+4. Write `kaizen-plugin-lifecycle` (`src/plugins/lifecycle/`): implements `start(ctx)`,
+   defines default events, drives the session loop via `ctx.runtime`. Inspects
+   `emit('tool:before', ...)` result array to implement short-circuit semantics.
+
 5. Write `kaizen-plugin-ui-terminal` (`src/plugins/ui-terminal/`): hooks `session:loop`
    (stdin readline) and `response:before` (stdout). No session logic.
+
 6. Write `kaizen-plugin-cli` (`src/plugins/cli/`): Phase 1 introspection engine,
    hooks `tool:before`/`tool:after`. Depends on `['lifecycle']`.
+
 7. Run `kaizen run` end-to-end with all three. This is the MVP.
+
 8. Write `kaizen-plugin-noop` as an external npm package. If it requires touching
    `src/types/plugin.ts`: the API has coupling to fix before shipping.
+
 9. Write `kaizen init` + `kaizen apply` + `kaizen install` + `kaizen plugin *` commands.
+   Plugin install uses `bun add --global` with 60s timeout + structured error handling.
+
 10. Document plugin authoring API (`docs/plugin-api.md`). Publish `kaizen-plugin-noop`
     as the reference implementation.
 
@@ -787,9 +862,15 @@ Plugin contract tests (run on every commit — these are the quality gate):
   version ranges. If `kaizen-plugin-cli` requires a lifecycle feature added in
   lifecycle v2.0, there is no way to express that in Phase 2. Version negotiation is
   Phase 3.
-- **Plugin resolution requires npm:** `kaizen install` and `kaizen plugin install` shell
-  out to `npm`. Users running the compiled binary still need npm for plugin management.
-  Bundled npm client is Phase 3.
+- **Handler chains are serial:** All event handlers run sequentially. With N plugins
+  hooking the same event and M tool calls per session, per-session latency grows as
+  O(N×M). For the built-in plugins this is negligible. Plugin authors should keep
+  handlers fast. Parallel handler execution is Phase 3.
+- **Plugin install requires Bun on PATH:** `kaizen plugin install` shells to `bun add
+  --global`. Users running the compiled binary have Bun embedded for running kaizen,
+  but `bun add` is only available if Bun is separately installed as a CLI tool. If Bun
+  is not on PATH, fall back to `npm install -g`. Document this in the install guide.
+  (Phase 3: invoke Bun's package management APIs from inside the binary.)
 
 ## What I noticed about how you think
 
@@ -810,8 +891,11 @@ Plugin contract tests (run on every commit — these are the quality gate):
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 1 | issues_found | npm/bun contradiction caught |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 11 issues, 0 critical gaps |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
-**VERDICT:** Spec review: 3 rounds, 15 issues caught and fixed. Final quality: 8/10. Ready for eng review.
+**ENG REVIEW SUMMARY (2026-04-04):** 11 issues across architecture (5), code quality (2), tests (3), performance (1). All resolved. Key changes: emit() returns `unknown[]`, `__core:ready` replaced by `start()` on lifecycle provider, ESM + createRequire locked in, Day 1 binary spike added as Step 0, npm install replaced by bun add, required-role setup() failures escalate immediately, on() throws outside INITIALIZING.
+
+**VERDICT:** ENG CLEARED — ready to implement. Run `/plan-ceo-review` if you want scope pressure-test before committing.
