@@ -497,9 +497,15 @@ Full schema:
 ```typescript
 interface KaizenConfig {
   plugins: string[];            // required. npm package names, load order = array order
+  extends?: string;             // optional. name of a harness to use as the base config
   [pluginName: string]: unknown; // plugin config namespace — key must match plugin.name
 }
 ```
+
+`extends` references a built-in harness by short name (`"core-debug"`) or a
+third-party harness by package name (`"kaizen-harness-godot"`). When present,
+the harness config is loaded first and the local config overlays it. See
+**Harness System** below.
 
 `provider` is no longer a reserved top-level key. Each executor plugin reads its own
 credentials from its config namespace. Core only requires `plugins`.
@@ -626,45 +632,112 @@ no credentials at all for local models).
 **Local LLM support:** use `core-executor-openai` with `base_url` pointing at any
 OpenAI-compatible server. See the local LLM harness example above.
 
-### Shareable Harness Format
+### Harness System
 
-A harness is an npm package that is BOTH a plugin (exports `KaizenPlugin`) AND ships
-a `kaizen.json` with its default config. This is what distinguishes it from a plain
-plugin: `kaizen install` handles the config merge; `kaizen plugin install` does not.
+A **harness** is a named, shareable configuration — a `kaizen.json` that describes
+a complete, working plugin stack. It is pure config, not a plugin. The unit of
+sharing is the harness; the unit of functionality is the plugin.
+
+#### What a harness contains
 
 ```
 kaizen-harness-godot/
-  package.json          # "keywords": ["kaizen-harness"]. kaizen-plugin-cli in dependencies.
-  kaizen.json           # default config this harness recommends
-  index.ts              # default export: KaizenPlugin (registers Godot-specific tools)
+  package.json   # pinned plugin versions as dependencies
+  kaizen.json    # plugin list + default config for each plugin
   README.md
 ```
 
-When a user runs `kaizen install <name-or-path>`:
-- If `<name-or-path>` starts with `./`, `/`, or is an absolute path: treat as local
-  directory. Skip npm install. Read its `kaizen.json` directly.
-- Otherwise: resolve `kaizen-harness-<name>` from npm registry.
-  `npm install -g kaizen-harness-<name>`
+No `index.ts`. A harness does not export `KaizenPlugin`. If a harness needs to
+register tools or behavior, it bundles a companion plugin that it lists in its
+`kaizen.json`.
 
-Then:
-1. Read the harness package's `kaizen.json` as defaults
-2. Merge into local `kaizen.json`:
-   - `plugins` array: union. Local plugins first, harness plugins appended. No duplicates.
-   - Plugin config namespaces (e.g., `"kaizen-plugin-cli": {...}`): deep merge.
-     Arrays within a namespace: union, deduplicated (local items first).
-     Scalar values: local wins if present and non-null. `null` in local = absent
-     (harness default is used). Log: "Local config overrides '<key>'" on collision.
-   - All other top-level keys (except `plugins`): local wins if present and non-null.
-     Harness value fills in absent or null keys.
-3. Run `kaizen apply` with merged config
+#### Built-in harnesses
 
-If no local `kaizen.json` exists, create one from the harness defaults.
+Core ships harnesses in the `harnesses/` directory alongside the source:
 
-A plain plugin (`kaizen plugin install <pkg>`) installs the npm package but skips
-config merge. User manually adds the plugin name to `kaizen.json["plugins"]`.
+```
+harnesses/
+  core-debug/    kaizen.json   — debug executor + event log
+  core-shell/    kaizen.json   — bash passthrough executor
+```
 
-Discovery in Phase 2: `npm search kaizen-harness` and `npm search kaizen-plugin`
-(npm keyword conventions). A dedicated registry UI is Phase 3.
+These are addressable by short name. More will be added as the ecosystem grows.
+
+#### Using a harness
+
+**Option 1 — CLI flag (no local config needed):**
+
+```bash
+kaizen --harness core-debug
+kaizen --harness core-shell
+```
+
+Loads the named harness config directly. No local `kaizen.json` required.
+
+**Option 2 — `extends` in local `kaizen.json` (with overrides):**
+
+```json
+{
+  "extends": "core-debug",
+  "core-lifecycle": { "systemPrompt": "You are a coding assistant." }
+}
+```
+
+The harness provides the base plugin stack; the local config overlays it.
+`--harness` on the CLI takes precedence if both are present.
+
+#### Merge behaviour
+
+When a local config overlays a harness:
+
+| Key | Behaviour |
+|-----|-----------|
+| `plugins` | Local replaces harness entirely (if present) |
+| Plugin config objects | Shallow merge — local wins on conflicts |
+| `extends` | Consumed during resolution, stripped from final config |
+
+This means a local config that omits `plugins` inherits the harness plugin stack
+unchanged; adding `plugins` replaces it entirely.
+
+#### Third-party harnesses
+
+Third-party harnesses follow the npm naming convention `kaizen-harness-<name>`
+and are installed like any other package:
+
+```bash
+bun add kaizen-harness-godot
+```
+
+Then referenced by package name:
+
+```json
+{ "extends": "kaizen-harness-godot" }
+```
+
+or:
+
+```bash
+kaizen --harness kaizen-harness-godot
+```
+
+Resolution order for `--harness <name>` or `extends: "<name>"`:
+
+1. `harnesses/<name>/kaizen.json` — built-in (ships with kaizen)
+2. `node_modules/kaizen-harness-<name>/kaizen.json` — installed third-party
+
+#### Payload types and event contracts
+
+A harness may bundle an events plugin (`provides: ["events"]`) that defines a
+custom vocabulary. Any plugin that wants to subscribe to those events declares
+`depends: ["kaizen-harness-godot"]` (or the events role it provides) and imports
+payload types from that package. The `depends` array is the machine-readable
+record of which event contract a plugin has accepted.
+
+#### Discovery
+
+`npm search kaizen-harness` lists published harnesses.
+`npm search kaizen-plugin` lists standalone plugins.
+A dedicated registry UI is a future phase.
 
 ## CLI Surface (Updated)
 
