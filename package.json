@@ -10,7 +10,8 @@
     "typecheck": "bun x tsc --noEmit",
     "test": "bun test",
     "test:integration": "bun test --integration",
-    "spike": "bun build --compile src/spike/loader-probe.ts --outfile /tmp/kaizen-probe && echo 'Binary built — running probe...' && /tmp/kaizen-probe"
+    "spike": "bun build --compile src/spike/loader-probe.ts --outfile /tmp/kaizen-probe && echo 'Binary built — running probe...' && /tmp/kaizen-probe",
+    "test:core": "bun scripts/test-core.ts"
   },
   "workspaces": [
     "plugins/*"
