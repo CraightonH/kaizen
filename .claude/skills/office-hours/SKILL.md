@@ -1,0 +1,1 @@
+/home/craighton/repos/kaizen/.claude/skills/gstack/office-hours/SKILL.md
