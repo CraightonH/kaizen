@@ -1,7 +1,7 @@
 import type { PluginContext, ToolDefinition } from "../types/plugin.js";
 import type { EventBus } from "./event-bus.js";
 import type { ToolRegistry } from "./tool-registry.js";
-import type { createLLMRuntime } from "./llm.js";
+import type { ExecutorRegistry } from "./executor-registry.js";
 
 export type CoreState = "INITIALIZING" | "READY" | "RUNNING" | "CLOSED";
 
@@ -16,7 +16,7 @@ export function createPluginContext(
   pluginConfig: Record<string, unknown>,
   eventBus: EventBus,
   toolRegistry: ToolRegistry,
-  llmRuntime: ReturnType<typeof createLLMRuntime>,
+  executorRegistry: ExecutorRegistry,
   getState: () => CoreState,
 ): PluginContext {
   return {
@@ -29,6 +29,11 @@ export function createPluginContext(
     registerTool(tool: ToolDefinition): void {
       assertInitializing(getState(), "register tools");
       toolRegistry.register(tool, pluginName);
+    },
+
+    registerExecutor(impl) {
+      assertInitializing(getState(), "register executor");
+      executorRegistry.register(impl, pluginName);
     },
 
     defineEvent(name: string): void {
@@ -46,7 +51,9 @@ export function createPluginContext(
     },
 
     runtime: {
-      llm: llmRuntime,
+      get executor() {
+        return executorRegistry.get();
+      },
       tools: {
         list() {
           return toolRegistry.list();

@@ -899,7 +899,7 @@ Plugin contract tests (run on every commit — these are the quality gate):
 | 1 — Project setup | ✅ Done | `bun init`, ESM, workspace monorepo (`plugins/*`), `scripts/setup.sh` |
 | 2 — Plugin API types | ✅ Done | `src/types/plugin.ts` — `KaizenPlugin`, `PluginContext`, `Executor`, etc. |
 | 3 — Core runtime | ✅ Done | `src/core/` — loader, event bus, tool registry, bootstrap. `bun run test:core` 9/9 |
-| 4 — Executor-as-plugin refactor | 🔄 In progress | Remove LLM from core; add `registerExecutor()`, `core-executor-anthropic` |
+| 4 — Executor-as-plugin refactor | ✅ Done | `core-executor-anthropic` + `core-executor-openai` (scaffold). `registerExecutor()` + `ctx.runtime.executor`. `bun run test:core` 12/12. |
 | 5 — `core-lifecycle` | ⬜ Todo | Session loop, default events, `ctx.runtime.executor` |
 | 6 — `core-ui-terminal` | ⬜ Todo | stdin/stdout I/O plugin |
 | 7 — `core-cli` | ⬜ Todo | Phase 1 CLI introspection engine |

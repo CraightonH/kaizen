@@ -56,6 +56,11 @@ export interface LLMStreamChunk {
   tool_call?: Partial<ToolCall>;
 }
 
+export interface Executor {
+  send(messages: Message[], tools: ToolDefinition[]): Promise<LLMResponse>;
+  stream(messages: Message[], tools: ToolDefinition[]): AsyncIterable<LLMStreamChunk>;
+}
+
 // ---------------------------------------------------------------------------
 // Tools
 // ---------------------------------------------------------------------------
@@ -101,6 +106,10 @@ export interface PluginContext {
   // --- Tool registration (INITIALIZING state only) -------------------------
   registerTool(tool: ToolDefinition): void;
 
+  // --- Executor registration (INITIALIZING state only) ---------------------
+  /** Register the executor implementation. Exactly one plugin must call this. */
+  registerExecutor(impl: Executor): void;
+
   // --- Event bus (INITIALIZING state only) ---------------------------------
   // All three methods throw if called after setup() returns:
   //   "Cannot register event handlers after initialization."
@@ -132,10 +141,7 @@ export interface PluginContext {
   // Other plugins should interact with the session through events.
 
   runtime: {
-    llm: {
-      send(messages: Message[], tools: ToolDefinition[]): Promise<LLMResponse>;
-      stream(messages: Message[], tools: ToolDefinition[]): AsyncIterable<LLMStreamChunk>;
-    };
+    executor: Executor;
     tools: {
       /** Returns all registered tools at the time of the call. */
       list(): ToolDefinition[];
@@ -191,27 +197,10 @@ export interface KaizenPlugin {
 // ---------------------------------------------------------------------------
 
 export interface KaizenConfig {
-  /** References a key in ~/.kaizen/config.json */
-  provider: string;
   /** npm package names, load order = array order */
   plugins: string[];
   /** Plugin config namespaces — key must match plugin.name */
   [pluginName: string]: unknown;
-}
-
-export interface ProviderConfig {
-  adapter: "anthropic" | "openai" | "google" | "mistral";
-  model: string;
-  /** Env var name holding the API key. Omit for local/keyless providers. */
-  api_key_env?: string;
-  /** Literal key — prefer api_key_env. */
-  api_key?: string;
-  /** Override the adapter's default endpoint. Enables local LLMs (Ollama, LM Studio, etc). */
-  baseURL?: string;
-}
-
-export interface GlobalConfig {
-  providers: Record<string, ProviderConfig>;
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +211,6 @@ export interface GlobalConfig {
 
 export interface SessionContext {
   sessionId: string;
-  provider: string;
   config: KaizenConfig;
 }
 

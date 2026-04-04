@@ -6,7 +6,7 @@ import { fatal, warn, debug } from "./errors.js";
 import { RESERVED_KEYS } from "./config.js";
 import type { EventBus } from "./event-bus.js";
 import type { ToolRegistry } from "./tool-registry.js";
-import type { createLLMRuntime } from "./llm.js";
+import type { ExecutorRegistry } from "./executor-registry.js";
 import { createPluginContext, type CoreState } from "./context.js";
 
 // ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ export async function loadPlugins(
   builtins: Builtins,
   eventBus: EventBus,
   toolRegistry: ToolRegistry,
-  llmRuntime: ReturnType<typeof createLLMRuntime>,
+  executorRegistry: ExecutorRegistry,
 ): Promise<{ lifecycleProvider: KaizenPlugin; state: { current: CoreState } }> {
   const stateContainer = { current: "INITIALIZING" as CoreState };
   const getState = () => stateContainer.current;
@@ -199,7 +199,7 @@ export async function loadPlugins(
       pluginConfig,
       eventBus,
       toolRegistry,
-      llmRuntime,
+      executorRegistry,
       getState,
     );
 
@@ -248,7 +248,7 @@ export async function loadPlugins(
   }
 
   // 6. Warn on unclaimed config keys
-  const claimedKeys = new Set(["provider", "plugins", ...loadedNames]);
+  const claimedKeys = new Set(["plugins", ...loadedNames]);
   for (const key of Object.keys(config)) {
     if (!claimedKeys.has(key)) {
       warn(`Unknown config key '${key}'. No plugin claimed it.`);

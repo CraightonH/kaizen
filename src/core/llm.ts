@@ -6,9 +6,16 @@ import type {
   ToolDefinition,
   LLMResponse,
   LLMStreamChunk,
-  ProviderConfig,
   ToolCall,
 } from "../types/plugin.js";
+
+interface ProviderConfig {
+  adapter: "anthropic" | "openai" | "google" | "mistral";
+  model: string;
+  api_key_env?: string;
+  api_key?: string;
+  baseURL?: string;
+}
 import { fatal } from "./errors.js";
 
 // ---------------------------------------------------------------------------
