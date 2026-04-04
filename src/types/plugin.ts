@@ -33,6 +33,8 @@ export interface Message {
   content: string;
   /** Present on role=tool messages — identifies which tool call this is the result of. */
   tool_call_id?: string;
+  /** Present on role=assistant messages when the LLM requested tool calls. */
+  tool_calls?: ToolCall[];
 }
 
 export interface ToolCall {
