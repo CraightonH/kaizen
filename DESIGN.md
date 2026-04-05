@@ -930,7 +930,7 @@ Plugin contract tests (run on every commit — these are the quality gate):
 6. **[TODO]** Write `core-ui-terminal` (`plugins/core-ui-terminal/`): hooks `session:loop`
    (stdin readline) and `response:before` (stdout). No session logic.
 
-7. **[TODO]** Write `core-cli` (`plugins/core-cli/`): Phase 1 introspection engine,
+7. **[DONE]** Write `core-cli` (`plugins/core-cli/`): Phase 1 introspection engine,
    hooks `tool:before`/`tool:after`. Depends on `['lifecycle']`.
 
 8. **[TODO]** Run `kaizen run` end-to-end with all four. This is the MVP.
