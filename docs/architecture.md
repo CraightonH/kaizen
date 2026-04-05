@@ -105,7 +105,9 @@ runs all handlers serially and returns an array of all return values.
 (e.g. skipping tool execution if a `tool:before` handler returns a `ToolResult`)
 is the caller's responsibility, not the event bus's.
 
-## File layout
+## Directory structure
+
+### Repo layout
 
 ```
 src/
@@ -120,35 +122,54 @@ src/
     executor-registry.ts  ExecutorRegistry: register / get
     ui-registry.ts     UiRegistry: register / get
     context.ts         createPluginContext() — the PluginContext handed to each plugin
-    config.ts          kaizen.json loading, harness resolution, config merging
+    config.ts          Config loading, harness resolution, config merging
     errors.ts          fatal / warn / debug helpers
     llm.ts             Vercel AI SDK adapter (Anthropic + OpenAI-compatible)
     stdin.ts           Shared readline queue (avoids competing readers)
   types/
     plugin.ts          Public plugin API types — the contract for plugin authors
-  spike/
-    loader-probe.ts    Day-0 spike: verified createRequire from compiled binary
 
-plugins/               Built-in plugins (bundled into binary)
+plugins/               Built-in plugins (workspace packages, compiled into binary)
   core-events/
   core-executor-anthropic/
   core-executor-debug/
-  core-executor-openai/
   core-executor-shell/
   core-lifecycle/
   core-ui-terminal/
   core-cli/
   kaizen-plugin-timestamps/
 
-harnesses/             Built-in harnesses (bundled configs)
+harnesses/             Built-in harnesses (JSON, bundled into binary via static import)
   core-anthropic/      Full default stack (Anthropic LLM)
   core-debug/          Debug executor (echoes messages, prints events)
   core-shell/          Shell executor (bash passthrough)
 
-docs/
-  architecture.md      ← this file
-  plugin-api.md        Plugin authoring guide
-  harnesses.md         Harness authoring + usage
-  core-internals.md    Core internals for contributors
-  plugin-loading.md    How plugin resolution works from a compiled binary
+scripts/
+  install.sh           One-liner installer (downloads binary + runs kaizen init --global)
 ```
+
+### Runtime layout
+
+```
+~/.kaizen/                   Global kaizen home (created by install.sh or kaizen init --global)
+  kaizen.json                Default config — used when no project config found
+  node_modules/              Plugins installed via kaizen plugin install
+  plugins/                   Locally authored / extracted plugins (require-able directories)
+  harnesses/                 Custom harnesses (folders containing kaizen.json)
+
+<project>/
+  .kaizen/                   Project-local config (like .vscode/)
+    kaizen.json              Project config — extends a harness or defines full plugin stack
+    node_modules/            Plugins installed with kaizen plugin install --local (future)
+    plugins/                 Project-local authored plugins
+    harnesses/               Project-local harnesses
+```
+
+### Plugin resolution order
+
+1. Built-in (compiled into binary)
+2. `.kaizen/plugins/<name>/` — project-scoped authored plugin
+3. `~/.kaizen/plugins/<name>/` — global authored plugin
+4. `.kaizen/node_modules/<name>` — project npm-installed plugin
+5. `~/.kaizen/node_modules/<name>` — globally npm-installed plugin (`kaizen plugin install`)
+6. Standard npm resolution (bun global, npm global, `./node_modules`)
