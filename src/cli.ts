@@ -3,9 +3,10 @@
  * kaizen CLI entrypoint
  * Built-in plugins are statically imported so bun build --compile bundles them.
  */
-import { existsSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
 import { bootstrap } from "./core/index.js";
-import { resolveConfig } from "./core/config.js";
+import { resolveConfig, PROJECT_DIR, PROJECT_CONFIG, KAIZEN_HOME, KAIZEN_HOME_CONFIG } from "./core/config.js";
 import { fatal } from "./core/errors.js";
 import {
   readLocalConfig,
@@ -44,8 +45,6 @@ const builtins = {
 const rawArgs = process.argv.slice(2);
 const subcommand = rawArgs[0];
 
-const CONFIG_PATH = "kaizen.json";
-
 function getCliList(config: Record<string, unknown>): string[] {
   const cliConfig = config["core-cli"] as Record<string, unknown> | undefined;
   return (cliConfig?.["clis"] as string[] | undefined) ?? [];
@@ -58,35 +57,51 @@ function setCliList(config: Record<string, unknown>, clis: string[]): void {
   (config["core-cli"] as Record<string, unknown>)["clis"] = clis;
 }
 
+const DEFAULT_PLUGINS = {
+  plugins: [
+    "core-events",
+    "core-executor-anthropic",
+    "core-ui-terminal",
+    "core-cli",
+    "core-lifecycle",
+  ],
+  "core-executor-anthropic": {
+    model: "claude-opus-4-6",
+    api_key_env: "ANTHROPIC_API_KEY",
+  },
+  "core-cli": {
+    clis: [] as string[],
+    allow_destructive: false,
+    subprocess_timeout_ms: 30000,
+  },
+};
+
 // ---------------------------------------------------------------------------
-// Subcommand: kaizen init
+// Subcommand: kaizen init [--global]
 // ---------------------------------------------------------------------------
 
 if (subcommand === "init") {
-  if (existsSync(CONFIG_PATH)) {
-    console.log("kaizen.json already exists.");
-    process.exit(0);
+  const isGlobal = rawArgs.includes("--global");
+
+  if (isGlobal) {
+    if (existsSync(KAIZEN_HOME_CONFIG)) {
+      console.log(`~/.kaizen/kaizen.json already exists.`);
+      process.exit(0);
+    }
+    mkdirSync(KAIZEN_HOME, { recursive: true });
+    writeFileSync(KAIZEN_HOME_CONFIG, JSON.stringify(DEFAULT_PLUGINS, null, 2) + "\n", "utf8");
+    console.log(`Created ~/.kaizen/kaizen.json`);
+  } else {
+    if (existsSync(PROJECT_CONFIG)) {
+      console.log(`.kaizen/kaizen.json already exists.`);
+      process.exit(0);
+    }
+    mkdirSync(PROJECT_DIR, { recursive: true });
+    writeFileSync(PROJECT_CONFIG, JSON.stringify(DEFAULT_PLUGINS, null, 2) + "\n", "utf8");
+    console.log(`Created .kaizen/kaizen.json`);
   }
-  const defaultConfig = {
-    plugins: [
-      "core-events",
-      "core-executor-anthropic",
-      "core-ui-terminal",
-      "core-cli",
-      "core-lifecycle",
-    ],
-    "core-executor-anthropic": {
-      model: "claude-opus-4-6",
-      api_key_env: "ANTHROPIC_API_KEY",
-    },
-    "core-cli": {
-      clis: [] as string[],
-      allow_destructive: false,
-      subprocess_timeout_ms: 30000,
-    },
-  };
-  writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2) + "\n", "utf8");
-  console.log("Created kaizen.json. Run 'kaizen add <cli>' to register CLI tools.");
+
+  console.log(`Run 'kaizen add <cli>' to register CLI tools.`);
   process.exit(0);
 }
 
@@ -105,7 +120,7 @@ if (subcommand === "add") {
     clis.push(cliName);
     setCliList(config, clis);
     writeLocalConfig(config);
-    console.log(`Added '${cliName}' to core-cli.clis in kaizen.json.`);
+    console.log(`Added '${cliName}' to core-cli.clis.`);
   }
   process.exit(0);
 }
@@ -125,7 +140,7 @@ if (subcommand === "remove") {
   } else {
     setCliList(config, filtered);
     writeLocalConfig(config);
-    console.log(`Removed '${cliName}' from core-cli.clis in kaizen.json.`);
+    console.log(`Removed '${cliName}' from core-cli.clis.`);
   }
   process.exit(0);
 }

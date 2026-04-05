@@ -9,12 +9,12 @@
 
 import { createRequire } from "module";
 import { spawnSync } from "child_process";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { RESOLVE_PATHS } from "../core/loader.js";
+import { PROJECT_CONFIG, KAIZEN_HOME, findProjectConfig } from "../core/config.js";
 import type { KaizenPlugin } from "../types/plugin.js";
 
-const CONFIG_PATH = "kaizen.json";
 const INSTALL_TIMEOUT_MS = 60_000;
 
 // ---------------------------------------------------------------------------
@@ -22,15 +22,16 @@ const INSTALL_TIMEOUT_MS = 60_000;
 // ---------------------------------------------------------------------------
 
 export function readLocalConfig(): Record<string, unknown> {
-  if (!existsSync(CONFIG_PATH)) {
-    console.error("No kaizen.json found. Run 'kaizen init' to create one.");
+  const configPath = findProjectConfig();
+  if (!configPath) {
+    console.error("No .kaizen/kaizen.json found. Run 'kaizen init' to create one.");
     process.exit(1);
   }
-  return JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as Record<string, unknown>;
+  return JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
 }
 
 export function writeLocalConfig(config: Record<string, unknown>): void {
-  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", "utf8");
+  writeFileSync(PROJECT_CONFIG, JSON.stringify(config, null, 2) + "\n", "utf8");
 }
 
 function getPlugins(config: Record<string, unknown>): string[] {
@@ -55,16 +56,17 @@ function isInstalled(name: string): boolean {
   }
 }
 
-function bunAddGlobal(pkg: string): boolean {
-  const result = spawnSync("bun", ["add", "--global", pkg], {
+function npmInstallToHome(pkg: string): boolean {
+  mkdirSync(KAIZEN_HOME, { recursive: true });
+  const result = spawnSync("npm", ["install", "--prefix", KAIZEN_HOME, pkg], {
     stdio: "inherit",
     timeout: INSTALL_TIMEOUT_MS,
   });
   return result.status === 0;
 }
 
-function bunRemoveGlobal(pkg: string): boolean {
-  const result = spawnSync("bun", ["remove", "--global", pkg], {
+function npmUninstallFromHome(pkg: string): boolean {
+  const result = spawnSync("npm", ["uninstall", "--prefix", KAIZEN_HOME, pkg], {
     stdio: "inherit",
     timeout: INSTALL_TIMEOUT_MS,
   });
@@ -134,7 +136,7 @@ export function cmdApply(builtins: Record<string, KaizenPlugin>): void {
   let failed = 0;
   for (const name of missing) {
     console.log(`Installing ${name}...`);
-    const ok = bunAddGlobal(name);
+    const ok = npmInstallToHome(name);
     if (!ok) {
       console.error(`Plugin install failed for '${name}'. Check the package name and your connection.`);
       failed++;
@@ -162,15 +164,16 @@ export function cmdInstall(harnessArg: string | undefined): void {
     process.exit(1);
   }
 
-  // Update or create local kaizen.json to extend the given harness
-  if (existsSync(CONFIG_PATH)) {
+  // Update or create .kaizen/kaizen.json to extend the given harness
+  if (findProjectConfig()) {
     const config = readLocalConfig();
     config["extends"] = harnessArg;
     writeLocalConfig(config);
-    console.log(`Updated kaizen.json: extends = "${harnessArg}"`);
+    console.log(`Updated .kaizen/kaizen.json: extends = "${harnessArg}"`);
   } else {
+    mkdirSync(".kaizen", { recursive: true });
     writeLocalConfig({ extends: harnessArg });
-    console.log(`Created kaizen.json: extends = "${harnessArg}"`);
+    console.log(`Created .kaizen/kaizen.json: extends = "${harnessArg}"`);
   }
   console.log(`Run 'kaizen apply' to install any missing plugins.`);
 }
@@ -186,14 +189,14 @@ export function cmdPluginInstall(pkgArg: string | undefined): void {
   }
 
   console.log(`Installing ${pkgArg}...\n`);
-  const ok = bunAddGlobal(pkgArg);
+  const ok = npmInstallToHome(pkgArg);
   if (!ok) {
     console.error(`Install failed. Check the package name and your connection.`);
     process.exit(1);
   }
 
-  // Try to load the plugin to get its name, then add to kaizen.json
-  if (existsSync(CONFIG_PATH)) {
+  // Try to load the plugin to get its name, then add to .kaizen/kaizen.json
+  if (findProjectConfig()) {
     const req = createRequire(process.execPath);
     let pluginName: string | undefined;
     try {
@@ -230,22 +233,22 @@ export function cmdPluginRemove(nameArg: string | undefined, uninstall: boolean)
     process.exit(1);
   }
 
-  if (existsSync(CONFIG_PATH)) {
+  if (findProjectConfig()) {
     const config = readLocalConfig();
     const plugins = getPlugins(config);
     const filtered = plugins.filter((p) => p !== nameArg);
     if (filtered.length < plugins.length) {
       config["plugins"] = filtered;
       writeLocalConfig(config);
-      console.log(`Removed '${nameArg}' from kaizen.json plugins.`);
+      console.log(`Removed '${nameArg}' from .kaizen/kaizen.json plugins.`);
     } else {
-      console.log(`'${nameArg}' not found in kaizen.json plugins.`);
+      console.log(`'${nameArg}' not found in .kaizen/kaizen.json plugins.`);
     }
   }
 
   if (uninstall) {
     console.log(`Uninstalling ${nameArg}...`);
-    bunRemoveGlobal(nameArg);
+    npmUninstallFromHome(nameArg);
   }
 }
 

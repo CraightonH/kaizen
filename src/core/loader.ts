@@ -1,9 +1,11 @@
 import { createRequire } from "module";
 import { execSync } from "child_process";
+import { existsSync } from "fs";
+import { join } from "path";
 import type { KaizenPlugin, KaizenConfig } from "../types/plugin.js";
 import { PLUGIN_API_VERSION } from "../types/plugin.js";
 import { fatal, warn, debug } from "./errors.js";
-import { RESERVED_KEYS } from "./config.js";
+import { RESERVED_KEYS, KAIZEN_HOME, KAIZEN_HOME_PLUGINS, PROJECT_PLUGINS } from "./config.js";
 import type { EventBus } from "./event-bus.js";
 import type { ToolRegistry } from "./tool-registry.js";
 import type { ExecutorRegistry } from "./executor-registry.js";
@@ -37,7 +39,10 @@ function getNpmGlobalRoot(): string {
 const BUN_GLOBAL_ROOT = getBunGlobalRoot();
 const NPM_GLOBAL_ROOT = getNpmGlobalRoot();
 
+// npm-style resolution paths (for require.resolve)
 export const RESOLVE_PATHS = [
+  join(KAIZEN_HOME, "node_modules"),       // ~/.kaizen/node_modules (kaizen plugin install target)
+  join(process.cwd(), ".kaizen/node_modules"), // .kaizen/node_modules (project-local install target)
   BUN_GLOBAL_ROOT,
   NPM_GLOBAL_ROOT,
   process.cwd() + "/node_modules",
@@ -49,40 +54,56 @@ export const RESOLVE_PATHS = [
 
 export type Builtins = Record<string, KaizenPlugin>;
 
-function resolvePlugin(name: string, builtins: Builtins): KaizenPlugin | null {
-  // Builtins map takes priority — covers workspace packages in compiled binary
-  if (builtins[name]) return builtins[name]!;
-
-  const require = createRequire(process.execPath);
-
+function loadPluginFromPath(path: string, name: string): KaizenPlugin | null {
+  const req = createRequire(process.execPath);
   try {
-    // Local/absolute paths bypass global resolution
-    const isPath = name.startsWith("./") || name.startsWith("/") || name.startsWith("../");
-    const resolved = isPath
-      ? require.resolve(name)
-      : require.resolve(name, { paths: RESOLVE_PATHS });
-
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require(resolved) as { default?: unknown };
+    const mod = req(path) as { default?: unknown };
     const plugin = mod.default;
-
     if (
-      typeof plugin !== "object" ||
-      plugin === null ||
+      typeof plugin !== "object" || plugin === null ||
       typeof (plugin as Record<string, unknown>)["name"] !== "string" ||
       typeof (plugin as Record<string, unknown>)["setup"] !== "function"
     ) {
       warn(`Plugin '${name}' does not export a valid KaizenPlugin. Skipping.`);
       return null;
     }
-
     return plugin as KaizenPlugin;
   } catch (err) {
+    warn(`Failed to load plugin at '${path}': ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+function resolvePlugin(name: string, builtins: Builtins): KaizenPlugin | null {
+  // 1. Builtins (workspace packages / compiled binary)
+  if (builtins[name]) return builtins[name]!;
+
+  const isPath = name.startsWith("./") || name.startsWith("/") || name.startsWith("../");
+
+  if (!isPath) {
+    // 2. .kaizen/plugins/<name>/ — project-scoped
+    const projectPlugin = join(process.cwd(), PROJECT_PLUGINS, name);
+    if (existsSync(projectPlugin)) return loadPluginFromPath(projectPlugin, name);
+
+    // 3. ~/.kaizen/plugins/<name>/ — global kaizen home
+    const homePlugin = join(KAIZEN_HOME_PLUGINS, name);
+    if (existsSync(homePlugin)) return loadPluginFromPath(homePlugin, name);
+  }
+
+  // 4. Standard npm resolution (./node_modules, global bun/npm store, explicit paths)
+  const req = createRequire(process.execPath);
+  try {
+    const resolved = isPath
+      ? req.resolve(name)
+      : req.resolve(name, { paths: RESOLVE_PATHS });
+    return loadPluginFromPath(resolved, name);
+  } catch (err) {
     warn(
-      `Cannot find plugin '${name}'. Install it with:\n` +
-        `  bun add --global ${name}  (global)\n` +
-        `  bun add ${name}           (local)\n` +
-        `Error: ${err instanceof Error ? err.message : String(err)}`,
+      `Cannot find plugin '${name}'.\n` +
+      `  Project-scoped: .kaizen/plugins/${name}/\n` +
+      `  Global install: kaizen plugin install ${name}\n` +
+      `Error: ${err instanceof Error ? err.message : String(err)}`,
     );
     return null;
   }
