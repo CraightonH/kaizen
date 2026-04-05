@@ -155,38 +155,24 @@ export function cmdApply(builtins: Record<string, KaizenPlugin>): void {
 
 export function cmdInstall(harnessArg: string | undefined): void {
   if (!harnessArg) {
-    console.error("Usage: kaizen install <harness-name>");
+    console.error("Usage: kaizen install <url-or-path>");
+    console.error("  kaizen install https://example.com/harness/kaizen.json");
+    console.error("  kaizen install ./my-harness");
+    console.error("  kaizen install core-debug  (built-in short name)");
     process.exit(1);
   }
 
-  // Resolve package name: short name → kaizen-harness-<name>, else use as-is
-  const pkgName = harnessArg.includes("/") || harnessArg.startsWith("kaizen-harness-")
-    ? harnessArg
-    : `kaizen-harness-${harnessArg}`;
-
-  // Short name for the extends field (strip prefix)
-  const shortName = pkgName.startsWith("kaizen-harness-")
-    ? pkgName.slice("kaizen-harness-".length)
-    : pkgName;
-
-  console.log(`Installing ${pkgName}...\n`);
-  const ok = bunAddGlobal(pkgName);
-  if (!ok) {
-    console.error(`Install failed. Check the package name and your connection.`);
-    process.exit(1);
-  }
-
-  // Update or create kaizen.json
+  // Update or create local kaizen.json to extend the given harness
   if (existsSync(CONFIG_PATH)) {
     const config = readLocalConfig();
-    config["extends"] = shortName;
+    config["extends"] = harnessArg;
     writeLocalConfig(config);
-    console.log(`\nUpdated kaizen.json to extend '${shortName}'.`);
+    console.log(`Updated kaizen.json: extends = "${harnessArg}"`);
   } else {
-    const config = { extends: shortName };
-    writeLocalConfig(config);
-    console.log(`\nCreated kaizen.json extending '${shortName}'.`);
+    writeLocalConfig({ extends: harnessArg });
+    console.log(`Created kaizen.json: extends = "${harnessArg}"`);
   }
+  console.log(`Run 'kaizen apply' to install any missing plugins.`);
 }
 
 // ---------------------------------------------------------------------------

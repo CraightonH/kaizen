@@ -72,9 +72,10 @@ dependents are not enforced.
 
 **Plugin:** A self-contained npm package that exports a `KaizenPlugin` default.
 
-**Harness:** A npm package that is both a plugin AND ships a `kaizen.json` with
-recommended config. A harness may register custom tools, or simply compose and
-configure existing plugins — custom tools are optional.
+**Harness:** A `kaizen.json` file that describes a complete plugin stack plus
+default config. The minimum harness is a single file. Shared by URL or local path
+— no npm publish required. A companion plugin can be listed in the harness's
+`kaizen.json` if custom tools or behavior are needed.
 
 ## Premises
 
@@ -84,8 +85,9 @@ configure existing plugins — custom tools are optional.
 2. Lifecycle hooks are the right primitive for plugin power. Plugins hook into named
    events rather than composing tools through a functional pipeline.
 
-3. "Shareable harness" means installable in one command — not a JSON config to copy-paste.
-   A harness is an npm package that pulls in its own plugin dependencies.
+3. "Shareable harness" means usable in one command — a URL or local path to a
+   `kaizen.json`. No npm publish required. The file is the artifact.
+   `kaizen --harness <url>` is the install step.
 
 4. (KEY REVISION) Core = plugin loader + event bus + tool primitives only. The
    session loop, UI, CLI introspection, and the execution engine are all plugins.
@@ -94,11 +96,12 @@ configure existing plugins — custom tools are optional.
    harness, a web UI, or a non-LLM shell-based agent replaces the relevant plugin —
    core never changes.
 
-5. npm is the plugin distribution channel. Plugins declare capability roles
+5. npm is the **plugin** distribution channel. Plugins declare capability roles
    (`provides: ['lifecycle']`, `provides: ['ui']`). Other plugins depend on roles, not
    specific names — `depends: ['lifecycle']` works with any lifecycle plugin, enabling
    drop-in replacement. Core enforces: exactly one plugin per role that requires it.
-   Discovery is npm keyword-based in Phase 2. Dedicated registry is Phase 3.
+   Plugin discovery: `npm search kaizen-plugin`. Harnesses are shared by URL/path,
+   not npm — no registry needed.
 
 ## Plugin System Architecture
 
@@ -640,16 +643,17 @@ sharing is the harness; the unit of functionality is the plugin.
 
 #### What a harness contains
 
+The minimum harness is a single `kaizen.json`. A folder harness adds companion
+files alongside it (prompt templates, tool scripts, README):
+
 ```
-kaizen-harness-godot/
-  package.json   # pinned plugin versions as dependencies
-  kaizen.json    # plugin list + default config for each plugin
+my-harness/
+  kaizen.json   ← kaizen reads this
   README.md
 ```
 
-No `index.ts`. A harness does not export `KaizenPlugin`. If a harness needs to
-register tools or behavior, it bundles a companion plugin that it lists in its
-`kaizen.json`.
+A harness does not export `KaizenPlugin`. If it needs tools or behavior, it lists
+a companion plugin in its `kaizen.json`.
 
 #### Built-in harnesses
 
@@ -657,38 +661,41 @@ Core ships harnesses in the `harnesses/` directory alongside the source:
 
 ```
 harnesses/
-  core-debug/    kaizen.json   — debug executor + event log
-  core-shell/    kaizen.json   — bash passthrough executor
+  core-anthropic/  kaizen.json  — full default stack (Anthropic LLM)
+  core-debug/      kaizen.json  — debug executor + event log
+  core-shell/      kaizen.json  — bash passthrough executor
 ```
 
-These are addressable by short name. More will be added as the ecosystem grows.
+Addressable by short name: `kaizen --harness core-debug`.
 
 #### Using a harness
 
-**Option 1 — CLI flag (no local config needed):**
-
+**Option 1 — built-in short name:**
 ```bash
 kaizen --harness core-debug
-kaizen --harness core-shell
 ```
 
-Loads the named harness config directly. No local `kaizen.json` required.
+**Option 2 — local path:**
+```bash
+kaizen --harness ./my-harness/kaizen.json
+kaizen --harness ./my-harness/
+```
 
-**Option 2 — `extends` in local `kaizen.json` (with overrides):**
+**Option 3 — URL:**
+```bash
+kaizen --harness https://example.com/my-harness/kaizen.json
+```
 
+**Option 4 — `extends` in local `kaizen.json` (with overrides):**
 ```json
 {
   "extends": "core-debug",
   "core-lifecycle": { "systemPrompt": "You are a coding assistant." }
 }
 ```
-
-The harness provides the base plugin stack; the local config overlays it.
-`--harness` on the CLI takes precedence if both are present.
+`extends` accepts anything `--harness` accepts: short name, local path, or URL.
 
 #### Merge behaviour
-
-When a local config overlays a harness:
 
 | Key | Behaviour |
 |-----|-----------|
@@ -696,48 +703,21 @@ When a local config overlays a harness:
 | Plugin config objects | Shallow merge — local wins on conflicts |
 | `extends` | Consumed during resolution, stripped from final config |
 
-This means a local config that omits `plugins` inherits the harness plugin stack
-unchanged; adding `plugins` replaces it entirely.
+#### Sharing harnesses
 
-#### Third-party harnesses
-
-Third-party harnesses follow the npm naming convention `kaizen-harness-<name>`
-and are installed like any other package:
+Share a URL or local path to `kaizen.json`. No npm publish required.
 
 ```bash
-bun add kaizen-harness-godot
+# recipient uses:
+kaizen --harness https://raw.githubusercontent.com/team/repo/main/kaizen.json
 ```
 
-Then referenced by package name:
-
-```json
-{ "extends": "kaizen-harness-godot" }
-```
-
-or:
-
-```bash
-kaizen --harness kaizen-harness-godot
-```
-
-Resolution order for `--harness <name>` or `extends: "<name>"`:
-
-1. `harnesses/<name>/kaizen.json` — built-in (ships with kaizen)
-2. `node_modules/kaizen-harness-<name>/kaizen.json` — installed third-party
-
-#### Payload types and event contracts
-
-A harness may bundle an events plugin (`provides: ["events"]`) that defines a
-custom vocabulary. Any plugin that wants to subscribe to those events declares
-`depends: ["kaizen-harness-godot"]` (or the events role it provides) and imports
-payload types from that package. The `depends` array is the machine-readable
-record of which event contract a plugin has accepted.
+Or: `kaizen install <url>` sets `extends` in their local `kaizen.json`.
 
 #### Discovery
 
-`npm search kaizen-harness` lists published harnesses.
-`npm search kaizen-plugin` lists standalone plugins.
-A dedicated registry UI is a future phase.
+Share harness URLs directly (gist, repo, file host). There is no harness-specific
+npm registry — `npm search kaizen-plugin` lists plugins only.
 
 ## CLI Surface (Updated)
 
@@ -835,7 +815,7 @@ is coupled to the built-in implementations and must be fixed before shipping.
 
 **Discoverability:**
 - `npm search kaizen-plugin` returns at minimum: kaizen-plugin-cli, kaizen-plugin-noop
-- `npm search kaizen-harness` returns at minimum one published harness example
+- At least one harness is published as a shareable URL (gist or repo)
 
 ## Testing Strategy
 
@@ -889,8 +869,8 @@ Plugin contract tests (run on every commit — these are the quality gate):
 
 **Plugin/harness distribution:**
 - Plugins: npm package with keyword `kaizen-plugin`. `npm search kaizen-plugin`.
-- Harnesses: npm package with keyword `kaizen-harness`. `npm search kaizen-harness`.
-- `kaizen install <name>` resolves `kaizen-harness-<name>` from npm registry.
+- Harnesses: a `kaizen.json` file shared by URL or local path. No npm publish required.
+  `kaizen install <url-or-path>` sets `extends` in local `kaizen.json`.
 - Plugin installation uses `bun add --global <name>` (not `npm install -g`). Since the
   kaizen binary embeds the Bun runtime, no external package manager is needed.
   The binary is truly self-contained for both running and plugin management.
@@ -942,8 +922,12 @@ Plugin contract tests (run on every commit — these are the quality gate):
 10. **[TODO]** Write `kaizen init` + `kaizen apply` + `kaizen install` + `kaizen plugin *`.
     Plugin install uses `bun add --global` with 60s timeout + structured error handling.
 
-11. **[TODO]** Document plugin authoring API (`docs/plugin-api.md`). Publish
-    `kaizen-plugin-noop` as the reference implementation.
+11. **[DONE]** Document plugin authoring API and internals.
+    - `docs/architecture.md` — system overview, lifecycle, file layout
+    - `docs/plugin-api.md` — plugin authoring guide (tools, events, roles, config)
+    - `docs/harnesses.md` — harness usage and authoring
+    - `docs/core-internals.md` — loader, event bus, registries, config system
+    Publishing `kaizen-plugin-noop` as reference impl deferred with step 9.
 
 ## Known Limitations (Phase 2)
 
