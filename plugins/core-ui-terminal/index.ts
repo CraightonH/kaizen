@@ -2,11 +2,26 @@ import { randomUUID } from "crypto";
 import type { KaizenPlugin, UiChannel, UserMessage, AgentMessage } from "../../src/types/plugin.js";
 import { readStdinLine } from "../../src/core/stdin.js";
 
-function createTerminalChannel(opts: { prompt: string; responsePrefix: string }): UiChannel {
+function createTerminalChannel(opts: {
+  prompt: string;
+  responsePrefix: string;
+  initialPrompt?: string;
+  oneShot?: boolean;
+}): UiChannel {
+  let firstReceive = true;
+
   return {
     id: randomUUID(),
 
     async receive(): Promise<UserMessage> {
+      if (firstReceive && opts.initialPrompt) {
+        firstReceive = false;
+        return { type: "text", content: opts.initialPrompt };
+      }
+      firstReceive = false;
+
+      if (opts.oneShot) throw new Error("one-shot complete");
+
       process.stdout.write(opts.prompt);
       const line = await readStdinLine();
       if (line === "") throw new Error("stdin closed");
@@ -42,10 +57,17 @@ const plugin: KaizenPlugin = {
   async setup(ctx) {
     const prompt = (ctx.config["prompt"] as string | undefined) ?? "> ";
     const responsePrefix = (ctx.config["responsePrefix"] as string | undefined) ?? "";
+    const initialPrompt = ctx.config["initial_prompt"] as string | undefined;
+    const oneShot = Boolean(ctx.config["one_shot"] ?? (initialPrompt !== undefined));
 
     ctx.registerUi({
       async *accept() {
-        yield createTerminalChannel({ prompt, responsePrefix });
+        yield createTerminalChannel({
+          prompt,
+          responsePrefix,
+          ...(initialPrompt !== undefined ? { initialPrompt } : {}),
+          oneShot,
+        });
       },
     });
   },
