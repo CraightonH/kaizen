@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import type { KaizenPlugin, PluginContext, UiChannel, Message } from "../../src/types/plugin.js";
-import { EVENTS } from "../core-events/index.js";
+import { EVENTS, type UserMessageContext, type ResponseContext } from "../core-events/index.js";
 
 async function runSession(channel: UiChannel, ctx: PluginContext): Promise<void> {
   const sessionId = randomUUID();
@@ -22,15 +22,21 @@ async function runSession(channel: UiChannel, ctx: PluginContext): Promise<void>
         break;
       }
 
-      await ctx.emit(EVENTS.USER_MESSAGE, { sessionId, content: userMsg.content });
-      history.push({ role: "user", content: userMsg.content });
+      const msgPayload: UserMessageContext = { sessionId, content: userMsg.content };
+      await ctx.emit(EVENTS.USER_MESSAGE, msgPayload);
+      history.push({ role: "user", content: msgPayload.content });
 
       const tools = ctx.runtime.tools.list();
       const response = await ctx.runtime.executor.send(history, tools);
 
+      const respPayload: ResponseContext = { sessionId, content: response.content };
+      if (response.content) {
+        await ctx.emit(EVENTS.AGENT_RESPONSE, respPayload);
+      }
+
       history.push({
         role: "assistant",
-        content: response.content,
+        content: respPayload.content,
         ...(response.tool_calls.length > 0 ? { tool_calls: response.tool_calls } : {}),
       });
 
@@ -47,8 +53,7 @@ async function runSession(channel: UiChannel, ctx: PluginContext): Promise<void>
       }
 
       if (response.content) {
-        await ctx.emit(EVENTS.AGENT_RESPONSE, { sessionId, content: response.content });
-        await channel.send({ type: "text", content: response.content + "\n" });
+        await channel.send({ type: "text", content: respPayload.content + "\n" });
       }
     }
   } finally {

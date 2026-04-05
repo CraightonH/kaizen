@@ -10,13 +10,13 @@ const plugin: KaizenPlugin = {
 
   async setup(ctx) {
     ctx.on(EVENTS.USER_MESSAGE, async (payload) => {
-      const { content } = payload as UserMessageContext;
-      ctx.log(`[${new Date().toISOString()}] user: ${content}`);
+      const msg = payload as UserMessageContext;
+      msg.content = `[${new Date().toISOString()}] ${msg.content}`;
     });
 
     ctx.on(EVENTS.AGENT_RESPONSE, async (payload) => {
-      const { content } = payload as ResponseContext;
-      ctx.log(`[${new Date().toISOString()}] agent: ${content}`);
+      const msg = payload as ResponseContext;
+      msg.content = `[${new Date().toISOString()}] ${msg.content}`;
     });
   },
 };
