@@ -1,8 +1,20 @@
 import { readFileSync, existsSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { join } from "path";
 import type { KaizenConfig } from "../types/plugin.js";
 import { fatal, warn } from "./errors.js";
+
+// Built-in harnesses are imported as JSON so they are bundled into the compiled
+// binary. import.meta.url resolves to a virtual path inside the Bun binary and
+// cannot be used for filesystem resolution at runtime.
+import coreAnthropicHarness from "../../harnesses/core-anthropic/kaizen.json";
+import coreDebugHarness from "../../harnesses/core-debug/kaizen.json";
+import coreShellHarness from "../../harnesses/core-shell/kaizen.json";
+
+const BUILTIN_HARNESSES: Record<string, KaizenConfig> = {
+  "core-anthropic": coreAnthropicHarness as KaizenConfig,
+  "core-debug": coreDebugHarness as KaizenConfig,
+  "core-shell": coreShellHarness as KaizenConfig,
+};
 
 // Reserved top-level keys — not treated as plugin config namespaces.
 const RESERVED_KEYS = new Set(["plugins", "extends"]);
@@ -10,35 +22,79 @@ const RESERVED_KEYS = new Set(["plugins", "extends"]);
 // ---------------------------------------------------------------------------
 // Harness resolution
 //
-// Search order:
-//   1. <kaizen-repo-root>/harnesses/<name>/kaizen.json  (built-ins, dev)
-//   2. kaizen-harness-<name>/kaizen.json                (installed npm package)
+// Accepts:
+//   1. Built-in short name (e.g. "core-debug")
+//   2. Local path (e.g. "./my-harness" or "./my-harness/kaizen.json")
+//   3. URL — future (fetch at startup)
 // ---------------------------------------------------------------------------
 
-function kaizenRoot(): string {
-  // Walk up from this file (src/core/config.ts) to the repo root
-  return join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-}
+export function loadHarnessConfig(nameOrPath: string): KaizenConfig {
+  // 1. Built-in by short name
+  if (BUILTIN_HARNESSES[nameOrPath]) {
+    return BUILTIN_HARNESSES[nameOrPath]!;
+  }
 
-export function resolveHarness(name: string): string {
-  // 1. Built-in harness alongside the kaizen source tree
-  const builtin = join(kaizenRoot(), "harnesses", name, "kaizen.json");
-  if (existsSync(builtin)) return builtin;
+  // 2. Local path
+  if (nameOrPath.startsWith("./") || nameOrPath.startsWith("/") || nameOrPath.startsWith("../")) {
+    let filePath = nameOrPath;
+    // If it's a directory, look for kaizen.json inside
+    if (!filePath.endsWith(".json")) {
+      filePath = join(filePath, "kaizen.json");
+    }
+    if (!existsSync(filePath)) {
+      fatal(`Harness not found at path: ${filePath}`);
+    }
+    return parseAndValidateHarness(filePath, nameOrPath);
+  }
 
-  // 2. Installed npm package (kaizen-harness-<name>)
-  const pkg = join(kaizenRoot(), "node_modules", `kaizen-harness-${name}`, "kaizen.json");
-  if (existsSync(pkg)) return pkg;
+  // 3. URL — not yet implemented
+  if (nameOrPath.startsWith("http://") || nameOrPath.startsWith("https://")) {
+    fatal(
+      `URL harnesses are not yet supported in this version.\n` +
+      `Download the kaizen.json and use a local path instead.`,
+    );
+  }
 
   fatal(
-    `Harness '${name}' not found.\n` +
-    `  Built-in harnesses: core-debug\n` +
-    `  Install third-party: bun add kaizen-harness-${name}`,
+    `Harness '${nameOrPath}' not found.\n` +
+    `  Built-in harnesses: ${Object.keys(BUILTIN_HARNESSES).join(", ")}\n` +
+    `  Local path: ./my-harness/kaizen.json\n` +
+    `  URL: https://example.com/harness/kaizen.json (coming soon)`,
   );
 }
 
 // ---------------------------------------------------------------------------
 // Config loading
 // ---------------------------------------------------------------------------
+
+function validateConfig(config: Record<string, unknown>, source: string): void {
+  for (const [key, value] of Object.entries(config)) {
+    if (Array.isArray(value) && value.some((v) => v === null || v === undefined)) {
+      fatal(`Config error: '${key}' array in ${source} contains null/undefined entries.`);
+    }
+  }
+}
+
+function parseAndValidateHarness(path: string, label: string): KaizenConfig {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(path, "utf8"));
+  } catch (e) {
+    fatal(`Failed to parse ${path}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    fatal(`${path} must be a JSON object.`);
+  }
+
+  const config = raw as Record<string, unknown>;
+  validateConfig(config, path);
+
+  if (!config["plugins"]) fatal(`Harness '${label}' kaizen.json is missing 'plugins'.`);
+  if (!Array.isArray(config["plugins"])) fatal(`Harness '${label}' kaizen.json 'plugins' must be an array.`);
+
+  return config as KaizenConfig;
+}
 
 function parseConfigFile(path: string): Record<string, unknown> {
   let raw: unknown;
@@ -53,13 +109,7 @@ function parseConfigFile(path: string): Record<string, unknown> {
   }
 
   const config = raw as Record<string, unknown>;
-
-  for (const [key, value] of Object.entries(config)) {
-    if (Array.isArray(value) && value.some((v) => v === null || v === undefined)) {
-      fatal(`Config error: '${key}' array in ${path} contains null/undefined entries.`);
-    }
-  }
-
+  validateConfig(config, path);
   return config;
 }
 
@@ -72,16 +122,6 @@ export function loadKaizenConfig(path = "kaizen.json"): KaizenConfig {
 
   if (!config["plugins"]) fatal(`kaizen.json is missing required field 'plugins'.`);
   if (!Array.isArray(config["plugins"])) fatal(`kaizen.json 'plugins' must be an array.`);
-
-  return config as KaizenConfig;
-}
-
-export function loadHarnessConfig(name: string): KaizenConfig {
-  const path = resolveHarness(name);
-  const config = parseConfigFile(path);
-
-  if (!config["plugins"]) fatal(`Harness '${name}' kaizen.json is missing 'plugins'.`);
-  if (!Array.isArray(config["plugins"])) fatal(`Harness '${name}' kaizen.json 'plugins' must be an array.`);
 
   return config as KaizenConfig;
 }
