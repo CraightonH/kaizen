@@ -37,7 +37,7 @@ function getNpmGlobalRoot(): string {
 const BUN_GLOBAL_ROOT = getBunGlobalRoot();
 const NPM_GLOBAL_ROOT = getNpmGlobalRoot();
 
-const RESOLVE_PATHS = [
+export const RESOLVE_PATHS = [
   BUN_GLOBAL_ROOT,
   NPM_GLOBAL_ROOT,
   process.cwd() + "/node_modules",

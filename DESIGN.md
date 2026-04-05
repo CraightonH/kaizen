@@ -935,8 +935,9 @@ Plugin contract tests (run on every commit — these are the quality gate):
 
 8. **[DONE]** Run `kaizen run` end-to-end with all four. This is the MVP.
 
-9. **[TODO]** Write `kaizen-plugin-noop` as an external npm package. If it requires
+9. **[DEFERRED]** Write `kaizen-plugin-noop` as an external npm package. If it requires
    touching `src/types/plugin.ts`: the API has coupling to fix before shipping.
+   Deferred: this is a publishing/registry smoke test, not a code quality gate.
 
 10. **[TODO]** Write `kaizen init` + `kaizen apply` + `kaizen install` + `kaizen plugin *`.
     Plugin install uses `bun add --global` with 60s timeout + structured error handling.

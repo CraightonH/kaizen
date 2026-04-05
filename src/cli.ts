@@ -3,10 +3,19 @@
  * kaizen CLI entrypoint
  * Built-in plugins are statically imported so bun build --compile bundles them.
  */
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, writeFileSync } from "fs";
 import { bootstrap } from "./core/index.js";
 import { resolveConfig } from "./core/config.js";
 import { fatal } from "./core/errors.js";
+import {
+  readLocalConfig,
+  writeLocalConfig,
+  cmdApply,
+  cmdInstall,
+  cmdPluginInstall,
+  cmdPluginRemove,
+  cmdPluginList,
+} from "./commands/manage.js";
 
 import coreEvents from "core-events";
 import coreLifecycle from "core-lifecycle";
@@ -33,37 +42,9 @@ const builtins = {
 // ---------------------------------------------------------------------------
 
 const rawArgs = process.argv.slice(2);
-
-function flag(name: string): string | undefined {
-  const i = rawArgs.indexOf(name);
-  return i !== -1 ? rawArgs[i + 1] : undefined;
-}
-
-function hasFlag(name: string): boolean {
-  return rawArgs.includes(name);
-}
-
 const subcommand = rawArgs[0];
 
-// ---------------------------------------------------------------------------
-// kaizen.json helpers (for add/remove/list)
-// ---------------------------------------------------------------------------
-
 const CONFIG_PATH = "kaizen.json";
-
-function readLocalConfig(): Record<string, unknown> {
-  if (!existsSync(CONFIG_PATH)) {
-    fatal(
-      `No kaizen.json found. Run 'kaizen init' to create one, ` +
-      `or use a harness: kaizen --harness core-anthropic`,
-    );
-  }
-  return JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as Record<string, unknown>;
-}
-
-function writeLocalConfig(config: Record<string, unknown>): void {
-  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", "utf8");
-}
 
 function getCliList(config: Record<string, unknown>): string[] {
   const cliConfig = config["core-cli"] as Record<string, unknown> | undefined;
@@ -78,25 +59,54 @@ function setCliList(config: Record<string, unknown>, clis: string[]): void {
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: kaizen init
+// ---------------------------------------------------------------------------
+
+if (subcommand === "init") {
+  if (existsSync(CONFIG_PATH)) {
+    console.log("kaizen.json already exists.");
+    process.exit(0);
+  }
+  const defaultConfig = {
+    plugins: [
+      "core-events",
+      "core-executor-anthropic",
+      "core-ui-terminal",
+      "core-cli",
+      "core-lifecycle",
+    ],
+    "core-executor-anthropic": {
+      model: "claude-opus-4-6",
+      api_key_env: "ANTHROPIC_API_KEY",
+    },
+    "core-cli": {
+      clis: [] as string[],
+      allow_destructive: false,
+      subprocess_timeout_ms: 30000,
+    },
+  };
+  writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2) + "\n", "utf8");
+  console.log("Created kaizen.json. Run 'kaizen add <cli>' to register CLI tools.");
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
 // Subcommand: kaizen add <cli>
 // ---------------------------------------------------------------------------
 
 if (subcommand === "add") {
   const cliName = rawArgs[1];
   if (!cliName) fatal("Usage: kaizen add <cli-name>");
-
   const config = readLocalConfig();
   const clis = getCliList(config);
-
   if (clis.includes(cliName)) {
     console.log(`'${cliName}' is already registered.`);
-    process.exit(0);
+  } else {
+    clis.push(cliName);
+    setCliList(config, clis);
+    writeLocalConfig(config);
+    console.log(`Added '${cliName}' to core-cli.clis in kaizen.json.`);
   }
-
-  clis.push(cliName);
-  setCliList(config, clis);
-  writeLocalConfig(config);
-  console.log(`Added '${cliName}' to core-cli.clis in kaizen.json.`);
   process.exit(0);
 }
 
@@ -107,19 +117,16 @@ if (subcommand === "add") {
 if (subcommand === "remove") {
   const cliName = rawArgs[1];
   if (!cliName) fatal("Usage: kaizen remove <cli-name>");
-
   const config = readLocalConfig();
   const clis = getCliList(config);
   const filtered = clis.filter((c) => c !== cliName);
-
   if (filtered.length === clis.length) {
     console.log(`'${cliName}' is not registered.`);
-    process.exit(0);
+  } else {
+    setCliList(config, filtered);
+    writeLocalConfig(config);
+    console.log(`Removed '${cliName}' from core-cli.clis in kaizen.json.`);
   }
-
-  setCliList(config, filtered);
-  writeLocalConfig(config);
-  console.log(`Removed '${cliName}' from core-cli.clis in kaizen.json.`);
   process.exit(0);
 }
 
@@ -140,48 +147,49 @@ if (subcommand === "list") {
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: kaizen init
+// Subcommand: kaizen apply
 // ---------------------------------------------------------------------------
 
-if (subcommand === "init") {
-  if (existsSync(CONFIG_PATH)) {
-    console.log("kaizen.json already exists.");
-    process.exit(0);
-  }
-
-  const defaultConfig = {
-    plugins: [
-      "core-events",
-      "core-executor-anthropic",
-      "core-ui-terminal",
-      "core-cli",
-      "core-lifecycle",
-    ],
-    "core-executor-anthropic": {
-      model: "claude-opus-4-6",
-      api_key_env: "ANTHROPIC_API_KEY",
-    },
-    "core-cli": {
-      clis: [] as string[],
-      allow_destructive: false,
-      subprocess_timeout_ms: 30000,
-    },
-  };
-
-  writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2) + "\n", "utf8");
-  console.log("Created kaizen.json. Run 'kaizen add <cli>' to register CLI tools.");
+if (subcommand === "apply") {
+  cmdApply(builtins);
   process.exit(0);
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: kaizen run [prompt]
+// Subcommand: kaizen install <harness>
 // ---------------------------------------------------------------------------
 
-// Parse remaining run args — anything not consumed above as a subcommand.
-// Handles both `kaizen run [opts] [prompt]` and `kaizen [opts]` (implicit run).
-// Flags with values: --harness <val>, --config <val>
-// Boolean flags: --allow-destructive
-// Positional: "run" keyword (consumed), then optional prompt string
+if (subcommand === "install") {
+  cmdInstall(rawArgs[1]);
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: kaizen plugin <sub> [args]
+// ---------------------------------------------------------------------------
+
+if (subcommand === "plugin") {
+  const pluginSub = rawArgs[1];
+  switch (pluginSub) {
+    case "install":
+      cmdPluginInstall(rawArgs[2]);
+      break;
+    case "remove":
+      cmdPluginRemove(rawArgs[2], rawArgs.includes("--uninstall"));
+      break;
+    case "list":
+      cmdPluginList(builtins);
+      break;
+    default:
+      console.error("Usage: kaizen plugin install|remove|list [args]");
+      process.exit(1);
+  }
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: kaizen run [prompt]  (also: kaizen [flags])
+// ---------------------------------------------------------------------------
 
 const FLAGS_WITH_VALUE = new Set(["--harness", "--config"]);
 
@@ -208,14 +216,13 @@ function parseRunArgs(args: string[]): {
       allowDestructive = true;
       i++;
     } else if (arg.startsWith("--")) {
-      i++; // unknown flag, skip
+      i++;
     } else {
       positional.push(arg);
       i++;
     }
   }
 
-  // First positional is "run" keyword (consumed), second is the prompt
   const firstPositional = positional[0];
   const prompt = firstPositional === "run" ? positional[1] : firstPositional;
 
@@ -234,14 +241,12 @@ const kaizenConfig = resolveConfig({
   ...(parsed.configPath !== undefined ? { configPath: parsed.configPath } : {}),
 });
 
-// Inject allow_destructive override
 if (parsed.allowDestructive) {
   const cliConfig = (kaizenConfig["core-cli"] as Record<string, unknown> | undefined) ?? {};
   cliConfig["allow_destructive"] = true;
   kaizenConfig["core-cli"] = cliConfig;
 }
 
-// Inject single-prompt + one-shot into ui config
 if (parsed.prompt) {
   const uiConfig = (kaizenConfig["core-ui-terminal"] as Record<string, unknown> | undefined) ?? {};
   uiConfig["initial_prompt"] = parsed.prompt;
