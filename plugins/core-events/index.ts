@@ -1,4 +1,5 @@
 import type { KaizenPlugin, KaizenConfig } from "../../src/types/plugin.js";
+import { ServiceToken } from "../../src/types/plugin.js";
 
 // ---------------------------------------------------------------------------
 // Canonical event names
@@ -53,6 +54,17 @@ export interface ToolResultContext {
 }
 
 // ---------------------------------------------------------------------------
+// Service token — lets consumer plugins retrieve core-events capabilities
+// without re-importing the static EVENTS constant directly.
+// ---------------------------------------------------------------------------
+
+export interface CoreEventsService {
+  readonly events: typeof EVENTS;
+}
+
+export const CoreEventsServiceToken = new ServiceToken<CoreEventsService>("CoreEventsService");
+
+// ---------------------------------------------------------------------------
 // Plugin
 // ---------------------------------------------------------------------------
 
@@ -66,6 +78,7 @@ const plugin: KaizenPlugin = {
     for (const name of Object.values(EVENTS)) {
       ctx.defineEvent(name);
     }
+    ctx.registerService(CoreEventsServiceToken, { events: EVENTS });
   },
 };
 

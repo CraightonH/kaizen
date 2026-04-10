@@ -5,6 +5,7 @@ import { ExecutorRegistry } from "./executor-registry.js";
 import { UiRegistry } from "./ui-registry.js";
 import { loadPlugins, type Builtins } from "./loader.js";
 import { createPluginContext } from "./context.js";
+import { ServiceRegistry } from "./service-registry.js";
 
 export { PLUGIN_API_VERSION } from "../types/plugin.js";
 export type { KaizenPlugin, PluginContext } from "../types/plugin.js";
@@ -24,7 +25,7 @@ export async function bootstrap(
   const executorRegistry = new ExecutorRegistry();
   const uiRegistry = new UiRegistry();
 
-  const { lifecycleProvider, state } = await loadPlugins(
+  const { lifecycleProvider, state, serviceRegistry } = await loadPlugins(
     kaizenConfig,
     builtins,
     eventBus,
@@ -42,6 +43,7 @@ export async function bootstrap(
     toolRegistry,
     executorRegistry,
     uiRegistry,
+    serviceRegistry,
     () => state.current,
   );
 

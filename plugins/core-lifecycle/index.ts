@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import type { KaizenPlugin, PluginContext, UiChannel, Message } from "../../src/types/plugin.js";
-import { EVENTS, type UserMessageContext, type ResponseContext } from "../core-events/index.js";
+import { CoreEventsServiceToken, type CoreEventsService, type UserMessageContext, type ResponseContext } from "../core-events/index.js";
 
-async function runSession(channel: UiChannel, ctx: PluginContext): Promise<void> {
+async function runSession(channel: UiChannel, ctx: PluginContext, events: CoreEventsService["events"]): Promise<void> {
   const sessionId = randomUUID();
   const history: Message[] = [];
 
@@ -11,7 +11,7 @@ async function runSession(channel: UiChannel, ctx: PluginContext): Promise<void>
     history.push({ role: "system", content: systemPrompt });
   }
 
-  await ctx.emit(EVENTS.SESSION_START, { sessionId, config: ctx.config });
+  await ctx.emit(events.SESSION_START, { sessionId, config: ctx.config });
 
   try {
     while (true) {
@@ -23,7 +23,7 @@ async function runSession(channel: UiChannel, ctx: PluginContext): Promise<void>
       }
 
       const msgPayload: UserMessageContext = { sessionId, content: userMsg.content };
-      await ctx.emit(EVENTS.USER_MESSAGE, msgPayload);
+      await ctx.emit(events.USER_MESSAGE, msgPayload);
       history.push({ role: "user", content: msgPayload.content });
 
       const tools = ctx.runtime.tools.list();
@@ -31,7 +31,7 @@ async function runSession(channel: UiChannel, ctx: PluginContext): Promise<void>
 
       const respPayload: ResponseContext = { sessionId, content: response.content };
       if (response.content) {
-        await ctx.emit(EVENTS.AGENT_RESPONSE, respPayload);
+        await ctx.emit(events.AGENT_RESPONSE, respPayload);
       }
 
       history.push({
@@ -41,14 +41,14 @@ async function runSession(channel: UiChannel, ctx: PluginContext): Promise<void>
       });
 
       for (const tc of response.tool_calls) {
-        await ctx.emit(EVENTS.TOOL_BEFORE, { sessionId, tool: tc.name, args: tc.args });
+        await ctx.emit(events.TOOL_BEFORE, { sessionId, tool: tc.name, args: tc.args });
         await channel.send({ type: "tool_call", name: tc.name, args: tc.args });
 
         const result = await ctx.runtime.tools.execute(tc.name, tc.args);
         const output = result.error ?? result.output ?? JSON.stringify(result.data) ?? "";
         history.push({ role: "tool", content: output, tool_call_id: tc.id });
 
-        await ctx.emit(EVENTS.TOOL_AFTER, { sessionId, tool: tc.name, ok: result.ok, output });
+        await ctx.emit(events.TOOL_AFTER, { sessionId, tool: tc.name, ok: result.ok, output });
         await channel.send({ type: "tool_result", name: tc.name, ok: result.ok, output });
       }
 
@@ -57,7 +57,7 @@ async function runSession(channel: UiChannel, ctx: PluginContext): Promise<void>
       }
     }
   } finally {
-    await ctx.emit(EVENTS.SESSION_END, { sessionId });
+    await ctx.emit(events.SESSION_END, { sessionId });
     await channel.close();
   }
 }
@@ -68,13 +68,16 @@ const plugin: KaizenPlugin = {
   provides: ["lifecycle"],
   depends: ["events", "executor", "ui"],
 
-  async setup(_ctx) {},
+  async setup(ctx) {
+    ctx.getService(CoreEventsServiceToken); // validates CoreEventsService is available
+  },
 
   async start(ctx) {
+    const { events } = ctx.getService(CoreEventsServiceToken);
     const sessions: Promise<void>[] = [];
     for await (const channel of ctx.runtime.ui.accept()) {
       sessions.push(
-        runSession(channel, ctx).catch((err: unknown) => {
+        runSession(channel, ctx, events).catch((err: unknown) => {
           ctx.log(`session ${channel.id} error: ${err instanceof Error ? err.message : String(err)}`);
         }),
       );

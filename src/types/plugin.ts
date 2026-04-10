@@ -11,7 +11,8 @@
 
 export const PLUGIN_API_VERSION = "1";
 
-export { ServiceToken } from "../core/service-registry.js";
+import { ServiceToken } from "../core/service-registry.js";
+export { ServiceToken };
 
 // ---------------------------------------------------------------------------
 // JSON Schema (subset used for tool parameter definitions)
@@ -141,6 +142,14 @@ export type EventHandler = (payload?: unknown) => Promise<unknown | void>;
 // ---------------------------------------------------------------------------
 
 export interface PluginContext {
+  // --- Service registry ----------------------------------------------------
+
+  /** Register a typed service. Only valid during INITIALIZING (setup()). */
+  registerService<T>(token: ServiceToken<T>, impl: T): void;
+
+  /** Retrieve a typed service. Valid at any lifecycle state. Throws if not registered. */
+  getService<T>(token: ServiceToken<T>): T;
+
   // --- Tool registration (INITIALIZING state only) -------------------------
   registerTool(tool: ToolDefinition): void;
 

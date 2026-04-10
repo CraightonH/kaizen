@@ -10,6 +10,7 @@ import type { EventBus } from "./event-bus.js";
 import type { ToolRegistry } from "./tool-registry.js";
 import type { ExecutorRegistry } from "./executor-registry.js";
 import type { UiRegistry } from "./ui-registry.js";
+import { ServiceRegistry } from "./service-registry.js";
 import { createPluginContext, type CoreState } from "./context.js";
 
 // ---------------------------------------------------------------------------
@@ -177,9 +178,10 @@ export async function loadPlugins(
   toolRegistry: ToolRegistry,
   executorRegistry: ExecutorRegistry,
   uiRegistry: UiRegistry,
-): Promise<{ lifecycleProvider: KaizenPlugin; state: { current: CoreState } }> {
+): Promise<{ lifecycleProvider: KaizenPlugin; state: { current: CoreState }; serviceRegistry: ServiceRegistry }> {
   const stateContainer = { current: "INITIALIZING" as CoreState };
   const getState = () => stateContainer.current;
+  const serviceRegistry = new ServiceRegistry();
 
   // 1. Resolve plugins
   const resolved: KaizenPlugin[] = [];
@@ -224,6 +226,7 @@ export async function loadPlugins(
       toolRegistry,
       executorRegistry,
       uiRegistry,
+      serviceRegistry,
       getState,
     );
 
@@ -290,5 +293,5 @@ export async function loadPlugins(
   }
 
   stateContainer.current = "READY";
-  return { lifecycleProvider, state: stateContainer };
+  return { lifecycleProvider, state: stateContainer, serviceRegistry };
 }

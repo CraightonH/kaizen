@@ -1,8 +1,10 @@
 import type { PluginContext, ToolDefinition } from "../types/plugin.js";
+import type { ServiceToken } from "../types/plugin.js";
 import type { EventBus } from "./event-bus.js";
 import type { ToolRegistry } from "./tool-registry.js";
 import type { ExecutorRegistry } from "./executor-registry.js";
 import type { UiRegistry } from "./ui-registry.js";
+import type { ServiceRegistry } from "./service-registry.js";
 
 export type CoreState = "INITIALIZING" | "READY" | "RUNNING" | "CLOSED";
 
@@ -19,6 +21,7 @@ export function createPluginContext(
   toolRegistry: ToolRegistry,
   executorRegistry: ExecutorRegistry,
   uiRegistry: UiRegistry,
+  serviceRegistry: ServiceRegistry,
   getState: () => CoreState,
 ): PluginContext {
   return {
@@ -26,6 +29,15 @@ export function createPluginContext(
 
     log(msg: string): void {
       console.log(`[${pluginName}] ${msg}`);
+    },
+
+    registerService<T>(token: ServiceToken<T>, impl: T): void {
+      assertInitializing(getState(), "register services");
+      serviceRegistry.register(token, impl);
+    },
+
+    getService<T>(token: ServiceToken<T>): T {
+      return serviceRegistry.get(token);
     },
 
     registerTool(tool: ToolDefinition): void {

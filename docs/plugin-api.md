@@ -283,3 +283,85 @@ exported as `PLUGIN_API_VERSION` from `kaizen/core`.
 ```typescript
 import { PLUGIN_API_VERSION } from "kaizen/core";
 ```
+
+## Service Registry
+
+Plugins can share typed capabilities using `ServiceToken<T>`, `ctx.registerService`, and `ctx.getService`. This is the canonical way for one plugin to expose an API to another — typed at compile time, collision-free, and order-safe via `depends`.
+
+### Concepts
+
+- **`ServiceToken<T>`** — an unforgeable, typed key. Each `new ServiceToken(label)` call produces a distinct key, even if two tokens share the same label string.
+- **`ctx.registerService(token, impl)`** — register a service implementation. Valid only during `setup()`. Throws on duplicate registration.
+- **`ctx.getService(token)`** — retrieve a service. Valid at any lifecycle state (including tool handlers). Throws with a named error if the service is not registered.
+- **`depends`** — ensures the provider's `setup()` runs before the consumer's `setup()`. Required whenever `getService` is called during `setup()`.
+
+### Provider plugin
+
+```typescript
+// plugins/my-provider/index.ts
+import type { KaizenPlugin } from "kaizen/types";
+import { ServiceToken } from "kaizen/types";
+
+export interface MyService {
+  greet(name: string): string;
+}
+
+export const MyServiceToken = new ServiceToken<MyService>("MyService");
+
+const plugin: KaizenPlugin = {
+  name: "my-provider",
+  apiVersion: "1.0.0",
+  provides: [],
+  depends: [],
+  async setup(ctx) {
+    ctx.registerService(MyServiceToken, {
+      greet: (name) => `Hello, ${name}!`,
+    });
+  },
+};
+export default plugin;
+```
+
+### Consumer plugin
+
+```typescript
+// plugins/my-consumer/index.ts
+import type { KaizenPlugin } from "kaizen/types";
+import { MyServiceToken } from "my-provider";
+
+const plugin: KaizenPlugin = {
+  name: "my-consumer",
+  apiVersion: "1.0.0",
+  depends: ["my-provider"], // guarantees provider initializes first
+  async setup(ctx) {
+    const svc = ctx.getService(MyServiceToken); // typed as MyService
+    ctx.log(svc.greet("world"));               // "Hello, world!"
+  },
+};
+export default plugin;
+```
+
+### Built-in reference pair
+
+`core-events` ships a `CoreEventsServiceToken` that exposes its canonical event name constants. `core-lifecycle` consumes it — this is the canonical real-world example:
+
+```typescript
+// provider (core-events/index.ts, simplified)
+export interface CoreEventsService { readonly events: typeof EVENTS; }
+export const CoreEventsServiceToken = new ServiceToken<CoreEventsService>("CoreEventsService");
+// in setup(): ctx.registerService(CoreEventsServiceToken, { events: EVENTS });
+
+// consumer (core-lifecycle/index.ts, simplified)
+import { CoreEventsServiceToken } from "core-events";
+// in start(): const { events } = ctx.getService(CoreEventsServiceToken);
+```
+
+### Rules summary
+
+| Rule | Detail |
+|------|--------|
+| `registerService` is INITIALIZING-only | Call it in `setup()`. Calling it from a tool handler throws. |
+| `getService` is always valid | Call it in `setup()`, tool handlers, or event handlers. |
+| `depends` is required for ordering | If provider and consumer can load in any order, `getService` may throw at startup. |
+| Token label = interface name | `new ServiceToken<MyService>("MyService")` — label matches the TypeScript type name exactly. |
+| One provider per token | Duplicate `registerService` calls for the same token throw immediately. |
