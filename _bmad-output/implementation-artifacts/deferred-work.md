@@ -1,0 +1,7 @@
+## Deferred from: code review of 1-1-servicetoken-t-class-and-export (2026-04-09)
+
+- **No `toString()`/inspect override** — `ServiceToken` instances print as `ServiceToken {}` in logs and error output; a `toString()` returning `ServiceToken(${this.label})` would improve debuggability. Not required by any AC.
+- **Symbol realm isolation risk** — if `service-registry.js` is resolved from two different on-disk paths (e.g. two npm copies), cross-realm `instanceof ServiceToken` would fail. No `instanceof` guard is planned for `ServiceRegistry` (Map uses object identity), so this is low-impact unless that assumption changes. Worth revisiting if dynamic plugin loading from multiple registries is added.
+- **Empty-string label not validated** — `new ServiceToken("")` is silently accepted, producing a token with `Symbol("")`. A guard (`if (!label) throw`) would catch author mistakes early. No AC requires this.
+- **AC4 compile-time mismatch not tested** — AC4 (type mismatch is a compile error) is guaranteed by TypeScript generics but has no explicit `@ts-expect-error` or `tsd` test. Consider adding `tsd` tooling to the project to cover this class of AC.
+- **`_type` phantom brand not declared `private`** — `declare readonly _type: T` is visible in intellisense. `declare private readonly _type: T` would signal intent more clearly and suppress it from autocompletion without affecting structural typing behavior.
