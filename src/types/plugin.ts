@@ -11,6 +11,8 @@
 
 export const PLUGIN_API_VERSION = "1";
 
+export { ServiceToken } from "../core/service-registry.js";
+
 // ---------------------------------------------------------------------------
 // JSON Schema (subset used for tool parameter definitions)
 // ---------------------------------------------------------------------------
