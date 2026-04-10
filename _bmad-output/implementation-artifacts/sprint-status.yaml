@@ -8,23 +8,23 @@
 # STATUS DEFINITIONS:
 # ==================
 # Epic Status:
-#   - backlog: Epic not yet started
+#   - done: Epic not yet started
 #   - in-progress: Epic actively being worked on
 #   - done: All stories in epic completed
 #
 # Epic Status Transitions:
-#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - done → in-progress: Automatically when first story is created (via create-story)
 #   - in-progress → done: Manually when all stories reach 'done' status
 #
 # Story Status:
-#   - backlog: Story only exists in epic file
+#   - done: Story only exists in epic file
 #   - ready-for-dev: Story file created in stories folder
 #   - in-progress: Developer actively working on implementation
 #   - review: Ready for code review (via Dev's code-review workflow)
 #   - done: Story completed
 #
 # Retrospective Status:
-#   - optional: Can be completed but not required
+#   - done: Can be completed but not required
 #   - done: Retrospective has been completed
 #
 # WORKFLOW NOTES:
@@ -43,19 +43,19 @@ story_location: _bmad-output/implementation-artifacts
 
 development_status:
   # Epic 1: Plugin Authors Can Define, Register, and Consume Typed Services
-  epic-1: in-progress
+  epic-1: done
   1-1-servicetoken-t-class-and-export: done
-  1-2-serviceregistry-class-with-register-get-and-error-handling: backlog
-  1-3-loader-integration-and-plugincontext-api-surface-wiring: backlog
-  epic-1-retrospective: optional
+  1-2-serviceregistry-class-with-register-get-and-error-handling: done
+  1-3-loader-integration-and-plugincontext-api-surface-wiring: done
+  epic-1-retrospective: done
 
   # Epic 2: Built-in Reference Pair Dogfoods the Pattern End-to-End
-  epic-2: backlog
-  2-1-core-events-plugin-exports-coreeventsservicetoken: backlog
-  2-2-core-lifecycle-plugin-consumes-coreeventsservicetoken-and-integration-tests: backlog
-  epic-2-retrospective: optional
+  epic-2: done
+  2-1-core-events-plugin-exports-coreeventsservicetoken: done
+  2-2-core-lifecycle-plugin-consumes-coreeventsservicetoken-and-integration-tests: done
+  epic-2-retrospective: done
 
   # Epic 3: Documentation Enables Third-Party Plugin Authors to Adopt the Pattern
-  epic-3: backlog
-  3-1-docs-plugin-api-md-service-registry-section: backlog
-  epic-3-retrospective: optional
+  epic-3: done
+  3-1-docs-plugin-api-md-service-registry-section: done
+  epic-3-retrospective: done
