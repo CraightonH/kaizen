@@ -1500,6 +1500,29 @@ git commit --allow-empty -m "chore: plan 1 (enforcer core) — end-to-end verifi
 - **Plan 2:** lockfile format, hash computation, UAC rendering, `kaizen install` / `plugin consent` / `plugin review` commands, lockfile enforcement.
 - **Plan 3:** `kaizen plugin dev --observe` mode, built-in plugin migration (10 plugins), flip enforcer default from `log-only` to `enforce`, README security-model section.
 
+### Deviation log (update this during implementation)
+
+Plans 2 and 3 are written against the assumptions below. **If an implementation
+task diverges from any of these, append a note here so Plans 2 and 3 can be
+updated before they run.**
+
+Assumptions Plans 2/3 rely on:
+- `PluginPermissions` shape as defined in Task 1 (tier + fs/net/env/exec/events).
+- `PermissionEnforcer` public API: `register(plugin, manifest)`, `deregister(plugin)`,
+  `check(plugin, op)`, `setMode("enforce" | "log-only")`, `onDenial(listener)`.
+- `PermissionOp` discriminated union kinds: `fs.read`, `fs.write`, `net.connect`,
+  `env.get`, `exec.run`, `events.subscribe`, `import`.
+- `createCtxIo(plugin, enforcer)` returns the `CtxIo` shape with `fs`/`net`/`secrets`/`exec`/`log`.
+- `runInPluginScope(pluginName, fn)` wraps plugin entry points.
+- `AuditLog` constructor shape: `{ rootDir, sessionId, enabled? }` with `record(DenialRecord)` and `flushSync()`/`flush()`.
+- Enforcer default mode after bootstrap: `log-only` (Plan 3 flips this).
+- `DenialRecord` shape: `{ ts, plugin, op, reason }`.
+
+**Deviations observed during implementation:**
+
+_(none yet — append as they occur)_
+
+
 ---
 
 ## Notes for the Implementing Engineer
