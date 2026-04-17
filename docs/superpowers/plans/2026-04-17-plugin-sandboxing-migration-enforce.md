@@ -979,6 +979,17 @@ just not exactly which binaries without config context. Future options: (a) a `s
 `ctx.permissions.refine(...)` API that narrows grants after reading config, or (b) a separate
 config-declaration field that core reads before constructing the permission manifest.
 
+**Task 10 — core-executor-debug and test-core observer needed permission fixes**
+Two issues surfaced after flipping the enforcer default to "enforce":
+1. `plugins/core-executor-debug/index.ts` was declared `{ tier: "trusted" }` (per plan's Task 4
+   instruction) but its `setup()` subscribes to ALL EVENTS — `session:*` and `tool:*` — for
+   debug output. TRUSTED tier blocks all external ops including `events.subscribe`. Fixed by
+   changing its permissions to `{ tier: "scoped", events: { subscribe: ["session:*", "tool:*"] } }`.
+2. `scripts/test-core.ts`'s inline `observer` plugin (fixture for `bun run test:core`) had no
+   `permissions` declaration and called `ctx.on()` for `session:*` events. Fixed by adding
+   `permissions: { tier: "scoped", events: { subscribe: ["session:*"] } }` to the fixture plugin.
+Both fixes were minimal — no production built-in manifests beyond what was previously planned.
+
 ---
 
 ## Notes for the Implementing Engineer
