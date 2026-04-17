@@ -40,6 +40,10 @@ const plugin: KaizenPlugin = {
   apiVersion: "1.0.0",
   provides: ["executor"],
   depends: [],
+  permissions: {
+    tier: "unscoped",
+    exec: { binaries: ["*"] }, // informational; not enforced at unscoped tier
+  },
 
   async setup(ctx) {
     const cwd = (ctx.config["cwd"] as string | undefined) ?? process.cwd();
