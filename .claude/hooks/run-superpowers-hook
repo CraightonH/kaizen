@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Wrapper so session-start can locate its skill files and use the correct
+# output format. CLAUDE_PLUGIN_ROOT must point to the directory whose
+# structure mirrors the plugin root (.claude/ in this repo).
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+export CLAUDE_PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+exec bash "${SCRIPT_DIR}/session-start"
