@@ -966,7 +966,18 @@ git commit --allow-empty -m "chore: plan 3 (migration + enforce + docs) — plug
 
 **Deviations observed during implementation:**
 
-_(none yet — append as they occur, so later work can build on accurate assumptions)_
+**Task 8 — core-cli exec.binaries: ["*"]**
+The plan recommended reading `ctx.config["clis"]` at plugin setup time to build a precise
+`exec.binaries` allowlist, or falling back to `["*"]` if that's impractical. The `permissions`
+block is declared statically on the plugin object — before `setup()` runs and before
+`ctx.config` is available. Duplicating the CLI list in both `kaizen.json` and the plugin
+source would be brittle and error-prone. Decision: use `exec.binaries: ["*"]` (any binary
+permitted for exec.run) with tier `"scoped"`. The enforcer still gates every `exec.run` call
+through the permission check; the actual invocations are bounded to whatever the user put
+in `clis` config. This is a breadth trade-off: the sandbox knows this plugin runs *something*,
+just not exactly which binaries without config context. Future options: (a) a `setup()`-time
+`ctx.permissions.refine(...)` API that narrows grants after reading config, or (b) a separate
+config-declaration field that core reads before constructing the permission manifest.
 
 ---
 

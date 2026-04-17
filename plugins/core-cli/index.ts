@@ -1,5 +1,4 @@
-import { execSync, spawn } from "child_process";
-import type { KaizenPlugin, ToolDefinition, ToolResult } from "../../src/types/plugin.js";
+import type { KaizenPlugin, PluginContext, ToolDefinition, ToolResult } from "../../src/types/plugin.js";
 import { readStdinLine } from "../../src/core/stdin.js";
 import { EVENTS } from "../core-events/index.js";
 
@@ -8,55 +7,33 @@ import { EVENTS } from "../core-events/index.js";
 // ---------------------------------------------------------------------------
 
 async function runCli(
+  ctx: PluginContext,
   cliName: string,
   args: string[],
   timeoutMs: number,
 ): Promise<ToolResult> {
-  return new Promise((resolve) => {
-    const child = spawn(cliName, args, { stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-
-    const timer = setTimeout(() => {
-      child.kill();
-      resolve({ ok: false, error: `${cliName}: timed out after ${timeoutMs}ms` });
-    }, timeoutMs);
-
-    child.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
-    child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
-
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code === 0) {
-        resolve({ ok: true, output: stdout || stderr });
-      } else {
-        const result: ToolResult = { ok: false, error: stderr || stdout };
-        if (code !== null) result.exit_code = code;
-        resolve(result);
-      }
-    });
-
-    child.on("error", (err) => {
-      clearTimeout(timer);
-      resolve({ ok: false, error: err.message });
-    });
-  });
+  try {
+    const result = await ctx.exec.run(cliName, args, { timeoutMs });
+    if (result.exitCode === 0) {
+      return { ok: true, output: result.stdout || result.stderr };
+    } else {
+      const toolResult: ToolResult = { ok: false, error: result.stderr || result.stdout };
+      toolResult.exit_code = result.exitCode;
+      return toolResult;
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: msg };
+  }
 }
 
-function getHelpText(cliName: string, timeoutMs: number): string {
+async function getHelpText(ctx: PluginContext, cliName: string, timeoutMs: number): Promise<string> {
   try {
-    return execSync(`${cliName} --help`, {
-      timeout: timeoutMs,
-      encoding: "utf8",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-  } catch (e: unknown) {
+    const result = await ctx.exec.run(cliName, ["--help"], { timeoutMs });
     // Many CLIs exit non-zero for --help but still write to stdout/stderr
-    if (e && typeof e === "object") {
-      const err = e as { stdout?: string; stderr?: string };
-      if (typeof err.stdout === "string" && err.stdout.trim()) return err.stdout;
-      if (typeof err.stderr === "string" && err.stderr.trim()) return err.stderr;
-    }
+    const text = result.stdout.trim() || result.stderr.trim();
+    return text || `${cliName} CLI tool`;
+  } catch {
     return `${cliName} CLI tool`;
   }
 }
@@ -123,6 +100,7 @@ async function confirmDestructive(cliName: string, command: string): Promise<boo
 // ---------------------------------------------------------------------------
 
 function createCliTool(
+  ctx: PluginContext,
   cliName: string,
   helpText: string,
   allowDestructive: boolean,
@@ -155,7 +133,7 @@ function createCliTool(
       }
 
       const cmdArgs = parseArgs(command);
-      return runCli(cliName, cmdArgs, timeoutMs);
+      return runCli(ctx, cliName, cmdArgs, timeoutMs);
     },
   };
 }
@@ -170,14 +148,27 @@ const plugin: KaizenPlugin = {
   provides: [],
   depends: ["lifecycle"],
 
+  // SCOPED with exec.binaries: ["*"]
+  // Rationale: the binary list comes from ctx.config["clis"] which is not
+  // available at plugin declaration time (only during setup()). A static
+  // allowlist would require duplicating config in two places. Using "*" is
+  // conservative in the other direction — it permits any binary — but the
+  // enforcer still gates every exec.run call through the permission check,
+  // and the actual binaries invoked are limited to what the user configured.
+  // Deviation logged in plan 3 Deviation Log.
+  permissions: {
+    tier: "scoped",
+    exec: { binaries: ["*"] },
+  },
+
   async setup(ctx) {
     const clis = (ctx.config["clis"] as string[] | undefined) ?? [];
     const allowDestructive = Boolean(ctx.config["allow_destructive"] ?? false);
     const timeoutMs = Number(ctx.config["subprocess_timeout_ms"] ?? 30000);
 
     for (const cliName of clis) {
-      const helpText = getHelpText(cliName, timeoutMs);
-      const tool = createCliTool(cliName, helpText, allowDestructive, timeoutMs);
+      const helpText = await getHelpText(ctx, cliName, timeoutMs);
+      const tool = createCliTool(ctx, cliName, helpText, allowDestructive, timeoutMs);
       ctx.registerTool(tool);
       ctx.log(`registered tool: ${cliName}`);
     }
