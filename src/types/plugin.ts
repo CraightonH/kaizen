@@ -217,6 +217,12 @@ export interface PluginContext {
   // --- Runtime primitives --------------------------------------------------
 
   runtime: {
+    /** All registered executors; routing mechanism deferred. */
+    executors: {
+      list(): Executor[];
+      getFirst(): Executor;
+    };
+    /** First-registered executor — preserved for back-compat. Deprecated once routing lands. */
     executor: Executor;
     /** All registered UI providers, in registration order. */
     ui: {

@@ -82,7 +82,11 @@ export function createPluginContext(
 
     runtime: {
       get executor() {
-        return executorRegistry.get();
+        return executorRegistry.getFirst();
+      },
+      executors: {
+        list: () => executorRegistry.list(),
+        getFirst: () => executorRegistry.getFirst(),
       },
       ui: {
         list: () => uiRegistry.list(),
