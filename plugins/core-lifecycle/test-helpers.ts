@@ -31,19 +31,23 @@ export interface MockChannel {
 export function makeMockChannel(id: string): MockChannel {
   const sent: AgentMessage[] = [];
   const sendWaiters: Array<(msg: AgentMessage) => void> = [];
-  let pendingUserResolve: ((msg: UserMessage) => void) | null = null;
-  let pendingReject: ((err: Error) => void) | null = null;
-  const queue: UserMessage[] = [];
+  // FIFO queues — models a real channel where pending receive() calls line up
+  // and each produced message resolves exactly one. Prevents orphan promises
+  // from silently consuming messages.
+  const receiveWaiters: Array<{
+    resolve: (msg: UserMessage) => void;
+    reject: (err: Error) => void;
+  }> = [];
+  const msgQueue: UserMessage[] = [];
   let closed = false;
 
   const channel: UiChannel = {
     id,
     async receive() {
       if (closed) throw new Error("closed");
-      if (queue.length > 0) return queue.shift()!;
+      if (msgQueue.length > 0) return msgQueue.shift()!;
       return new Promise<UserMessage>((resolve, reject) => {
-        pendingUserResolve = resolve;
-        pendingReject = reject;
+        receiveWaiters.push({ resolve, reject });
       });
     },
     async send(msg) {
@@ -53,10 +57,8 @@ export function makeMockChannel(id: string): MockChannel {
     },
     async close() {
       closed = true;
-      const reject = pendingReject;
-      pendingUserResolve = null;
-      pendingReject = null;
-      if (reject) reject(new Error("closed"));
+      const waiters = receiveWaiters.splice(0, receiveWaiters.length);
+      for (const w of waiters) w.reject(new Error("closed"));
     },
   };
 
@@ -64,21 +66,18 @@ export function makeMockChannel(id: string): MockChannel {
     channel,
     sent,
     sendUserMessage(content) {
-      if (pendingUserResolve) {
-        const resolve = pendingUserResolve;
-        pendingUserResolve = null;
-        pendingReject = null;
-        resolve({ type: "text", content });
+      const msg: UserMessage = { type: "text", content };
+      if (receiveWaiters.length > 0) {
+        const waiter = receiveWaiters.shift()!;
+        waiter.resolve(msg);
       } else {
-        queue.push({ type: "text", content });
+        msgQueue.push(msg);
       }
     },
     close() {
       closed = true;
-      const reject = pendingReject;
-      pendingUserResolve = null;
-      pendingReject = null;
-      if (reject) reject(new Error("closed"));
+      const waiters = receiveWaiters.splice(0, receiveWaiters.length);
+      for (const w of waiters) w.reject(new Error("closed"));
     },
     async waitForSend(predicate, timeoutMs = 2000) {
       // Check already-received messages first.

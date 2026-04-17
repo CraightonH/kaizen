@@ -101,6 +101,25 @@ const plugin: KaizenPlugin = {
     }
     await ctx.emit(events.SESSION_START, { sessionId, config: ctx.config });
 
+    // Per-channel pending receive — we reuse the same promise across race
+    // iterations so receive() is called at most once per channel per yielded
+    // message. Prevents the "orphan receive consumes a future message" problem.
+    type RaceResult =
+      | { kind: "msg"; msg: import("../../src/types/plugin.js").UserMessage; channel: UiChannel }
+      | { kind: "err"; err: unknown; channel: UiChannel };
+    const pending = new Map<UiChannel, Promise<RaceResult>>();
+    const ensurePending = (c: UiChannel): Promise<RaceResult> => {
+      let p = pending.get(c);
+      if (!p) {
+        p = c.receive().then(
+          (msg) => ({ kind: "msg" as const, msg, channel: c }),
+          (err: unknown) => ({ kind: "err" as const, err, channel: c }),
+        );
+        pending.set(c, p);
+      }
+      return p;
+    };
+
     try {
       while (true) {
         if (activeChannels.size === 0) {
@@ -109,30 +128,18 @@ const plugin: KaizenPlugin = {
           continue;
         }
 
-        // Race receives across all active channels.
-        // TODO: losers remain as orphaned pending promises on their channels'
-        // next message or close. Acceptable for phase 1 per plan (simplicity
-        // over premature cancellation); real channels consume on receive() so
-        // no message is lost — just a transient memory/resource footprint.
-        const receives = [...activeChannels].map((c) =>
-          c.receive().then(
-            (msg) => ({ kind: "msg" as const, msg, channel: c }),
-            (err: unknown) => ({ kind: "err" as const, err, channel: c }),
-          ),
-        );
+        const receives = [...activeChannels].map((c) => ensurePending(c));
         // A late-arriving channel should re-drive the race without waiting on
         // existing receives.
         const newChannelSignal = new Promise<{ kind: "new" }>((resolve) => {
           channelAddedResolvers.push(() => resolve({ kind: "new" }));
         });
 
-        const first = await Promise.race<
-          | { kind: "msg"; msg: import("../../src/types/plugin.js").UserMessage; channel: UiChannel }
-          | { kind: "err"; err: unknown; channel: UiChannel }
-          | { kind: "new" }
-        >([...receives, newChannelSignal]);
+        const first = await Promise.race<RaceResult | { kind: "new" }>([...receives, newChannelSignal]);
 
         if (first.kind === "new") continue;
+        // Clear the settled pending entry so the next iteration re-issues receive().
+        pending.delete(first.channel);
         if (first.kind === "err") {
           activeChannels.delete(first.channel);
           continue;
