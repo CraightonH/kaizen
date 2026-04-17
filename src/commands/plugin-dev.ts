@@ -25,18 +25,30 @@ export async function runPluginDevObserve(args: {
   const all: CheckRecord[] = [];
   enforcer.onCheck((r) => { all.push(r); recorder.record(r); });
 
+  const outPath = join(args.pluginDir, ".kaizen", "proposed-permissions.ts");
+  let finalized = false;
+  const finalize = (): void => {
+    if (finalized) return;
+    finalized = true;
+    recorder.flushSync();
+    const proposed = synthesizeManifest(args.pluginName, all);
+    writePluginPermissionsTs(outPath, args.pluginName, proposed);
+    console.log(`kaizen plugin dev: proposed manifest written to ${outPath}`);
+    console.log(`  records:    ${all.length}`);
+    console.log(`  log file:   ${recorder.path_()}`);
+  };
+
+  const onSignal = (): void => { finalize(); process.exit(0); };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+
   try {
     await runHarness({ kaizenConfig: args.kaizenConfig, builtins: args.builtins, enforcer });
   } finally {
-    recorder.flushSync();
+    finalize();
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
   }
-
-  const proposed = synthesizeManifest(args.pluginName, all);
-  const outPath = join(args.pluginDir, ".kaizen", "proposed-permissions.ts");
-  writePluginPermissionsTs(outPath, args.pluginName, proposed);
-  console.log(`kaizen plugin dev: proposed manifest written to ${outPath}`);
-  console.log(`  records:    ${all.length}`);
-  console.log(`  log file:   ${recorder.path_()}`);
   return 0;
 }
 

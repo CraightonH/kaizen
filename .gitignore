@@ -4,3 +4,10 @@ dist/
 kaizen
 /tmp/
 *.js.map
+
+# Sandbox runtime artifacts (commit kaizen.permissions.lock — it's the security record)
+.kaizen/
+plugins/*/.kaizen/
+
+# Bun build scratch files
+.*.bun-build
