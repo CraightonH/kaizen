@@ -4,9 +4,8 @@ import type { UserMessageContext, ResponseContext } from "../core-events/index.j
 
 const plugin: KaizenPlugin = {
   name: "kaizen-plugin-timestamps",
-  apiVersion: "1.0.0",
-  provides: [],
-  depends: ["events"],
+  apiVersion: "2.0.0",
+  capabilities: { consumes: ["core-lifecycle:lifecycle.drive"] },
 
   async setup(ctx) {
     ctx.on(EVENTS.USER_MESSAGE, async (payload) => {
