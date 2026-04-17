@@ -19,4 +19,11 @@ export class ExecutorRegistry {
   }
 
   isRegistered(): boolean { return this.impl !== null; }
+
+  deregisterByPlugin(pluginName: string): void {
+    if (this.registeredBy === pluginName) {
+      this.impl = null;
+      this.registeredBy = null;
+    }
+  }
 }
