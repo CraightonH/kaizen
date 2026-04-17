@@ -1,7 +1,7 @@
 import { createRequire } from "module";
 import { execSync } from "child_process";
-import { existsSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync } from "fs";
+import { dirname, join } from "path";
 import type { KaizenPlugin, KaizenConfig, PluginEntry, PluginManagerPublicApi, PluginManagerLifecycleApi } from "../types/plugin.js";
 import { PLUGIN_API_VERSION } from "../types/plugin.js";
 import { fatal, warn, debug } from "./errors.js";
@@ -17,6 +17,9 @@ import type { PermissionEnforcer } from "./permission-enforcer.js";
 import type { AuditLog } from "./audit-log.js";
 import { runInPluginScope } from "./plugin-scope.js";
 import { scanPluginEntryImports } from "./manifest-import-scan.js";
+import { readLockfile, writeLockfile, upsertPluginEntry } from "./lockfile.js";
+import { computePluginHash } from "./plugin-hash.js";
+import { decideConsent } from "./consent-flow.js";
 
 // ---------------------------------------------------------------------------
 // Resolution paths (cached once per process)
@@ -183,9 +186,53 @@ export class PluginManager {
     private readonly serviceRegistry: ServiceRegistry,
     private readonly enforcer: PermissionEnforcer,
     private readonly auditLog: AuditLog,
+    private readonly lockfilePath: string,
+    private readonly options: { trustLockfile: boolean; allowUnscoped: boolean; nonInteractive: boolean },
   ) {
     // Wire denial listener → audit log.
     this.enforcer.onDenial((r) => this.auditLog.record(r));
+  }
+
+  // --------------------------------------------------------------------------
+  // Lockfile consent
+  // --------------------------------------------------------------------------
+
+  private consultLockfile(plugin: KaizenPlugin, pluginDir: string | null): boolean {
+    // Built-ins with no pluginDir: pre-trusted; ship with the core binary.
+    if (!pluginDir) return true;
+
+    const lf = readLockfile(this.lockfilePath);
+    const pkgPath = join(pluginDir, "package.json");
+    const version = existsSync(pkgPath)
+      ? ((JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: string }).version ?? "unknown")
+      : "unknown";
+    const hash = computePluginHash(pluginDir);
+    const permissions = plugin.permissions ?? { tier: "trusted" };
+
+    const decision = decideConsent({
+      pluginName: plugin.name,
+      version,
+      hash,
+      permissions,
+      lockfile: lf,
+      interactive: !this.options.nonInteractive && process.stdin.isTTY === true,
+      allowUnscoped: this.options.allowUnscoped,
+    });
+
+    switch (decision.kind) {
+      case "accept":
+        return true;
+      case "accept-and-record":
+        writeLockfile(this.lockfilePath, upsertPluginEntry(lf, plugin.name, decision.entry));
+        return true;
+      case "prompt-scoped":
+      case "prompt-unscoped":
+        warn(`Plugin '${plugin.name}' requires consent. Run: kaizen plugin consent ${plugin.name}`);
+        return false;
+      case "refuse":
+        warn(`Plugin '${plugin.name}' refused: ${decision.reason}`);
+        return false;
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -200,7 +247,10 @@ export class PluginManager {
         continue;
       }
       const loaded = resolvePlugin(String(name), this.builtins);
-      if (loaded) resolvedPlugins.push(loaded);
+      if (!loaded) continue;
+      const pluginDir = loaded.resolvedPath ? dirname(loaded.resolvedPath) : null;
+      if (!this.consultLockfile(loaded.plugin, pluginDir)) continue;
+      resolvedPlugins.push(loaded);
     }
 
     const sorted = topoSort(resolvedPlugins.map((r) => r.plugin));
@@ -293,6 +343,15 @@ export class PluginManager {
     const pluginMajor = plugin.apiVersion.split(".")[0];
     if (pluginMajor !== PLUGIN_API_VERSION) {
       warn(`Plugin '${plugin.name}' apiVersion ${plugin.apiVersion}, core expects ${PLUGIN_API_VERSION}.x. Loading anyway.`);
+    }
+    const pluginDir = resolvedPath ? dirname(resolvedPath) : null;
+    if (!this.consultLockfile(plugin, pluginDir)) {
+      this.plugins.set(name, {
+        plugin,
+        entry: { name: plugin.name, apiVersion: plugin.apiVersion, provides: plugin.provides ?? [], status: "failed" },
+      });
+      warn(`Plugin '${name}' not loaded: consent refused or pending.`);
+      return;
     }
     try {
       await this.setupPlugin(plugin, resolvedPath);

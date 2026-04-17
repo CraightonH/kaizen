@@ -34,10 +34,16 @@ export async function bootstrap(
     sessionId: randomUUID(),
   });
 
+  const trustLockfile = process.argv.includes("--trust-lockfile");
+  const allowUnscoped = process.argv.includes("--allow-unscoped");
+  const nonInteractive = process.argv.includes("--non-interactive");
+  const lockfilePath = join(process.cwd(), "kaizen.permissions.lock");
+
   const manager = new PluginManager(
     kaizenConfig, builtins,
     eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry,
     enforcer, auditLog,
+    lockfilePath, { trustLockfile, allowUnscoped, nonInteractive },
   );
 
   const { lifecycleProvider } = await manager.initialize();
