@@ -1,8 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "fs";
+import { describe, expect, test, afterEach } from "bun:test";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { PluginManager } from "./plugin-manager.js";
+import { PluginManager, findPackageRoot } from "./plugin-manager.js";
 import { EventBus } from "./event-bus.js";
 import { ToolRegistry } from "./tool-registry.js";
 import { ExecutorRegistry } from "./executor-registry.js";
@@ -11,6 +11,34 @@ import { ServiceRegistry } from "./service-registry.js";
 import { PermissionEnforcer } from "./permission-enforcer.js";
 import { AuditLog } from "./audit-log.js";
 import type { KaizenPlugin, KaizenConfig, Executor, UiProvider } from "../types/plugin.js";
+
+describe("findPackageRoot", () => {
+  let tmpDir: string;
+  afterEach(() => { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }); });
+
+  test("returns directory itself when package.json is at the entry dir", () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "kaizen-pkgroot-"));
+    writeFileSync(join(tmpDir, "package.json"), "{}");
+    writeFileSync(join(tmpDir, "index.js"), "");
+    expect(findPackageRoot(join(tmpDir, "index.js"))).toBe(tmpDir);
+  });
+
+  test("walks up from dist/index.js to find package.json at parent", () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "kaizen-pkgroot-"));
+    mkdirSync(join(tmpDir, "dist"));
+    writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "foo", main: "dist/index.js" }));
+    writeFileSync(join(tmpDir, "dist", "index.js"), "");
+    const result = findPackageRoot(join(tmpDir, "dist", "index.js"));
+    expect(result).toBe(tmpDir);
+  });
+
+  test("throws when no package.json found", () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "kaizen-pkgroot-"));
+    mkdirSync(join(tmpDir, "deep", "path"), { recursive: true });
+    writeFileSync(join(tmpDir, "deep", "path", "index.js"), "");
+    expect(() => findPackageRoot(join(tmpDir, "deep", "path", "index.js"))).toThrow(/no package.json found/);
+  });
+});
 
 const stubExecutor: Executor = {
   send: async () => ({ content: "", tool_calls: [], stop_reason: "end_turn" }),

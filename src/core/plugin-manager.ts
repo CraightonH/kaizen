@@ -1,6 +1,6 @@
 import { createRequire } from "module";
 import { execSync } from "child_process";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, statSync } from "fs";
 import { dirname, join } from "path";
 import type { KaizenPlugin, KaizenConfig, PluginEntry, PluginManagerPublicApi, PluginManagerLifecycleApi } from "../types/plugin.js";
 import { PLUGIN_API_VERSION } from "../types/plugin.js";
@@ -50,6 +50,32 @@ export const RESOLVE_PATHS = [
   NPM_GLOBAL_ROOT,
   process.cwd() + "/node_modules",
 ].filter(Boolean);
+
+// ---------------------------------------------------------------------------
+// Package root resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Walk up from a resolved entry file (or directory) to the nearest ancestor
+ * directory that contains a package.json. This is the canonical plugin root
+ * for hash computation and package.json reads.
+ *
+ * For a standard npm plugin whose entry point is at
+ * `node_modules/foo/dist/index.js`, dirname() would give `.../dist` which
+ * misses the real package root. Walking up finds `.../foo` instead.
+ */
+export function findPackageRoot(startPath: string): string {
+  let dir =
+    existsSync(startPath) && statSync(startPath).isDirectory()
+      ? startPath
+      : dirname(startPath);
+  while (true) {
+    if (existsSync(join(dir, "package.json"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) throw new Error(`no package.json found walking up from ${startPath}`);
+    dir = parent;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Plugin resolution
@@ -248,7 +274,7 @@ export class PluginManager {
       }
       const loaded = resolvePlugin(String(name), this.builtins);
       if (!loaded) continue;
-      const pluginDir = loaded.resolvedPath ? dirname(loaded.resolvedPath) : null;
+      const pluginDir = loaded.resolvedPath ? findPackageRoot(loaded.resolvedPath) : null;
       if (!this.consultLockfile(loaded.plugin, pluginDir)) continue;
       resolvedPlugins.push(loaded);
     }
@@ -344,7 +370,7 @@ export class PluginManager {
     if (pluginMajor !== PLUGIN_API_VERSION) {
       warn(`Plugin '${plugin.name}' apiVersion ${plugin.apiVersion}, core expects ${PLUGIN_API_VERSION}.x. Loading anyway.`);
     }
-    const pluginDir = resolvedPath ? dirname(resolvedPath) : null;
+    const pluginDir = resolvedPath ? findPackageRoot(resolvedPath) : null;
     if (!this.consultLockfile(plugin, pluginDir)) {
       this.plugins.set(name, {
         plugin,
