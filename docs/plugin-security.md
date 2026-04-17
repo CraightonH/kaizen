@@ -18,13 +18,17 @@ Default to TRUSTED. Escalate only when you hit a real need.
 
 ## Declare permissions
 
-Permissions live on the plugin's default export:
+Permissions live on the plugin's default export, alongside (but orthogonal to)
+the plugin's `capabilities` declaration — see
+[`plugin-migration-capability-registry.md`](./plugin-migration-capability-registry.md)
+for the capability model.
 
 ```typescript
 const plugin: KaizenPlugin = {
   name: "my-plugin",
-  apiVersion: "1.0.0",
-  permissions: { tier: "trusted" },
+  apiVersion: "2.0.0",
+  capabilities: { consumes: ["core-events:service"] },  // what this plugin wires into
+  permissions: { tier: "trusted" },                     // what external I/O it's allowed
   async setup(ctx) { /* ... */ },
 };
 ```
@@ -140,5 +144,6 @@ catches post-consent code swaps but does not verify npm resolution itself.
 ## Further reading
 
 - [`plugin-api.md`](./plugin-api.md) — full plugin API reference
+- [`plugin-migration-capability-registry.md`](./plugin-migration-capability-registry.md) — v1 → v2 capability model (orthogonal to permissions but required for loading)
 - [`plugin-loading.md`](./plugin-loading.md) — load order, lifecycle, dependency resolution
 - [`adversarial-review.md`](./adversarial-review.md) — known findings; numbered references appear in code comments
