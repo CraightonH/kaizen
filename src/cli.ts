@@ -17,6 +17,9 @@ import {
   cmdPluginList,
 } from "./commands/manage.js";
 import { runInstall } from "./commands/install.js";
+import { runPluginConsent } from "./commands/plugin-consent.js";
+import { runPluginReview } from "./commands/plugin-review.js";
+import { runPluginAudit } from "./commands/plugin-audit.js";
 
 import coreEvents from "core-events";
 import coreLifecycle from "core-lifecycle";
@@ -196,6 +199,28 @@ if (subcommand === "install") {
 
 if (subcommand === "plugin") {
   const pluginSub = rawArgs[1];
+  const rest = rawArgs.slice(2);
+  const name = rest.find((a) => !a.startsWith("--"));
+  const lockfilePath = join(process.cwd(), "kaizen.permissions.lock");
+
+  if (pluginSub === "consent" && name) {
+    const code = await runPluginConsent({
+      pluginName: name,
+      lockfilePath,
+      allowUnscoped: rest.includes("--allow-unscoped"),
+      nonInteractive: rest.includes("--non-interactive"),
+    });
+    process.exit(code);
+  }
+  if (pluginSub === "review" && name) {
+    const code = await runPluginReview({ pluginName: name, lockfilePath });
+    process.exit(code);
+  }
+  if (pluginSub === "audit") {
+    const code = await runPluginAudit({ lockfilePath });
+    process.exit(code);
+  }
+
   switch (pluginSub) {
     case "install":
       cmdPluginInstall(rawArgs[2]);
@@ -207,7 +232,7 @@ if (subcommand === "plugin") {
       cmdPluginList(builtins);
       break;
     default:
-      console.error("Usage: kaizen plugin install|remove|list [args]");
+      console.error("Usage: kaizen plugin {install|remove|list|consent|review|audit} [args]");
       process.exit(1);
   }
   process.exit(0);
