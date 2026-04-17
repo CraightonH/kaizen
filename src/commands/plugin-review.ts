@@ -3,6 +3,7 @@ import { dirname, join } from "path";
 import { readFileSync } from "fs";
 import { readLockfile } from "../core/lockfile.js";
 import { computePluginHash } from "../core/plugin-hash.js";
+import { normalizeSort } from "../core/consent-flow.js";
 import type { KaizenPlugin } from "../types/plugin.js";
 
 export async function runPluginReview(args: { pluginName: string; lockfilePath: string }): Promise<number> {
@@ -39,7 +40,8 @@ export async function runPluginReview(args: { pluginName: string; lockfilePath: 
   const drift: string[] = [];
   if (entry.hash !== hash) drift.push("hash");
   if (entry.tier !== (declared.tier ?? "trusted")) drift.push("tier");
-  if (JSON.stringify(entry.permissions ?? {}) !== JSON.stringify({ ...declared, tier: undefined })) drift.push("permissions");
+  const { tier: _t, ...declaredPerms } = declared;
+  if (JSON.stringify(normalizeSort(entry.permissions ?? {})) !== JSON.stringify(normalizeSort(declaredPerms))) drift.push("permissions");
   if (drift.length === 0) console.log("  Status: IN SYNC.");
   else console.log(`  Status: DRIFT in ${drift.join(", ")}. Run 'kaizen plugin consent ${args.pluginName}' to re-consent.`);
   return 0;

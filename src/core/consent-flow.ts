@@ -69,7 +69,7 @@ function permissionsEqual(a?: Omit<PluginPermissions, "tier">, b?: Omit<PluginPe
   return JSON.stringify(normalizeSort(a ?? {})) === JSON.stringify(normalizeSort(b ?? {}));
 }
 
-function normalizeSort(p: Omit<PluginPermissions, "tier">): unknown {
+export function normalizeSort(p: Omit<PluginPermissions, "tier">): unknown {
   return {
     fs: p.fs ? { read: [...(p.fs.read ?? [])].sort(), write: [...(p.fs.write ?? [])].sort() } : undefined,
     net: p.net ? { connect: [...(p.net.connect ?? [])].sort() } : undefined,

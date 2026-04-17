@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { decideConsent } from "./consent-flow.js";
+import { decideConsent, normalizeSort } from "./consent-flow.js";
 import type { LockfileEntry, PermissionsLockfile } from "./lockfile.js";
 
 const BASE_MANIFEST = { tier: "scoped" as const, env: ["KEY"] };
@@ -114,5 +114,38 @@ describe("decideConsent", () => {
     });
     expect(decision.kind).toBe("refuse");
     if (decision.kind === "refuse") expect(decision.reason).toMatch(/unscoped/i);
+  });
+
+  test("same grants in lockfile reordered still accepted (normalizeSort)", () => {
+    // Lockfile recorded env as ["B", "A"]; declared as ["A", "B"] — should still accept.
+    const lf: PermissionsLockfile = {
+      schemaVersion: 1,
+      plugins: {
+        p1: {
+          version: "1.0", hash: "sha256:abc", tier: "scoped",
+          consentedAt: "t", consentedBy: "u",
+          permissions: { env: ["B", "A"] },
+        },
+      },
+    };
+    const decision = decideConsent({
+      pluginName: "p1", version: "1.0", hash: "sha256:abc",
+      permissions: { tier: "scoped", env: ["A", "B"] },
+      lockfile: lf, interactive: false, allowUnscoped: false,
+    });
+    expect(decision.kind).toBe("accept");
+  });
+});
+
+describe("normalizeSort", () => {
+  test("sorts env array", () => {
+    const result = normalizeSort({ env: ["Z", "A", "M"] }) as { env: string[] };
+    expect(result.env).toEqual(["A", "M", "Z"]);
+  });
+
+  test("grants reordered produce identical JSON", () => {
+    const a = JSON.stringify(normalizeSort({ env: ["B", "A"], exec: { binaries: ["curl", "bash"] } }));
+    const b = JSON.stringify(normalizeSort({ env: ["A", "B"], exec: { binaries: ["bash", "curl"] } }));
+    expect(a).toBe(b);
   });
 });
