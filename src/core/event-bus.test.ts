@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { EventBus } from "./event-bus.js";
+import { getCurrentPlugin } from "./plugin-scope.js";
 
 describe("EventBus.deregisterByPlugin", () => {
   test("removes only handlers registered by named plugin", async () => {
@@ -29,5 +30,16 @@ describe("EventBus.deregisterByPlugin", () => {
     bus.deregisterByPlugin("plugin-none");
     const results = await bus.emit("evt");
     expect(results).toHaveLength(1);
+  });
+});
+
+describe("EventBus plugin scope", () => {
+  test("handlers fire with plugin scope set to the registering plugin", async () => {
+    const bus = new EventBus();
+    bus.defineEvent("test-event", "plugin-a");
+    let seenInHandler: string | undefined;
+    bus.on("test-event", async () => { seenInHandler = getCurrentPlugin(); }, "plugin-a");
+    await bus.emit("test-event");
+    expect(seenInHandler).toBe("plugin-a");
   });
 });

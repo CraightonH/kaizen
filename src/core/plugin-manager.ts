@@ -56,7 +56,7 @@ export type Builtins = Record<string, KaizenPlugin>;
 
 interface LoadedPlugin {
   plugin: KaizenPlugin;
-  resolvedPath: string;
+  resolvedPath: string | null;
 }
 
 function loadPluginFromPath(path: string, name: string): LoadedPlugin | null {
@@ -80,7 +80,7 @@ function loadPluginFromPath(path: string, name: string): LoadedPlugin | null {
 }
 
 function resolvePlugin(name: string, builtins: Builtins): LoadedPlugin | null {
-  if (builtins[name]) return { plugin: builtins[name]!, resolvedPath: "" };
+  if (builtins[name]) return { plugin: builtins[name]!, resolvedPath: null };
   const isPath = name.startsWith("./") || name.startsWith("/") || name.startsWith("../");
   if (!isPath) {
     const projectPlugin = join(process.cwd(), PROJECT_PLUGINS, name);
@@ -222,7 +222,7 @@ export class PluginManager {
         warn(`Plugin '${plugin.name}' apiVersion ${plugin.apiVersion}, core expects ${PLUGIN_API_VERSION}.x. Loading anyway.`);
       }
       const providesRequiredRole = (plugin.provides ?? []).some((r) => requiredRoles.has(r));
-      const rPath = resolvedPathMap.get(plugin.name) ?? "";
+      const rPath = resolvedPathMap.get(plugin.name) ?? null;
       try {
         await this.setupPlugin(plugin, rPath);
         loadedNames.add(plugin.name);
@@ -380,11 +380,11 @@ export class PluginManager {
   // Internal setup
   // --------------------------------------------------------------------------
 
-  private async setupPlugin(plugin: KaizenPlugin, resolvedPath = ""): Promise<void> {
+  private async setupPlugin(plugin: KaizenPlugin, resolvedPath: string | null = null): Promise<void> {
     // Register the plugin's permission manifest (defaults to trusted).
     this.enforcer.register(plugin.name, plugin.permissions ?? { tier: "trusted" });
     // Scan imports after registration so check() has the manifest.
-    if (resolvedPath) this.scanAndCheckImports(plugin.name, resolvedPath);
+    if (resolvedPath !== null) this.scanAndCheckImports(plugin.name, resolvedPath);
 
     let pluginState: CoreState = "INITIALIZING";
     const pluginConfig = (this.config[plugin.name] as Record<string, unknown> | undefined) ?? {};
