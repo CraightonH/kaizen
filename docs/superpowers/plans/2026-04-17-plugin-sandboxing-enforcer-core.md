@@ -1524,9 +1524,19 @@ Assumptions Plans 2/3 rely on:
 
 - **Task 9 — `setupPlugin` takes optional `resolvedPath`**: Import scan is performed inside `setupPlugin` (after `enforcer.register`) rather than inline in the call sites, so the plugin is registered before its imports are checked. Signature: `setupPlugin(plugin, resolvedPath = "")`.
 
-- **Task 9 — Builtin plugins get empty `resolvedPath`**: Builtins are injected as in-memory objects; there is no file path to scan. `resolvePlugin` returns `resolvedPath: ""` for builtins, and scan is skipped when the string is empty. Real enforcement happens at runtime via the require patch.
+- **Task 9 — Builtin plugins get `resolvedPath: null`**: Builtins are injected as in-memory objects; there is no file path to scan. `resolvePlugin` returns `resolvedPath: null` for builtins, and `scanAndCheckImports` guards with `if (resolvedPath !== null)`. Real enforcement happens at runtime via the require patch. (Originally implemented as `""` sentinel; follow-up commit switched to explicit `null` for clarity.)
 
-- **Task 9 — Harness end-to-end skipped**: `src/cli.ts` references `core-plugin-manager` package which is not installed (pre-existing issue, also visible in typecheck output). No `.kaizen/audit/` output generated. The enforcer + audit plumbing is wired correctly; the harness failure is unrelated to Task 9.
+- **Task 9 — Harness end-to-end skipped**: `src/cli.ts` references `core-plugin-manager` package which is not installed (pre-existing issue, also visible in typecheck output). No `.kaizen/audit/` output generated. The enforcer + audit plumbing is wired correctly; the harness failure is unrelated to Task 9. The `bun run test:core` smoke test (which exercises `bootstrap()` without going through `src/cli.ts`) passes 8/8.
+
+- **Task 9 — Import scan no-ops for directory-installed plugins**: For plugins resolved from `.kaizen/plugins/<name>/` or `~/.kaizen/plugins/<name>/`, `loadPluginFromPath` receives the directory path (pre-existing behavior). `scanPluginEntryImports` reads the path via `readFileSync`, which throws for directories; `scanAndCheckImports` catches the error and records a debug log. Pre-scan silently skips these installs. Runtime `require` patching still catches violations, so Plan 1 safety is not broken.
+
+- **Task 4 — Fetch wrapper returns rejected Promise, not sync throw**: `enforcer.check()` is synchronous and throws `PermissionError` in enforce mode. Inside the `globalThis.fetch` wrapper, we catch that throw and return `Promise.reject(err)` so callers can use `await fetch(...)` / `.rejects.toThrow()` idioms consistently. The error object is preserved; only the delivery mechanism changed.
+
+- **Task 4 — Typecheck adjustments**: `patchedRequire` needed `this: Module` annotation for TS to infer `call(this, id)`. `RequestInfo` is not in Bun's type defs; the fetch wrapper input type is `Request | string | URL`.
+
+- **Task 2 — `matchesNet`: `*.example.com` does NOT match `example.com` apex**: The plan skeleton in step 3 read `host === suffix || host.endsWith(\`.${suffix}\`)` for subdomain-wildcard patterns, but the test in step 1 requires the apex domain to be excluded. Implementation omits the `host === suffix` branch so `*.example.com:443` matches `api.example.com` / `deep.api.example.com` but **not** `example.com`. More restrictive, safer default.
+
+- **Task 8 — `CtxLog` surface deferred**: `createCtxIo` returns a `log: CtxLog` surface with structured debug/info/warn/error, but `PluginContext` in `src/types/plugin.ts` keeps the existing `log(msg: string)` method for back-compat and does not add `log: CtxLog`. Plan 3 can decide whether to add a structured `log` surface to `PluginContext`.
 
 
 ---
