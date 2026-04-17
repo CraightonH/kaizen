@@ -104,6 +104,10 @@ const observerPlugin: KaizenPlugin = {
   apiVersion: "1.0.0",
   provides: [],
   depends: ["events", "executor", "ui"],
+  permissions: {
+    tier: "scoped",
+    events: { subscribe: ["session:*"] },
+  },
   async setup(ctx: PluginContext) {
     ctx.on(EVENTS.SESSION_START, async () => { results["event_session_start"] = true; });
     ctx.on(EVENTS.USER_MESSAGE, async (p) => { results["event_user_message"] = p; });

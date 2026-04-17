@@ -9,6 +9,7 @@ import { ServiceRegistry } from "./service-registry.js";
 import { PluginManager, type Builtins } from "./plugin-manager.js";
 import { createPluginContext } from "./context.js";
 import { PermissionEnforcer } from "./permission-enforcer.js";
+import type { EnforcerMode } from "./permission-enforcer.js";
 import { AuditLog } from "./audit-log.js";
 import { initializeSandbox } from "./sandbox-bootstrap.js";
 import { runInPluginScope } from "./plugin-scope.js";
@@ -38,7 +39,8 @@ export async function runHarness(opts: RunHarnessOpts): Promise<void> {
     enforcer = injectedEnforcer;
     // caller already called initializeSandbox
   } else {
-    enforcer = new PermissionEnforcer({ mode: "log-only" });
+    const mode = (process.env["KAIZEN_SANDBOX_MODE"] as EnforcerMode | undefined) ?? "enforce";
+    enforcer = new PermissionEnforcer({ mode });
     initializeSandbox(enforcer);
   }
 

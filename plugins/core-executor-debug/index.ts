@@ -120,7 +120,7 @@ async function promptForResponse(
 const plugin: KaizenPlugin = {
   name: "core-executor-debug",
   apiVersion: "1.0.0",
-  permissions: { tier: "trusted" },
+  permissions: { tier: "scoped", events: { subscribe: ["session:*", "tool:*"] } },
   provides: ["executor"],
   depends: ["events"],
 
