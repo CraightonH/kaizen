@@ -12,11 +12,11 @@ import {
   readLocalConfig,
   writeLocalConfig,
   cmdApply,
-  cmdInstall,
   cmdPluginInstall,
   cmdPluginRemove,
   cmdPluginList,
 } from "./commands/manage.js";
+import { runInstall } from "./commands/install.js";
 
 import coreEvents from "core-events";
 import coreLifecycle from "core-lifecycle";
@@ -173,12 +173,21 @@ if (subcommand === "apply") {
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: kaizen install <harness>
+// Subcommand: kaizen install <plugin> [--allow-unscoped] [--non-interactive]
 // ---------------------------------------------------------------------------
 
 if (subcommand === "install") {
-  cmdInstall(rawArgs[1]);
-  process.exit(0);
+  const rest = rawArgs.slice(1);
+  const pluginName = rest.find((a) => !a.startsWith("--"));
+  if (!pluginName) {
+    console.error("usage: kaizen install <plugin> [--allow-unscoped] [--non-interactive]");
+    process.exit(2);
+  }
+  const allowUnscoped = rest.includes("--allow-unscoped");
+  const nonInteractive = rest.includes("--non-interactive");
+  const lockfilePath = join(process.cwd(), "kaizen.permissions.lock");
+  const code = await runInstall({ pluginName, lockfilePath, allowUnscoped, nonInteractive });
+  process.exit(code);
 }
 
 // ---------------------------------------------------------------------------
