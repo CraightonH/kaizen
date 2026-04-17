@@ -46,6 +46,7 @@ const plugin: KaizenPlugin = {
     // Accumulate channels from all providers. A provider's accept() may yield
     // lazily (terminal yields once; web could yield per-connection indefinitely).
     const activeChannels = new Set<UiChannel>();
+    const knownChannels = new Set<UiChannel>();
     let stopAccepting = false;
     let pumpsDone = false;
 
@@ -65,6 +66,7 @@ const plugin: KaizenPlugin = {
             break;
           }
           activeChannels.add(channel);
+          knownChannels.add(channel);
           notifyChannelAdded();
         }
       } catch (err) {
@@ -185,8 +187,9 @@ const plugin: KaizenPlugin = {
     } finally {
       stopAccepting = true;
       await ctx.emit(events.SESSION_END, { sessionId });
-      await Promise.all([...activeChannels].map((c) => c.close().catch(() => {})));
+      await Promise.all([...knownChannels].map((c) => c.close().catch(() => {})));
       activeChannels.clear();
+      knownChannels.clear();
       await pumpsSettled;
     }
   },
