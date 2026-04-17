@@ -16,19 +16,32 @@ import { runInPluginScope } from "./plugin-scope.js";
 export { PLUGIN_API_VERSION } from "../types/plugin.js";
 export type { KaizenPlugin, PluginContext } from "../types/plugin.js";
 export type { Builtins } from "./plugin-manager.js";
+export { PermissionEnforcer } from "./permission-enforcer.js";
 
-export async function bootstrap(
-  kaizenConfig: KaizenConfig,
-  builtins: Builtins = {},
-): Promise<void> {
+export interface RunHarnessOpts {
+  kaizenConfig: KaizenConfig;
+  builtins?: Builtins;
+  enforcer?: PermissionEnforcer;
+}
+
+export async function runHarness(opts: RunHarnessOpts): Promise<void> {
+  const { kaizenConfig, builtins = {}, enforcer: injectedEnforcer } = opts;
+
   const eventBus = new EventBus();
   const toolRegistry = new ToolRegistry();
   const executorRegistry = new ExecutorRegistry();
   const uiRegistry = new UiRegistry();
   const serviceRegistry = new ServiceRegistry();
 
-  const enforcer = new PermissionEnforcer({ mode: "log-only" });
-  initializeSandbox(enforcer);
+  let enforcer: PermissionEnforcer;
+  if (injectedEnforcer) {
+    enforcer = injectedEnforcer;
+    // caller already called initializeSandbox
+  } else {
+    enforcer = new PermissionEnforcer({ mode: "log-only" });
+    initializeSandbox(enforcer);
+  }
+
   const auditLog = new AuditLog({
     rootDir: join(process.cwd(), ".kaizen", "audit"),
     sessionId: randomUUID(),
@@ -40,7 +53,7 @@ export async function bootstrap(
   const lockfilePath = join(process.cwd(), "kaizen.permissions.lock");
 
   const manager = new PluginManager(
-    kaizenConfig, builtins,
+    kaizenConfig, builtins as Builtins,
     eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry,
     enforcer, auditLog,
     lockfilePath, { trustLockfile, allowUnscoped, nonInteractive },
@@ -69,4 +82,11 @@ export async function bootstrap(
   } finally {
     await auditLog.flush();
   }
+}
+
+export async function bootstrap(
+  kaizenConfig: KaizenConfig,
+  builtins: Builtins = {},
+): Promise<void> {
+  return runHarness({ kaizenConfig, builtins });
 }

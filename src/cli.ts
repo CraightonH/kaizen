@@ -203,6 +203,28 @@ if (subcommand === "plugin") {
   const name = rest.find((a) => !a.startsWith("--"));
   const lockfilePath = join(process.cwd(), "kaizen.permissions.lock");
 
+  if (pluginSub === "dev" && rest.includes("--observe")) {
+    const { runPluginDevObserve } = await import("./commands/plugin-dev.js");
+    const { readFileSync } = await import("fs");
+    const { resolveConfig: resolveConfigInner } = await import("./core/config.js");
+    const nameArg = rest.find((a) => !a.startsWith("--"));
+    if (!nameArg) {
+      console.error("usage: kaizen plugin dev --observe <plugin-dir>");
+      process.exit(2);
+    }
+    const pluginDir = nameArg.startsWith(".") || nameArg.startsWith("/")
+      ? nameArg
+      : join(process.cwd(), nameArg);
+    const pluginName = JSON.parse(readFileSync(join(pluginDir, "package.json"), "utf8")).name as string;
+    const outDir = join(pluginDir, ".kaizen");
+    // Honor --harness flag if provided
+    const harnessIdx = rest.indexOf("--harness");
+    const harnessArg = harnessIdx !== -1 ? rest[harnessIdx + 1] : undefined;
+    const devConfig = resolveConfigInner(harnessArg !== undefined ? { harness: harnessArg } : {});
+    const code = await runPluginDevObserve({ pluginName, pluginDir, outDir, kaizenConfig: devConfig, builtins });
+    process.exit(code);
+  }
+
   if (pluginSub === "consent" && name) {
     const code = await runPluginConsent({
       pluginName: name,
@@ -232,7 +254,7 @@ if (subcommand === "plugin") {
       cmdPluginList(builtins);
       break;
     default:
-      console.error("Usage: kaizen plugin {install|remove|list|consent|review|audit} [args]");
+      console.error("Usage: kaizen plugin {install|remove|list|consent|review|audit|dev} [args]");
       process.exit(1);
   }
   process.exit(0);
