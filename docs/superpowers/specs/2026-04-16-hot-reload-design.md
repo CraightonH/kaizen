@@ -145,6 +145,10 @@ interface RuntimeContext {
 }
 ```
 
+`ctx.pluginManager` (plugin-facing) and `ctx.runtime.pluginManager` (lifecycle-facing)
+are scoped views of the same underlying `PluginManager` instance. Plugins get
+load/unload/queue operations; lifecycle gets drain. Neither surface is a separate object.
+
 ### Lifecycle plugin contract (updated)
 
 A conformant lifecycle plugin must:
