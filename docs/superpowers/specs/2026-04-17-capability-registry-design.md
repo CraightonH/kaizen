@@ -47,6 +47,10 @@ of capability containment.
 - Introspection CLI: `kaizen capability list` / `kaizen capability show <name>`.
 - TypeScript type exports from capability-defining plugins (same pattern as
   `core-lifecycle` already uses for event payload types).
+- **Plugin migration guide** (`docs/plugin-migration-capability-registry.md`)
+  written for coding agents to mechanically migrate existing plugins from the
+  `provides`/`depends` role system to the capability system. See
+  "Plugin Migration Guide" section below for required contents.
 
 ### Explicitly Deferred (see "Deferred Work" section)
 
@@ -250,6 +254,41 @@ Implemented by a new `core-capability-cli` plugin (or folded into `core-cli`).
 Reads from the capability registry. No new core API required beyond exposing the
 registry to plugins for introspection (read-only).
 
+### Plugin Migration Guide
+
+A dedicated migration document (`docs/plugin-migration-capability-registry.md`)
+ships as part of this work. Context: there is currently one external plugin
+author building against kaizen. Their agents will use this doc to perform the
+migration mechanically, without reading core source or this spec.
+
+The migration doc must contain:
+
+1. **The rename table** — `provides: ['ui']` → `capabilities: { provides:
+   ['core-lifecycle:ui.input', 'core-lifecycle:ui.output'] }`, etc. Full
+   mapping for every built-in role, copy-pasteable.
+2. **`depends` → `consumes` mapping** for every built-in role, including
+   capability names the plugin must now reference.
+3. **Input-source migration recipe** — if the plugin hooked `session:loop` to
+   provide input: concrete before/after code snippets showing the shift to
+   `ctx.registerInputSource(source)`. Must include a complete working
+   `InputSource` implementation as a template.
+4. **Third-party capability definition recipe** — how a plugin defines its own
+   capabilities, including owner-qualified naming rules and an example.
+5. **Alias declaration recipe** — when to declare `aliases` (fork compatibility,
+   short-name ergonomics), with examples.
+6. **Introspection commands** — `kaizen capability list` and
+   `kaizen capability show` for verifying the migration succeeded.
+7. **Failure modes and fixes** — the exact fatal-error strings core emits
+   (unknown capability, cardinality violation, owner-prefix mismatch, schema
+   validation failure) and the diff needed to resolve each.
+8. **Migration checklist** — ordered steps an agent can execute end-to-end:
+   update manifest → rename fields → wire `registerInputSource` if applicable
+   → run tests → verify with introspection CLI.
+
+Acceptance criterion: a capable agent, given only the migration doc and a
+pre-migration plugin, can produce a working post-migration plugin without
+reading this spec or core source.
+
 ### Event Bus: Unchanged
 
 The event bus stays as-is. Capabilities are for *registered extension points*
@@ -305,6 +344,9 @@ Contract:
 4. `kaizen capability list` surfaces every capability across every loaded plugin.
 5. All existing tests pass after migration. The autonomous Pattern B harness runs
    headlessly.
+6. `docs/plugin-migration-capability-registry.md` is published. A capable coding
+   agent, given only that doc and a pre-migration plugin, produces a working
+   post-migration plugin with no access to this spec or core source.
 
 ## Deferred Work
 
