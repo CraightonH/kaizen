@@ -57,12 +57,12 @@ export function createPluginContext(
 
     defineEvent(name: string): void {
       assertInitializing(getState(), "define events");
-      eventBus.defineEvent(name);
+      eventBus.defineEvent(name, pluginName);
     },
 
     on(event: string, handler: Parameters<PluginContext["on"]>[1]): void {
       assertInitializing(getState(), "register event handlers");
-      eventBus.on(event, handler);
+      eventBus.on(event, handler, pluginName);
     },
 
     async emit(event: string, payload?: unknown): Promise<unknown[]> {
