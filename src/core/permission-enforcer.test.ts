@@ -119,4 +119,23 @@ describe("PermissionEnforcer", () => {
     e.register("p1", {});
     expect(() => e.check("p1", { kind: "fs.read", path: "x" })).toThrow();
   });
+
+  test("observe mode notifies onCheck for both allows and denies", () => {
+    const e = new PermissionEnforcer({ mode: "observe" });
+    e.register("p1", { tier: "scoped", env: ["OK"] });
+    const checks: { allowed: boolean; op: string }[] = [];
+    e.onCheck((r) => checks.push({ allowed: r.allowed, op: r.op.kind }));
+    e.check("p1", { kind: "env.get", name: "OK" });
+    e.check("p1", { kind: "env.get", name: "DENY" });
+    expect(checks).toEqual([
+      { allowed: true,  op: "env.get" },
+      { allowed: false, op: "env.get" },
+    ]);
+  });
+
+  test("observe mode never throws", () => {
+    const e = new PermissionEnforcer({ mode: "observe" });
+    e.register("p1", { tier: "trusted" });
+    expect(() => e.check("p1", { kind: "fs.read", path: "x" })).not.toThrow();
+  });
 });

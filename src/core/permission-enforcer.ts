@@ -1,7 +1,7 @@
 import type { PluginPermissions, PermissionOp } from "../types/plugin.js";
 import { PermissionError } from "./errors.js";
 
-export type EnforcerMode = "enforce" | "log-only";
+export type EnforcerMode = "enforce" | "log-only" | "observe";
 
 export interface DenialRecord {
   ts: number;
@@ -11,6 +11,11 @@ export interface DenialRecord {
 }
 
 export type DenialListener = (record: DenialRecord) => void;
+
+export type CheckRecord = {
+  ts: number; plugin: string; op: PermissionOp; allowed: boolean; reason?: string | undefined;
+};
+export type CheckListener = (record: CheckRecord) => void;
 
 const FORBIDDEN_IMPORTS_NON_UNSCOPED = new Set<string>([
   "node:fs", "fs", "node:fs/promises", "fs/promises",
@@ -33,6 +38,7 @@ export class PermissionEnforcer {
   private mode: EnforcerMode;
   private readonly manifests = new Map<string, PluginPermissions>();
   private readonly listeners: DenialListener[] = [];
+  private readonly checkListeners: CheckListener[] = [];
 
   constructor(opts: { mode: EnforcerMode }) {
     this.mode = opts.mode;
@@ -48,15 +54,21 @@ export class PermissionEnforcer {
   deregister(plugin: string): void { this.manifests.delete(plugin); }
 
   onDenial(listener: DenialListener): void { this.listeners.push(listener); }
+  onCheck(listener: CheckListener): void { this.checkListeners.push(listener); }
 
   check(plugin: string, op: PermissionOp): void {
     const reason = this.evaluate(plugin, op);
-    if (!reason) return;
-    const record: DenialRecord = { ts: Date.now(), plugin, op, reason };
-    for (const l of this.listeners) l(record);
-    if (this.mode === "enforce") {
-      throw new PermissionError(plugin, op.kind, reason);
+    const allowed = reason === null;
+    if (this.mode === "observe") {
+      const rec: CheckRecord = { ts: Date.now(), plugin, op, allowed };
+      if (reason !== null) rec.reason = reason;
+      for (const l of this.checkListeners) l(rec);
+      return;  // observe never throws, always allows
     }
+    if (allowed) return;
+    const record: DenialRecord = { ts: Date.now(), plugin, op, reason: reason! };
+    for (const l of this.listeners) l(record);
+    if (this.mode === "enforce") throw new PermissionError(plugin, op.kind, reason!);
   }
 
   /** Returns a denial reason string, or null if permitted. */
