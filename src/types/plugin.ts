@@ -185,6 +185,9 @@ export interface PluginContext {
   /** Structured logger — output is prefixed with the plugin name. */
   log(msg: string): void;
 
+  /** Access plugin loading/unloading at runtime. */
+  pluginManager: PluginManagerPublicApi;
+
   // --- Runtime primitives --------------------------------------------------
 
   runtime: {
@@ -200,6 +203,8 @@ export interface PluginContext {
        */
       execute(name: string, args: Record<string, unknown>): Promise<ToolResult>;
     };
+    /** Call drainPendingReloads() between turns. Required for hot-reload support. */
+    pluginManager: PluginManagerLifecycleApi;
   };
 }
 
@@ -253,4 +258,29 @@ export interface KaizenConfig {
   extends?: string;
   /** Plugin config namespaces — key must match plugin.name */
   [pluginName: string]: unknown;
+}
+
+// ---------------------------------------------------------------------------
+// Plugin Manager API
+// ---------------------------------------------------------------------------
+
+export interface PluginEntry {
+  name: string;
+  apiVersion: string;
+  provides: string[];
+  status: "loaded" | "unloaded" | "failed";
+}
+
+export interface PluginManagerPublicApi {
+  load(name: string): Promise<void>;
+  unload(name: string): Promise<void>;
+  reload(name: string): Promise<void>;
+  queueLoad(name: string): void;
+  queueUnload(name: string): void;
+  queueReload(name: string): void;
+  list(): PluginEntry[];
+}
+
+export interface PluginManagerLifecycleApi {
+  drainPendingReloads(): Promise<void>;
 }
