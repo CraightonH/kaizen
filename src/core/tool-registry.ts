@@ -47,4 +47,12 @@ export class ToolRegistry {
       return { ok: false, error: message };
     }
   }
+
+  deregisterByPlugin(pluginName: string): void {
+    for (const [name, entry] of this.tools) {
+      if (entry.registeredBy === pluginName) {
+        this.tools.delete(name);
+      }
+    }
+  }
 }
