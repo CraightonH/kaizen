@@ -11,6 +11,7 @@ import type { ToolRegistry } from "./tool-registry.js";
 import type { ExecutorRegistry } from "./executor-registry.js";
 import type { UiRegistry } from "./ui-registry.js";
 import type { ServiceRegistry } from "./service-registry.js";
+import type { CapabilityRegistry } from "./capability-registry.js";
 import { createPluginContext } from "./context.js";
 import type { CoreState } from "./context.js";
 import type { PermissionEnforcer } from "./permission-enforcer.js";
@@ -144,29 +145,58 @@ function bustRequireCache(name: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Topological sort (Kahn's algorithm)
+// Topological sort (Kahn's algorithm) — driven by capability provides/consumes
 // ---------------------------------------------------------------------------
+
+function resolveCapName(name: string, aliases: Record<string, string>): string {
+  return aliases[name] ?? name;
+}
+
+function isCritical(plugin: KaizenPlugin, reg: CapabilityRegistry): boolean {
+  const aliases = plugin.aliases ?? {};
+  for (const raw of plugin.capabilities?.provides ?? []) {
+    const cap = resolveCapName(raw, aliases);
+    const spec = reg.getSpec(cap);
+    if (spec?.cardinality === "one" && reg.consumersOf(cap).length > 0) return true;
+  }
+  return false;
+}
 
 function topoSort(plugins: KaizenPlugin[]): KaizenPlugin[] {
   const nameToPlugin = new Map(plugins.map((p) => [p.name, p]));
-  const roleToPlugin = new Map<string, KaizenPlugin>();
+
+  // Map canonical capability name → list of plugins that provide it.
+  const capToProviders = new Map<string, string[]>();
   for (const p of plugins) {
-    for (const role of p.provides ?? []) roleToPlugin.set(role, p);
-  }
-  const inDegree = new Map(plugins.map((p) => [p.name, 0]));
-  const edges = new Map<string, string[]>();
-  for (const p of plugins) {
-    for (const dep of p.depends ?? []) {
-      const depPlugin = roleToPlugin.get(dep) ?? nameToPlugin.get(dep);
-      if (!depPlugin) continue;
-      const depName = depPlugin.name;
-      if (depName === p.name) continue;
-      const existing = edges.get(depName) ?? [];
+    const aliases = p.aliases ?? {};
+    for (const raw of p.capabilities?.provides ?? []) {
+      const cap = resolveCapName(raw, aliases);
+      const existing = capToProviders.get(cap) ?? [];
       existing.push(p.name);
-      edges.set(depName, existing);
-      inDegree.set(p.name, (inDegree.get(p.name) ?? 0) + 1);
+      capToProviders.set(cap, existing);
     }
   }
+
+  const inDegree = new Map(plugins.map((p) => [p.name, 0]));
+  const edges = new Map<string, string[]>();
+
+  for (const p of plugins) {
+    const aliases = p.aliases ?? {};
+    const seen = new Set<string>();
+    for (const raw of p.capabilities?.consumes ?? []) {
+      const cap = resolveCapName(raw, aliases);
+      for (const providerName of capToProviders.get(cap) ?? []) {
+        if (providerName === p.name) continue;
+        if (seen.has(providerName)) continue;
+        seen.add(providerName);
+        const existing = edges.get(providerName) ?? [];
+        existing.push(p.name);
+        edges.set(providerName, existing);
+        inDegree.set(p.name, (inDegree.get(p.name) ?? 0) + 1);
+      }
+    }
+  }
+
   const queue = plugins.filter((p) => (inDegree.get(p.name) ?? 0) === 0);
   const sorted: KaizenPlugin[] = [];
   while (queue.length > 0) {
@@ -209,6 +239,7 @@ export class PluginManager {
     private readonly toolRegistry: ToolRegistry,
     private readonly executorRegistry: ExecutorRegistry,
     private readonly uiRegistry: UiRegistry,
+    private readonly capabilityRegistry: CapabilityRegistry,
     private readonly serviceRegistry: ServiceRegistry,
     private readonly enforcer: PermissionEnforcer,
     private readonly auditLog: AuditLog,
@@ -297,71 +328,74 @@ export class PluginManager {
     // Map plugin name → resolvedPath for import scan below.
     const resolvedPathMap = new Map(resolvedPlugins.map((r) => [r.plugin.name, r.resolvedPath]));
 
-    const requiredRoles = new Set<string>();
-    for (const p of sorted) {
-      for (const dep of p.depends ?? []) {
-        const isPluginName = sorted.some((q) => q.name === dep);
-        if (!isPluginName) requiredRoles.add(dep);
+    // PASS 1: register provide/consume metadata so criticality + validateAll see full graph
+    for (const plugin of sorted) {
+      const aliases = plugin.aliases ?? {};
+      for (const raw of plugin.capabilities?.provides ?? []) {
+        this.capabilityRegistry.addProvider(resolveCapName(raw, aliases), plugin.name);
+      }
+      for (const raw of plugin.capabilities?.consumes ?? []) {
+        this.capabilityRegistry.addConsumer(resolveCapName(raw, aliases), plugin.name);
       }
     }
 
+    // PASS 2: call setup() in topo order.
     const loadedNames = new Set<string>();
     for (const plugin of sorted) {
       const pluginMajor = plugin.apiVersion.split(".")[0];
       if (pluginMajor !== PLUGIN_API_VERSION) {
         warn(`Plugin '${plugin.name}' apiVersion ${plugin.apiVersion}, core expects ${PLUGIN_API_VERSION}.x. Loading anyway.`);
       }
-      const providesRequiredRole = (plugin.provides ?? []).some((r) => requiredRoles.has(r));
+      const critical = isCritical(plugin, this.capabilityRegistry);
       const rPath = resolvedPathMap.get(plugin.name) ?? null;
       try {
         await this.setupPlugin(plugin, rPath);
         loadedNames.add(plugin.name);
         this.plugins.set(plugin.name, {
           plugin,
-          entry: { name: plugin.name, apiVersion: plugin.apiVersion, provides: plugin.provides ?? [], status: "loaded" },
+          entry: {
+            name: plugin.name,
+            apiVersion: plugin.apiVersion,
+            capabilities: plugin.capabilities ?? {},
+            status: "loaded",
+          },
         });
         debug(`Plugin '${plugin.name}' initialized.`);
       } catch (err) {
-        if (providesRequiredRole) {
-          const role = (plugin.provides ?? []).find((r) => requiredRoles.has(r))!;
-          fatal(`${plugin.name} (provides: ${role}) failed to initialize: ${err instanceof Error ? err.message : String(err)}`);
-        } else {
-          if (err instanceof Error && err.stack) debug(err.stack);
-          console.error(`[kaizen] error: plugin '${plugin.name}' failed to initialize:`, err instanceof Error ? err.message : err);
-          this.plugins.set(plugin.name, {
-            plugin,
-            entry: { name: plugin.name, apiVersion: plugin.apiVersion, provides: plugin.provides ?? [], status: "failed" },
-          });
+        if (critical) {
+          fatal(`${plugin.name} (provides critical capability) failed to initialize: ${err instanceof Error ? err.message : String(err)}`);
         }
+        if (err instanceof Error && err.stack) debug(err.stack);
+        console.error(`[kaizen] error: plugin '${plugin.name}' failed to initialize:`, err instanceof Error ? err.message : err);
+        this.plugins.set(plugin.name, {
+          plugin,
+          entry: {
+            name: plugin.name,
+            apiVersion: plugin.apiVersion,
+            capabilities: plugin.capabilities ?? {},
+            status: "failed",
+          },
+        });
       }
     }
 
-    // Role validation
-    const roleProviders = new Map<string, string[]>();
-    for (const [name, record] of this.plugins) {
-      if (record.entry.status !== "loaded") continue;
-      for (const role of record.plugin.provides ?? []) {
-        const existing = roleProviders.get(role) ?? [];
-        existing.push(name);
-        roleProviders.set(role, existing);
-      }
-    }
-    for (const role of requiredRoles) {
-      const providers = roleProviders.get(role) ?? [];
-      if (providers.length === 0) fatal(`No plugin provides role '${role}'. Add one to kaizen.json.`);
-      if (providers.length > 1) fatal(`Multiple plugins provide role '${role}': ${providers.join(", ")}. Remove one.`);
+    // PASS 3: validate capability cardinalities + referenced-but-undefined
+    try {
+      this.capabilityRegistry.validateAll();
+    } catch (err) {
+      fatal(err instanceof Error ? err.message : String(err));
     }
 
     // Warn on unclaimed config keys
-    const claimedKeys = new Set(["plugins", ...loadedNames]);
+    const claimedKeys = new Set(["plugins", "extends", ...loadedNames]);
     for (const key of Object.keys(this.config)) {
       if (!claimedKeys.has(key)) warn(`Unknown config key '${key}'. No plugin claimed it.`);
     }
 
-    // Find lifecycle provider
-    const lifecycleProviderName = roleProviders.get("lifecycle")?.[0];
-    if (!lifecycleProviderName) fatal("No lifecycle plugin found. Add one to kaizen.json.");
-    const lifecycleProvider = this.plugins.get(lifecycleProviderName!)?.plugin;
+    // Resolve lifecycle provider — sole provider of core-lifecycle:lifecycle.drive
+    const lifeProviders = this.capabilityRegistry.providersOf("core-lifecycle:lifecycle.drive");
+    if (lifeProviders.length === 0) fatal("No lifecycle plugin found. Add one to kaizen.json.");
+    const lifecycleProvider = this.plugins.get(lifeProviders[0]!)?.plugin;
     if (!lifecycleProvider || typeof lifecycleProvider.start !== "function") {
       fatal("No lifecycle plugin found. Add one to kaizen.json.");
     }
@@ -388,27 +422,54 @@ export class PluginManager {
     if (!this.consultLockfile(plugin, pluginDir)) {
       this.plugins.set(name, {
         plugin,
-        entry: { name: plugin.name, apiVersion: plugin.apiVersion, provides: plugin.provides ?? [], status: "failed" },
+        entry: {
+          name: plugin.name,
+          apiVersion: plugin.apiVersion,
+          capabilities: plugin.capabilities ?? {},
+          status: "failed",
+        },
       });
       warn(`Plugin '${name}' not loaded: consent refused or pending.`);
       return;
+    }
+    const aliases = plugin.aliases ?? {};
+    for (const raw of plugin.capabilities?.provides ?? []) {
+      this.capabilityRegistry.addProvider(resolveCapName(raw, aliases), plugin.name);
+    }
+    for (const raw of plugin.capabilities?.consumes ?? []) {
+      this.capabilityRegistry.addConsumer(resolveCapName(raw, aliases), plugin.name);
     }
     try {
       await this.setupPlugin(plugin, resolvedPath);
       this.plugins.set(name, {
         plugin,
-        entry: { name: plugin.name, apiVersion: plugin.apiVersion, provides: plugin.provides ?? [], status: "loaded" },
+        entry: {
+          name: plugin.name,
+          apiVersion: plugin.apiVersion,
+          capabilities: plugin.capabilities ?? {},
+          status: "loaded",
+        },
       });
+      try {
+        this.capabilityRegistry.validateAll();
+      } catch (err) {
+        warn(`Capability validation after loading '${name}': ${err instanceof Error ? err.message : String(err)}`);
+      }
       debug(`Plugin '${name}' loaded.`);
     } catch (err) {
       this.plugins.set(name, {
         plugin,
-        entry: { name: plugin.name, apiVersion: plugin.apiVersion, provides: plugin.provides ?? [], status: "failed" },
+        entry: {
+          name: plugin.name,
+          apiVersion: plugin.apiVersion,
+          capabilities: plugin.capabilities ?? {},
+          status: "failed",
+        },
       });
       const msg = err instanceof Error ? err.message : String(err);
       warn(`Plugin '${name}' failed to load: ${msg}`);
-      const providesList = (plugin.provides ?? []).join(", ");
-      if (providesList) warn(`Plugin '${name}' provides [${providesList}] but failed — role may be unavailable.`);
+      const provList = (plugin.capabilities?.provides ?? []).join(", ");
+      if (provList) warn(`Plugin '${name}' provides [${provList}] but failed — capability may be unavailable.`);
     }
   }
 
@@ -424,6 +485,7 @@ export class PluginManager {
     this.executorRegistry.deregisterByPlugin(name);
     this.uiRegistry.deregisterByPlugin(name);
     this.enforcer.deregister(name);
+    this.capabilityRegistry.deregisterByPlugin(name);
     record.entry.status = "unloaded";
     this.plugins.delete(name);
     debug(`Plugin '${name}' unloaded.`);
@@ -494,6 +556,7 @@ export class PluginManager {
       this.toolRegistry,
       this.executorRegistry,
       this.uiRegistry,
+      this.capabilityRegistry,
       this.serviceRegistry,
       this.enforcer,
       () => pluginState,

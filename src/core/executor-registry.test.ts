@@ -2,30 +2,59 @@ import { describe, expect, test } from "bun:test";
 import { ExecutorRegistry } from "./executor-registry.js";
 import type { Executor } from "../types/plugin.js";
 
-const stubExecutor: Executor = {
-  send: async () => ({ content: "", tool_calls: [], stop_reason: "end_turn" }),
-  stream: async function* () { yield { type: "done" }; },
-};
+function stub(): Executor {
+  return {
+    send: async () => ({ content: "", tool_calls: [], stop_reason: "end_turn" }),
+    stream: async function* () { yield { type: "done" }; },
+  };
+}
 
-describe("ExecutorRegistry.deregisterByPlugin", () => {
-  test("removes executor registered by named plugin", () => {
-    const registry = new ExecutorRegistry();
-    registry.register(stubExecutor, "plugin-exec");
-    registry.deregisterByPlugin("plugin-exec");
-    expect(registry.isRegistered()).toBe(false);
+describe("ExecutorRegistry multi-provider", () => {
+  test("two registrations: both stored in registration order", () => {
+    const r = new ExecutorRegistry();
+    const a = stub(), b = stub();
+    r.register(a, "a"); r.register(b, "b");
+    expect(r.list()).toEqual([a, b]);
   });
 
-  test("no-op when plugin name does not match", () => {
-    const registry = new ExecutorRegistry();
-    registry.register(stubExecutor, "plugin-exec");
-    registry.deregisterByPlugin("plugin-other");
-    expect(registry.isRegistered()).toBe(true);
+  test("getFirst returns first registered", () => {
+    const r = new ExecutorRegistry();
+    const a = stub(), b = stub();
+    r.register(a, "a"); r.register(b, "b");
+    expect(r.getFirst()).toBe(a);
   });
 
-  test("deregistered executor slot can be re-registered", () => {
-    const registry = new ExecutorRegistry();
-    registry.register(stubExecutor, "plugin-exec");
-    registry.deregisterByPlugin("plugin-exec");
-    expect(() => registry.register(stubExecutor, "plugin-exec")).not.toThrow();
+  test("getFirst fatal when none registered", () => {
+    const r = new ExecutorRegistry();
+    expect(() => r.getFirst()).toThrow();
+  });
+
+  test("isRegistered true when at least one", () => {
+    const r = new ExecutorRegistry();
+    expect(r.isRegistered()).toBe(false);
+    r.register(stub(), "a");
+    expect(r.isRegistered()).toBe(true);
+  });
+
+  test("deregisterByPlugin removes only the targeted plugin's executor", () => {
+    const r = new ExecutorRegistry();
+    const a = stub(), b = stub();
+    r.register(a, "a"); r.register(b, "b");
+    r.deregisterByPlugin("a");
+    expect(r.list()).toEqual([b]);
+  });
+
+  test("deregisterByPlugin no-op when name does not match", () => {
+    const r = new ExecutorRegistry();
+    r.register(stub(), "a");
+    r.deregisterByPlugin("other");
+    expect(r.isRegistered()).toBe(true);
+  });
+
+  test("deregistered slot can be re-registered", () => {
+    const r = new ExecutorRegistry();
+    r.register(stub(), "a");
+    r.deregisterByPlugin("a");
+    expect(() => r.register(stub(), "a")).not.toThrow();
   });
 });

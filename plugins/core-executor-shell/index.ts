@@ -37,13 +37,12 @@ function runCommand(command: string, cwd: string, shell: string): string {
 
 const plugin: KaizenPlugin = {
   name: "core-executor-shell",
-  apiVersion: "1.0.0",
-  provides: ["executor"],
-  depends: [],
+  apiVersion: "2.0.0",
   permissions: {
     tier: "unscoped",
     exec: { binaries: ["*"] }, // informational; not enforced at unscoped tier
   },
+  capabilities: { provides: ["core-lifecycle:executor.send"] },
 
   async setup(ctx) {
     const cwd = (ctx.config["cwd"] as string | undefined) ?? process.cwd();

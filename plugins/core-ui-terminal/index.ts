@@ -50,10 +50,9 @@ function createTerminalChannel(opts: {
 
 const plugin: KaizenPlugin = {
   name: "core-ui-terminal",
-  apiVersion: "1.0.0",
+  apiVersion: "2.0.0",
   permissions: { tier: "trusted" },
-  provides: ["ui"],
-  depends: [],
+  capabilities: { provides: ["core-lifecycle:ui.input", "core-lifecycle:ui.output"] },
 
   async setup(ctx) {
     const prompt = (ctx.config["prompt"] as string | undefined) ?? "> ";

@@ -44,9 +44,10 @@ const results: Record<string, unknown> = {};
 
 const mockExecutorPlugin: KaizenPlugin = {
   name: "mock-executor",
-  apiVersion: "1.0.0",
-  provides: ["executor"],
-  depends: [],
+  apiVersion: "2.0.0",
+  capabilities: {
+    provides: ["core-lifecycle:executor.send"],
+  },
   async setup(ctx) {
     ctx.registerExecutor({
       async send(): Promise<LLMResponse> {
@@ -64,9 +65,10 @@ const mockExecutorPlugin: KaizenPlugin = {
 
 const mockUiPlugin: KaizenPlugin = {
   name: "mock-ui",
-  apiVersion: "1.0.0",
-  provides: ["ui"],
-  depends: [],
+  apiVersion: "2.0.0",
+  capabilities: {
+    provides: ["core-lifecycle:ui.input", "core-lifecycle:ui.output"],
+  },
   async setup(ctx) {
     const sentMessages: unknown[] = [];
     let receiveCount = 0;
@@ -101,12 +103,13 @@ const mockUiPlugin: KaizenPlugin = {
 
 const observerPlugin: KaizenPlugin = {
   name: "observer",
-  apiVersion: "1.0.0",
-  provides: [],
-  depends: ["events", "executor", "ui"],
+  apiVersion: "2.0.0",
   permissions: {
     tier: "scoped",
     events: { subscribe: ["session:*"] },
+  },
+  capabilities: {
+    consumes: ["core-events:service"],
   },
   async setup(ctx: PluginContext) {
     ctx.on(EVENTS.SESSION_START, async () => { results["event_session_start"] = true; });

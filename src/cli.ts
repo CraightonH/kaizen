@@ -261,6 +261,32 @@ if (subcommand === "plugin") {
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: kaizen capability list|show <name>
+// ---------------------------------------------------------------------------
+
+if (subcommand === "capability") {
+  const sub = rawArgs[1];
+  const { capabilityList, capabilityShow } = await import("./commands/capability.js");
+  const { initializePluginSystem } = await import("./core/index.js");
+  const cfg = resolveConfig({});
+  const { capabilityRegistry } = await initializePluginSystem(cfg, builtins);
+  if (sub === "list") {
+    capabilityList(capabilityRegistry);
+  } else if (sub === "show") {
+    const name = rawArgs[2];
+    if (!name) {
+      console.error("Usage: kaizen capability show <name>");
+      process.exit(1);
+    }
+    capabilityShow(capabilityRegistry, name);
+  } else {
+    console.error("Usage: kaizen capability list|show <name>");
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
 // Subcommand: kaizen run [prompt]  (also: kaizen [flags])
 // ---------------------------------------------------------------------------
 

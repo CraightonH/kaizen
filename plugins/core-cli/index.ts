@@ -144,9 +144,8 @@ function createCliTool(
 
 const plugin: KaizenPlugin = {
   name: "core-cli",
-  apiVersion: "1.0.0",
-  provides: [],
-  depends: ["lifecycle"],
+  apiVersion: "2.0.0",
+  capabilities: { consumes: ["core-lifecycle:lifecycle.drive"] },
 
   // SCOPED with exec.binaries: ["*"]
   // Rationale: the binary list comes from ctx.config["clis"] which is not
