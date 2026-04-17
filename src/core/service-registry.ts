@@ -1,7 +1,7 @@
 export class ServiceToken<T> {
   readonly label: string;
   private readonly _symbol: symbol;
-  declare readonly _type: T; // phantom brand — compile-time only, zero runtime footprint
+  declare readonly _type: T;
 
   constructor(label: string) {
     this.label = label;
@@ -11,17 +11,32 @@ export class ServiceToken<T> {
 
 export class ServiceRegistry {
   private readonly services = new Map<ServiceToken<unknown>, unknown>();
+  private readonly owners = new Map<ServiceToken<unknown>, string>();
 
-  register<T>(token: ServiceToken<T>, impl: T): void {
+  register<T>(token: ServiceToken<T>, impl: T, pluginName: string): void {
     if (this.services.has(token)) {
-      throw new Error(`Service '${token.label}' is already registered. Each service token may only have one provider.`);
+      throw new Error(
+        `Service '${token.label}' is already registered. Each service token may only have one provider.`,
+      );
     }
     this.services.set(token, impl);
+    this.owners.set(token, pluginName);
+  }
+
+  deregisterByPlugin(pluginName: string): void {
+    for (const [token, owner] of [...this.owners]) {
+      if (owner === pluginName) {
+        this.services.delete(token);
+        this.owners.delete(token);
+      }
+    }
   }
 
   get<T>(token: ServiceToken<T>): T {
     if (!this.services.has(token)) {
-      throw new Error(`Service '${token.label}' not found. Ensure the provider plugin is listed in depends[] before this plugin.`);
+      throw new Error(
+        `Service '${token.label}' not found. Ensure the provider plugin is listed in depends[] before this plugin.`,
+      );
     }
     return this.services.get(token) as T;
   }

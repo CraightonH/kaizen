@@ -33,7 +33,7 @@ export function createPluginContext(
 
     registerService<T>(token: ServiceToken<T>, impl: T): void {
       assertInitializing(getState(), "register services");
-      serviceRegistry.register(token, impl);
+      serviceRegistry.register(token, impl, pluginName);
     },
 
     getService<T>(token: ServiceToken<T>): T {
