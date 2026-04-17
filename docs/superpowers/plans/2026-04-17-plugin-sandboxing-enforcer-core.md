@@ -1520,7 +1520,13 @@ Assumptions Plans 2/3 rely on:
 
 **Deviations observed during implementation:**
 
-_(none yet — append as they occur)_
+- **Task 9 — `loadPluginFromPath` return type changed**: To enable import scanning with the resolved path, `loadPluginFromPath` and `resolvePlugin` now return `{ plugin, resolvedPath }` instead of `KaizenPlugin | null`. Callers in `initialize()` and `load()` destructure accordingly. No external API impact.
+
+- **Task 9 — `setupPlugin` takes optional `resolvedPath`**: Import scan is performed inside `setupPlugin` (after `enforcer.register`) rather than inline in the call sites, so the plugin is registered before its imports are checked. Signature: `setupPlugin(plugin, resolvedPath = "")`.
+
+- **Task 9 — Builtin plugins get empty `resolvedPath`**: Builtins are injected as in-memory objects; there is no file path to scan. `resolvePlugin` returns `resolvedPath: ""` for builtins, and scan is skipped when the string is empty. Real enforcement happens at runtime via the require patch.
+
+- **Task 9 — Harness end-to-end skipped**: `src/cli.ts` references `core-plugin-manager` package which is not installed (pre-existing issue, also visible in typecheck output). No `.kaizen/audit/` output generated. The enforcer + audit plumbing is wired correctly; the harness failure is unrelated to Task 9.
 
 
 ---
