@@ -14,6 +14,8 @@ export const PLUGIN_API_VERSION = "1";
 import { ServiceToken } from "../core/service-registry.js";
 export { ServiceToken };
 
+export type { CtxFs, CtxNet, CtxSecrets, CtxExec, CtxLog, CtxIo, ExecOpts, ExecResult } from "../core/plugin-ctx-io.js";
+
 // ---------------------------------------------------------------------------
 // JSON Schema (subset used for tool parameter definitions)
 // ---------------------------------------------------------------------------
@@ -187,6 +189,12 @@ export interface PluginContext {
 
   /** Access plugin loading/unloading at runtime. */
   pluginManager: PluginManagerPublicApi;
+
+  // --- Permission-gated I/O surface ----------------------------------------
+  fs: import("../core/plugin-ctx-io.js").CtxFs;
+  net: import("../core/plugin-ctx-io.js").CtxNet;
+  secrets: import("../core/plugin-ctx-io.js").CtxSecrets;
+  exec: import("../core/plugin-ctx-io.js").CtxExec;
 
   // --- Runtime primitives --------------------------------------------------
 
