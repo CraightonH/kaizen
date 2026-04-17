@@ -1,5 +1,6 @@
 import type { EventHandler } from "../types/plugin.js";
 import { debug, warn } from "./errors.js";
+import { runInPluginScope } from "./plugin-scope.js";
 
 export class EventBus {
   private defined = new Set<string>();
@@ -16,8 +17,9 @@ export class EventBus {
   }
 
   on(name: string, handler: EventHandler, pluginName: string): void {
+    const wrapped: EventHandler = (payload) => runInPluginScope(pluginName, () => handler(payload));
     const existing = this.handlers.get(name) ?? [];
-    existing.push({ handler, pluginName });
+    existing.push({ handler: wrapped, pluginName });
     this.handlers.set(name, existing);
   }
 

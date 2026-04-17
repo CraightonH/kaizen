@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { PluginManager } from "./plugin-manager.js";
 import { EventBus } from "./event-bus.js";
 import { ToolRegistry } from "./tool-registry.js";
 import { ExecutorRegistry } from "./executor-registry.js";
 import { UiRegistry } from "./ui-registry.js";
 import { ServiceRegistry } from "./service-registry.js";
+import { PermissionEnforcer } from "./permission-enforcer.js";
+import { AuditLog } from "./audit-log.js";
 import type { KaizenPlugin, KaizenConfig, Executor, UiProvider } from "../types/plugin.js";
 
 const stubExecutor: Executor = {
@@ -21,6 +26,16 @@ function makeRegistries() {
     uiRegistry: new UiRegistry(),
     serviceRegistry: new ServiceRegistry(),
   };
+}
+
+function makeSandboxStubs() {
+  const enforcer = new PermissionEnforcer({ mode: "log-only" });
+  const auditLog = new AuditLog({
+    rootDir: mkdtempSync(join(tmpdir(), "kaizen-test-audit-")),
+    sessionId: "test",
+    enabled: false,
+  });
+  return { enforcer, auditLog };
 }
 
 function makePlugin(name: string, setupFn?: (ctx: Parameters<KaizenPlugin["setup"]>[0]) => Promise<void>): KaizenPlugin {
@@ -52,9 +67,11 @@ describe("PluginManager.initialize", () => {
       async start() {},
     };
 
+    const { enforcer, auditLog } = makeSandboxStubs();
     const manager = new PluginManager(
       config, { "lifecycle-plugin": lifecyclePlugin },
       eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry,
+      enforcer, auditLog,
     );
     const { lifecycleProvider } = await manager.initialize();
     expect(setupCalls).toEqual(["lifecycle-plugin"]);
@@ -79,10 +96,12 @@ describe("PluginManager.initialize", () => {
       async setup() {}, async start() {},
     };
 
+    const { enforcer, auditLog } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: ["tool-plugin", "lc"] },
       { "tool-plugin": toolPlugin, "lc": lifecyclePlugin },
       eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry,
+      enforcer, auditLog,
     );
     await manager.initialize();
     expect(toolRegistry.list().map((t) => t.name)).toContain("my-tool");
@@ -96,9 +115,11 @@ describe("PluginManager.load + unload + reload", () => {
     const newPlugin = makePlugin("dyn-plugin", async (ctx) => {
       ctx.registerTool({ name: "dyn-tool", description: "", parameters: {}, execute: async () => ({ ok: true }) });
     });
+    const { enforcer, auditLog } = makeSandboxStubs();
     const manager = new PluginManager(
       config, { "dyn-plugin": newPlugin },
       eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry,
+      enforcer, auditLog,
     );
     await manager.load("dyn-plugin");
     expect(toolRegistry.list().map((t) => t.name)).toContain("dyn-tool");
@@ -110,9 +131,11 @@ describe("PluginManager.load + unload + reload", () => {
     const plugin = makePlugin("rm-plugin", async (ctx) => {
       ctx.registerTool({ name: "rm-tool", description: "", parameters: {}, execute: async () => ({ ok: true }) });
     });
+    const { enforcer, auditLog } = makeSandboxStubs();
     const manager = new PluginManager(
       config, { "rm-plugin": plugin },
       eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry,
+      enforcer, auditLog,
     );
     await manager.load("rm-plugin");
     await manager.unload("rm-plugin");
@@ -131,9 +154,11 @@ describe("PluginManager.load + unload + reload", () => {
         execute: async () => ({ ok: true }),
       });
     });
+    const { enforcer, auditLog } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: [] }, { "swap-plugin": plugin },
       eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry,
+      enforcer, auditLog,
     );
     await manager.load("swap-plugin");
     await manager.reload("swap-plugin");
@@ -145,10 +170,12 @@ describe("PluginManager.load + unload + reload", () => {
 describe("PluginManager.drainPendingReloads", () => {
   test("no-op when queue is empty", async () => {
     const registries = makeRegistries();
+    const { enforcer, auditLog } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: [] }, {},
       registries.eventBus, registries.toolRegistry, registries.executorRegistry,
       registries.uiRegistry, registries.serviceRegistry,
+      enforcer, auditLog,
     );
     await expect(manager.drainPendingReloads()).resolves.toBeUndefined();
   });
@@ -158,9 +185,11 @@ describe("PluginManager.drainPendingReloads", () => {
     const drained: string[] = [];
     const pluginA = makePlugin("a", async () => { drained.push("a"); });
     const pluginB = makePlugin("b", async () => { drained.push("b"); });
+    const { enforcer, auditLog } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: [] }, { a: pluginA, b: pluginB },
       eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry,
+      enforcer, auditLog,
     );
     await manager.load("a");
     await manager.load("b");
@@ -176,9 +205,11 @@ describe("PluginManager.list", () => {
   test("returns loaded plugin entries", async () => {
     const { eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry } = makeRegistries();
     const plugin = makePlugin("listed-plugin");
+    const { enforcer, auditLog } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: [] }, { "listed-plugin": plugin },
       eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry,
+      enforcer, auditLog,
     );
     await manager.load("listed-plugin");
     const entries = manager.list();

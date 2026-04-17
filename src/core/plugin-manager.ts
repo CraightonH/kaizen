@@ -13,6 +13,10 @@ import type { UiRegistry } from "./ui-registry.js";
 import type { ServiceRegistry } from "./service-registry.js";
 import { createPluginContext } from "./context.js";
 import type { CoreState } from "./context.js";
+import type { PermissionEnforcer } from "./permission-enforcer.js";
+import type { AuditLog } from "./audit-log.js";
+import { runInPluginScope } from "./plugin-scope.js";
+import { scanPluginEntryImports } from "./manifest-import-scan.js";
 
 // ---------------------------------------------------------------------------
 // Resolution paths (cached once per process)
@@ -50,7 +54,12 @@ export const RESOLVE_PATHS = [
 
 export type Builtins = Record<string, KaizenPlugin>;
 
-function loadPluginFromPath(path: string, name: string): KaizenPlugin | null {
+interface LoadedPlugin {
+  plugin: KaizenPlugin;
+  resolvedPath: string;
+}
+
+function loadPluginFromPath(path: string, name: string): LoadedPlugin | null {
   const req = createRequire(process.execPath);
   try {
     const mod = req(path) as { default?: unknown };
@@ -63,15 +72,15 @@ function loadPluginFromPath(path: string, name: string): KaizenPlugin | null {
       warn(`Plugin '${name}' does not export a valid KaizenPlugin. Skipping.`);
       return null;
     }
-    return plugin as KaizenPlugin;
+    return { plugin: plugin as KaizenPlugin, resolvedPath: path };
   } catch (err) {
     warn(`Failed to load plugin at '${path}': ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }
 
-function resolvePlugin(name: string, builtins: Builtins): KaizenPlugin | null {
-  if (builtins[name]) return builtins[name]!;
+function resolvePlugin(name: string, builtins: Builtins): LoadedPlugin | null {
+  if (builtins[name]) return { plugin: builtins[name]!, resolvedPath: "" };
   const isPath = name.startsWith("./") || name.startsWith("/") || name.startsWith("../");
   if (!isPath) {
     const projectPlugin = join(process.cwd(), PROJECT_PLUGINS, name);
@@ -172,24 +181,31 @@ export class PluginManager {
     private readonly executorRegistry: ExecutorRegistry,
     private readonly uiRegistry: UiRegistry,
     private readonly serviceRegistry: ServiceRegistry,
-  ) {}
+    private readonly enforcer: PermissionEnforcer,
+    private readonly auditLog: AuditLog,
+  ) {
+    // Wire denial listener → audit log.
+    this.enforcer.onDenial((r) => this.auditLog.record(r));
+  }
 
   // --------------------------------------------------------------------------
   // Initialization (startup path — replaces loadPlugins)
   // --------------------------------------------------------------------------
 
   async initialize(): Promise<{ lifecycleProvider: KaizenPlugin }> {
-    const resolved: KaizenPlugin[] = [];
+    const resolvedPlugins: LoadedPlugin[] = [];
     for (const name of this.config.plugins) {
       if (RESERVED_KEYS.has(name)) {
         warn(`Plugin name '${name}' collides with reserved config key. Skipping.`);
         continue;
       }
-      const plugin = resolvePlugin(String(name), this.builtins);
-      if (plugin) resolved.push(plugin);
+      const loaded = resolvePlugin(String(name), this.builtins);
+      if (loaded) resolvedPlugins.push(loaded);
     }
 
-    const sorted = topoSort(resolved);
+    const sorted = topoSort(resolvedPlugins.map((r) => r.plugin));
+    // Map plugin name → resolvedPath for import scan below.
+    const resolvedPathMap = new Map(resolvedPlugins.map((r) => [r.plugin.name, r.resolvedPath]));
 
     const requiredRoles = new Set<string>();
     for (const p of sorted) {
@@ -206,8 +222,9 @@ export class PluginManager {
         warn(`Plugin '${plugin.name}' apiVersion ${plugin.apiVersion}, core expects ${PLUGIN_API_VERSION}.x. Loading anyway.`);
       }
       const providesRequiredRole = (plugin.provides ?? []).some((r) => requiredRoles.has(r));
+      const rPath = resolvedPathMap.get(plugin.name) ?? "";
       try {
-        await this.setupPlugin(plugin);
+        await this.setupPlugin(plugin, rPath);
         loadedNames.add(plugin.name);
         this.plugins.set(plugin.name, {
           plugin,
@@ -267,17 +284,18 @@ export class PluginManager {
   // --------------------------------------------------------------------------
 
   async load(name: string): Promise<void> {
-    const plugin = resolvePlugin(name, this.builtins);
-    if (!plugin) {
+    const loaded = resolvePlugin(name, this.builtins);
+    if (!loaded) {
       warn(`Cannot load plugin '${name}': not found.`);
       return;
     }
+    const { plugin, resolvedPath } = loaded;
     const pluginMajor = plugin.apiVersion.split(".")[0];
     if (pluginMajor !== PLUGIN_API_VERSION) {
       warn(`Plugin '${plugin.name}' apiVersion ${plugin.apiVersion}, core expects ${PLUGIN_API_VERSION}.x. Loading anyway.`);
     }
     try {
-      await this.setupPlugin(plugin);
+      await this.setupPlugin(plugin, resolvedPath);
       this.plugins.set(name, {
         plugin,
         entry: { name: plugin.name, apiVersion: plugin.apiVersion, provides: plugin.provides ?? [], status: "loaded" },
@@ -306,6 +324,7 @@ export class PluginManager {
     this.serviceRegistry.deregisterByPlugin(name);
     this.executorRegistry.deregisterByPlugin(name);
     this.uiRegistry.deregisterByPlugin(name);
+    this.enforcer.deregister(name);
     record.entry.status = "unloaded";
     this.plugins.delete(name);
     debug(`Plugin '${name}' unloaded.`);
@@ -361,7 +380,12 @@ export class PluginManager {
   // Internal setup
   // --------------------------------------------------------------------------
 
-  private async setupPlugin(plugin: KaizenPlugin): Promise<void> {
+  private async setupPlugin(plugin: KaizenPlugin, resolvedPath = ""): Promise<void> {
+    // Register the plugin's permission manifest (defaults to trusted).
+    this.enforcer.register(plugin.name, plugin.permissions ?? { tier: "trusted" });
+    // Scan imports after registration so check() has the manifest.
+    if (resolvedPath) this.scanAndCheckImports(plugin.name, resolvedPath);
+
     let pluginState: CoreState = "INITIALIZING";
     const pluginConfig = (this.config[plugin.name] as Record<string, unknown> | undefined) ?? {};
     const ctx = createPluginContext(
@@ -372,11 +396,24 @@ export class PluginManager {
       this.executorRegistry,
       this.uiRegistry,
       this.serviceRegistry,
+      this.enforcer,
       () => pluginState,
       this.getPublicApi(),
       this.getLifecycleApi(),
     );
-    await plugin.setup(ctx);
+    await runInPluginScope(plugin.name, async () => { await plugin.setup(ctx); });
     pluginState = "READY";
+  }
+
+  private scanAndCheckImports(pluginName: string, resolvedPath: string): void {
+    try {
+      const imports = scanPluginEntryImports(resolvedPath);
+      for (const mod of imports) {
+        this.enforcer.check(pluginName, { kind: "import", module: mod });
+      }
+    } catch (err) {
+      // Swallow IO errors on scan (best-effort); real enforcement happens via require patch.
+      debug(`Import scan for '${pluginName}' failed: ${err instanceof Error ? err.message : err}`);
+    }
   }
 }
