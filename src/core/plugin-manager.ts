@@ -223,7 +223,17 @@ export class PluginManager {
   // Lockfile consent
   // --------------------------------------------------------------------------
 
-  private consultLockfile(plugin: KaizenPlugin, pluginDir: string | null): boolean {
+  /**
+   * @param persistOnAcceptAndRecord - When false (runtime path), demotes
+   *   `accept-and-record` to a silent accept without writing the lockfile.
+   *   Read-only filesystems (CI, sealed images) would fail on write; explicit
+   *   commands (kaizen install / plugin consent) pass true to persist.
+   */
+  private consultLockfile(
+    plugin: KaizenPlugin,
+    pluginDir: string | null,
+    persistOnAcceptAndRecord = false,
+  ): boolean {
     // Built-ins with no pluginDir: pre-trusted; ship with the core binary.
     if (!pluginDir) return true;
 
@@ -249,7 +259,11 @@ export class PluginManager {
       case "accept":
         return true;
       case "accept-and-record":
-        writeLockfile(this.lockfilePath, upsertPluginEntry(lf, plugin.name, decision.entry));
+        if (persistOnAcceptAndRecord) {
+          writeLockfile(this.lockfilePath, upsertPluginEntry(lf, plugin.name, decision.entry));
+        } else {
+          debug(`would record consent for '${plugin.name}'; run \`kaizen plugin consent ${plugin.name}\` to persist`);
+        }
         return true;
       case "prompt-scoped":
       case "prompt-unscoped":

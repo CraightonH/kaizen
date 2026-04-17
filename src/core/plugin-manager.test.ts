@@ -1,5 +1,5 @@
 import { describe, expect, test, afterEach } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { PluginManager, findPackageRoot } from "./plugin-manager.js";
@@ -235,6 +235,56 @@ describe("PluginManager.drainPendingReloads", () => {
     manager.queueReload("b");
     await manager.drainPendingReloads();
     expect(drained).toEqual(["a", "b"]);
+  });
+});
+
+describe("PluginManager runtime accept-and-record (item 2)", () => {
+  test("trusted external plugin on first runtime load does NOT write lockfile", async () => {
+    // Create a real plugin file on disk (non-builtin path) with a TRUSTED manifest.
+    // The runtime load path uses persistOnAcceptAndRecord=false, so accept-and-record
+    // must not write the lockfile even when decideConsent returns that decision.
+    const pluginDir = mkdtempSync(join(tmpdir(), "kaizen-test-ext-plugin-"));
+    const lockDir = mkdtempSync(join(tmpdir(), "kaizen-test-lock-"));
+    const lockfilePath = join(lockDir, "kaizen.permissions.lock");
+
+    writeFileSync(join(pluginDir, "package.json"), JSON.stringify({ name: "ext-trusted", version: "1.0.0", main: "index.js" }));
+    // Plugin file exports a minimal trusted plugin + lifecycle role
+    writeFileSync(join(pluginDir, "index.js"), [
+      "exports.default = {",
+      "  name: 'ext-trusted',",
+      "  apiVersion: '1',",
+      "  provides: ['lifecycle'],",
+      "  depends: [],",
+      "  permissions: { tier: 'trusted' },",
+      "  async setup() {},",
+      "  async start() {},",
+      "};",
+    ].join("\n"));
+
+    const { eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry } = makeRegistries();
+    const enforcer = new PermissionEnforcer({ mode: "log-only" });
+    const auditLog = new AuditLog({
+      rootDir: mkdtempSync(join(tmpdir(), "kaizen-test-audit-")),
+      sessionId: "test",
+      enabled: false,
+    });
+    const options = { trustLockfile: false, allowUnscoped: false, nonInteractive: true };
+
+    // Load via absolute path so resolvedPath is non-null → consultLockfile is exercised.
+    const manager = new PluginManager(
+      { plugins: [pluginDir] }, {},
+      eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+
+    await manager.initialize();
+
+    // Lockfile must NOT have been created by the runtime path.
+    expect(existsSync(lockfilePath)).toBe(false);
+
+    rmSync(pluginDir, { recursive: true, force: true });
+    rmSync(lockDir, { recursive: true, force: true });
   });
 });
 
