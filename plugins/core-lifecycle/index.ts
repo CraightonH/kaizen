@@ -77,7 +77,7 @@ const plugin: KaizenPlugin = {
   async start(ctx) {
     const { events } = ctx.getService(CoreEventsServiceToken);
     const sessions: Promise<void>[] = [];
-    for await (const channel of ctx.runtime.ui.accept()) {
+    for await (const channel of ctx.runtime.ui.getFirst().accept()) {
       sessions.push(
         runSession(channel, ctx, events).catch((err: unknown) => {
           ctx.log(`session ${channel.id} error: ${err instanceof Error ? err.message : String(err)}`);

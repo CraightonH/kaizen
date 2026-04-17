@@ -218,7 +218,11 @@ export interface PluginContext {
 
   runtime: {
     executor: Executor;
-    ui: UiProvider;
+    /** All registered UI providers, in registration order. */
+    ui: {
+      list(): UiProvider[];
+      getFirst(): UiProvider;
+    };
     tools: {
       /** Returns all registered tools at the time of the call. */
       list(): ToolDefinition[];

@@ -1,29 +1,31 @@
 import type { UiProvider } from "../types/plugin.js";
 import { fatal } from "./errors.js";
 
+interface Entry { impl: UiProvider; pluginName: string; }
+
 export class UiRegistry {
-  private impl: UiProvider | null = null;
-  private registeredBy: string | null = null;
+  private readonly entries: Entry[] = [];
 
   register(impl: UiProvider, pluginName: string): void {
-    if (this.impl !== null) {
-      fatal(`Two plugins registered a UI provider: '${this.registeredBy}' and '${pluginName}'. Remove one.`);
-    }
-    this.impl = impl;
-    this.registeredBy = pluginName;
+    this.entries.push({ impl, pluginName });
   }
 
-  get(): UiProvider {
-    if (!this.impl) fatal("No UI provider registered. Add a UI plugin to kaizen.json.");
-    return this.impl;
+  /** All registered providers, in registration order. */
+  list(): UiProvider[] {
+    return this.entries.map((e) => e.impl);
   }
 
-  isRegistered(): boolean { return this.impl !== null; }
+  /** First-registered provider, for back-compat with single-provider code paths. */
+  getFirst(): UiProvider {
+    if (this.entries.length === 0) fatal("No UI provider registered.");
+    return this.entries[0]!.impl;
+  }
+
+  isRegistered(): boolean { return this.entries.length > 0; }
 
   deregisterByPlugin(pluginName: string): void {
-    if (this.registeredBy === pluginName) {
-      this.impl = null;
-      this.registeredBy = null;
+    for (let i = this.entries.length - 1; i >= 0; i--) {
+      if (this.entries[i]!.pluginName === pluginName) this.entries.splice(i, 1);
     }
   }
 }

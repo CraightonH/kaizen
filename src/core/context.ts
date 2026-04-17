@@ -84,8 +84,9 @@ export function createPluginContext(
       get executor() {
         return executorRegistry.get();
       },
-      get ui() {
-        return uiRegistry.get();
+      ui: {
+        list: () => uiRegistry.list(),
+        getFirst: () => uiRegistry.getFirst(),
       },
       tools: {
         list() {
