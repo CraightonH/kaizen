@@ -11,6 +11,7 @@ import type { ToolRegistry } from "./tool-registry.js";
 import type { ExecutorRegistry } from "./executor-registry.js";
 import type { UiRegistry } from "./ui-registry.js";
 import type { ServiceRegistry } from "./service-registry.js";
+import type { CapabilityRegistry } from "./capability-registry.js";
 import { createPluginContext } from "./context.js";
 import type { CoreState } from "./context.js";
 
@@ -171,6 +172,7 @@ export class PluginManager {
     private readonly toolRegistry: ToolRegistry,
     private readonly executorRegistry: ExecutorRegistry,
     private readonly uiRegistry: UiRegistry,
+    private readonly capabilityRegistry: CapabilityRegistry,
     private readonly serviceRegistry: ServiceRegistry,
   ) {}
 
@@ -306,6 +308,7 @@ export class PluginManager {
     this.serviceRegistry.deregisterByPlugin(name);
     this.executorRegistry.deregisterByPlugin(name);
     this.uiRegistry.deregisterByPlugin(name);
+    this.capabilityRegistry.deregisterByPlugin(name);
     record.entry.status = "unloaded";
     this.plugins.delete(name);
     debug(`Plugin '${name}' unloaded.`);
@@ -371,6 +374,7 @@ export class PluginManager {
       this.toolRegistry,
       this.executorRegistry,
       this.uiRegistry,
+      this.capabilityRegistry,
       this.serviceRegistry,
       () => pluginState,
       this.getPublicApi(),

@@ -183,6 +183,10 @@ export interface PluginContext {
   /** Register the UI provider. Exactly one plugin must call this. */
   registerUi(impl: UiProvider): void;
 
+  // --- Capability registry (INITIALIZING state only) -----------------------
+  /** Declare a capability. Name must be prefixed with the calling plugin's name. */
+  defineCapability(name: string, spec: CapabilitySpec): void;
+
   // --- Event bus -----------------------------------------------------------
 
   /** Declare a new event type. Advisory only — suppresses "unknown event" warnings. */

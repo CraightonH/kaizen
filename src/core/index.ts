@@ -4,8 +4,11 @@ import { ToolRegistry } from "./tool-registry.js";
 import { ExecutorRegistry } from "./executor-registry.js";
 import { UiRegistry } from "./ui-registry.js";
 import { ServiceRegistry } from "./service-registry.js";
+import { CapabilityRegistry } from "./capability-registry.js";
 import { PluginManager, type Builtins } from "./plugin-manager.js";
 import { createPluginContext } from "./context.js";
+
+export { CapabilityRegistry } from "./capability-registry.js";
 
 export { PLUGIN_API_VERSION } from "../types/plugin.js";
 export type { KaizenPlugin, PluginContext } from "../types/plugin.js";
@@ -19,11 +22,12 @@ export async function bootstrap(
   const toolRegistry = new ToolRegistry();
   const executorRegistry = new ExecutorRegistry();
   const uiRegistry = new UiRegistry();
+  const capabilityRegistry = new CapabilityRegistry();
   const serviceRegistry = new ServiceRegistry();
 
   const manager = new PluginManager(
     kaizenConfig, builtins,
-    eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry,
+    eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
   );
 
   const { lifecycleProvider } = await manager.initialize();
@@ -37,6 +41,7 @@ export async function bootstrap(
     toolRegistry,
     executorRegistry,
     uiRegistry,
+    capabilityRegistry,
     serviceRegistry,
     () => "RUNNING",
     manager.getPublicApi(),

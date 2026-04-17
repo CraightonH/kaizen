@@ -5,6 +5,7 @@ import type { ToolRegistry } from "./tool-registry.js";
 import type { ExecutorRegistry } from "./executor-registry.js";
 import type { UiRegistry } from "./ui-registry.js";
 import type { ServiceRegistry } from "./service-registry.js";
+import type { CapabilityRegistry } from "./capability-registry.js";
 
 export type CoreState = "INITIALIZING" | "READY" | "RUNNING" | "CLOSED";
 
@@ -21,6 +22,7 @@ export function createPluginContext(
   toolRegistry: ToolRegistry,
   executorRegistry: ExecutorRegistry,
   uiRegistry: UiRegistry,
+  capabilityRegistry: CapabilityRegistry,
   serviceRegistry: ServiceRegistry,
   getState: () => CoreState,
   pluginManagerPublicApi: PluginManagerPublicApi,
@@ -57,6 +59,11 @@ export function createPluginContext(
     registerUi(impl) {
       assertInitializing(getState(), "register UI provider");
       uiRegistry.register(impl, pluginName);
+    },
+
+    defineCapability(name, spec) {
+      assertInitializing(getState(), "define capabilities");
+      capabilityRegistry.define(name, pluginName, spec);
     },
 
     defineEvent(name: string): void {
