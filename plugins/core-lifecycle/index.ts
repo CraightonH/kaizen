@@ -73,6 +73,7 @@ const plugin: KaizenPlugin = {
       "core-lifecycle:executor.send",
       "core-lifecycle:ui.input",
       "core-lifecycle:ui.output",
+      "core-events:service",
     ],
   },
 
