@@ -7,6 +7,10 @@ const plugin: KaizenPlugin = {
   apiVersion: "1.0.0",
   provides: [],
   depends: ["events"],
+  permissions: {
+    tier: "scoped",
+    events: { subscribe: ["session:*"] },
+  },
 
   async setup(ctx) {
     ctx.on(EVENTS.USER_MESSAGE, async (payload) => {

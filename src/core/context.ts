@@ -75,6 +75,7 @@ export function createPluginContext(
 
     on(event: string, handler: Parameters<PluginContext["on"]>[1]): void {
       assertInitializing(getState(), "register event handlers");
+      enforcer.check(pluginName, { kind: "events.subscribe", event });
       eventBus.on(event, handler, pluginName);
     },
 
