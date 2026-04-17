@@ -119,9 +119,8 @@ async function promptForResponse(
 
 const plugin: KaizenPlugin = {
   name: "core-executor-debug",
-  apiVersion: "1.0.0",
-  provides: ["executor"],
-  depends: ["events"],
+  apiVersion: "2.0.0",
+  capabilities: { provides: ["core-lifecycle:executor.send"] },
 
   async setup(ctx) {
     const useColor = (ctx.config["color"] as boolean | undefined) ?? true;
