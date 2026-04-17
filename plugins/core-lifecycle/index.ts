@@ -55,6 +55,8 @@ async function runSession(channel: UiChannel, ctx: PluginContext, events: CoreEv
       if (response.content) {
         await channel.send({ type: "text", content: respPayload.content + "\n" });
       }
+
+      await ctx.runtime.pluginManager.drainPendingReloads();
     }
   } finally {
     await ctx.emit(events.SESSION_END, { sessionId });

@@ -16,6 +16,7 @@
         "core-executor-openai": "workspace:*",
         "core-executor-shell": "workspace:*",
         "core-lifecycle": "workspace:*",
+        "core-plugin-manager": "workspace:*",
         "core-ui-terminal": "workspace:*",
         "kaizen-plugin-timestamps": "workspace:*",
       },
@@ -80,6 +81,10 @@
         "typescript": "^5.4.0",
       },
     },
+    "plugins/core-plugin-manager": {
+      "name": "core-plugin-manager",
+      "version": "0.1.0",
+    },
     "plugins/core-ui-terminal": {
       "name": "core-ui-terminal",
       "version": "0.1.0",
@@ -137,6 +142,8 @@
     "core-executor-shell": ["core-executor-shell@workspace:plugins/core-executor-shell"],
 
     "core-lifecycle": ["core-lifecycle@workspace:plugins/core-lifecycle"],
+
+    "core-plugin-manager": ["core-plugin-manager@workspace:plugins/core-plugin-manager"],
 
     "core-ui-terminal": ["core-ui-terminal@workspace:plugins/core-ui-terminal"],
 

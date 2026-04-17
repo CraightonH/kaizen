@@ -30,6 +30,7 @@
     "core-executor-anthropic": "workspace:*",
     "core-executor-debug": "workspace:*",
     "core-executor-shell": "workspace:*",
+    "core-plugin-manager": "workspace:*",
     "kaizen-plugin-timestamps": "workspace:*",
     "core-executor-openai": "workspace:*",
     "core-lifecycle": "workspace:*",

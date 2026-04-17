@@ -1,4 +1,4 @@
-import type { PluginContext, ToolDefinition } from "../types/plugin.js";
+import type { PluginContext, ToolDefinition, PluginManagerPublicApi, PluginManagerLifecycleApi } from "../types/plugin.js";
 import type { ServiceToken } from "../types/plugin.js";
 import type { EventBus } from "./event-bus.js";
 import type { ToolRegistry } from "./tool-registry.js";
@@ -23,6 +23,8 @@ export function createPluginContext(
   uiRegistry: UiRegistry,
   serviceRegistry: ServiceRegistry,
   getState: () => CoreState,
+  pluginManagerPublicApi: PluginManagerPublicApi,
+  pluginManagerLifecycleApi: PluginManagerLifecycleApi,
 ): PluginContext {
   return {
     config: pluginConfig,
@@ -31,9 +33,11 @@ export function createPluginContext(
       console.log(`[${pluginName}] ${msg}`);
     },
 
+    pluginManager: pluginManagerPublicApi,
+
     registerService<T>(token: ServiceToken<T>, impl: T): void {
       assertInitializing(getState(), "register services");
-      serviceRegistry.register(token, impl);
+      serviceRegistry.register(token, impl, pluginName);
     },
 
     getService<T>(token: ServiceToken<T>): T {
@@ -57,12 +61,12 @@ export function createPluginContext(
 
     defineEvent(name: string): void {
       assertInitializing(getState(), "define events");
-      eventBus.defineEvent(name);
+      eventBus.defineEvent(name, pluginName);
     },
 
     on(event: string, handler: Parameters<PluginContext["on"]>[1]): void {
       assertInitializing(getState(), "register event handlers");
-      eventBus.on(event, handler);
+      eventBus.on(event, handler, pluginName);
     },
 
     async emit(event: string, payload?: unknown): Promise<unknown[]> {
@@ -84,6 +88,7 @@ export function createPluginContext(
           return toolRegistry.execute(name, args);
         },
       },
+      pluginManager: pluginManagerLifecycleApi,
     },
   };
 }

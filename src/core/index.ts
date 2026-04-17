@@ -3,19 +3,14 @@ import { EventBus } from "./event-bus.js";
 import { ToolRegistry } from "./tool-registry.js";
 import { ExecutorRegistry } from "./executor-registry.js";
 import { UiRegistry } from "./ui-registry.js";
-import { loadPlugins, type Builtins } from "./loader.js";
-import { createPluginContext } from "./context.js";
 import { ServiceRegistry } from "./service-registry.js";
+import { PluginManager, type Builtins } from "./plugin-manager.js";
+import { createPluginContext } from "./context.js";
 
 export { PLUGIN_API_VERSION } from "../types/plugin.js";
 export type { KaizenPlugin, PluginContext } from "../types/plugin.js";
+export type { Builtins } from "./plugin-manager.js";
 
-/**
- * Bootstrap the kaizen runtime.
- *
- * @param kaizenConfig  Parsed kaizen.json
- * @param builtins      Pre-loaded built-in plugins (avoids dynamic require in compiled binary)
- */
 export async function bootstrap(
   kaizenConfig: KaizenConfig,
   builtins: Builtins = {},
@@ -24,15 +19,14 @@ export async function bootstrap(
   const toolRegistry = new ToolRegistry();
   const executorRegistry = new ExecutorRegistry();
   const uiRegistry = new UiRegistry();
+  const serviceRegistry = new ServiceRegistry();
 
-  const { lifecycleProvider, state, serviceRegistry } = await loadPlugins(
-    kaizenConfig,
-    builtins,
-    eventBus,
-    toolRegistry,
-    executorRegistry,
-    uiRegistry,
+  const manager = new PluginManager(
+    kaizenConfig, builtins,
+    eventBus, toolRegistry, executorRegistry, uiRegistry, serviceRegistry,
   );
+
+  const { lifecycleProvider } = await manager.initialize();
 
   const lifecycleConfig =
     (kaizenConfig[lifecycleProvider.name] as Record<string, unknown> | undefined) ?? {};
@@ -44,13 +38,14 @@ export async function bootstrap(
     executorRegistry,
     uiRegistry,
     serviceRegistry,
-    () => state.current,
+    () => "RUNNING",
+    manager.getPublicApi(),
+    manager.getLifecycleApi(),
   );
 
-  state.current = "RUNNING";
   try {
     await lifecycleProvider.start!(ctx);
   } finally {
-    state.current = "CLOSED";
+    // state is implicitly CLOSED after start() returns
   }
 }

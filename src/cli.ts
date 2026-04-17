@@ -26,6 +26,7 @@ import coreExecutorDebug from "core-executor-debug";
 import coreExecutorShell from "core-executor-shell";
 import kaizenPluginTimestamps from "kaizen-plugin-timestamps";
 import coreCli from "core-cli";
+import corePluginManager from "core-plugin-manager";
 
 const builtins = {
   [coreEvents.name]: coreEvents,
@@ -36,6 +37,7 @@ const builtins = {
   [coreExecutorShell.name]: coreExecutorShell,
   [kaizenPluginTimestamps.name]: kaizenPluginTimestamps,
   [coreCli.name]: coreCli,
+  [corePluginManager.name]: corePluginManager,
 };
 
 // ---------------------------------------------------------------------------

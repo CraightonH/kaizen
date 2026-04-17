@@ -11,7 +11,7 @@ import { createRequire } from "module";
 import { spawnSync } from "child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
-import { RESOLVE_PATHS } from "../core/loader.js";
+import { RESOLVE_PATHS } from "../core/plugin-manager.js";
 import { PROJECT_CONFIG, KAIZEN_HOME, findProjectConfig } from "../core/config.js";
 import type { KaizenPlugin } from "../types/plugin.js";
 
