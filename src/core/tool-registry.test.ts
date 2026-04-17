@@ -27,4 +27,10 @@ describe("ToolRegistry.deregisterByPlugin", () => {
     registry.register({ name: "t", description: "new", parameters: {}, execute: noop }, "plugin-a");
     expect(registry.list()[0]?.description).toBe("new");
   });
+
+  test("no-op on empty registry", () => {
+    const registry = new ToolRegistry();
+    expect(() => registry.deregisterByPlugin("plugin-a")).not.toThrow();
+    expect(registry.list()).toEqual([]);
+  });
 });

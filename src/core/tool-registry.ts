@@ -49,7 +49,7 @@ export class ToolRegistry {
   }
 
   deregisterByPlugin(pluginName: string): void {
-    for (const [name, entry] of this.tools) {
+    for (const [name, entry] of [...this.tools]) {
       if (entry.registeredBy === pluginName) {
         this.tools.delete(name);
       }
