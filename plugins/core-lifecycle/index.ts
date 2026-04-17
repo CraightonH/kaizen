@@ -66,12 +66,34 @@ async function runSession(channel: UiChannel, ctx: PluginContext, events: CoreEv
 
 const plugin: KaizenPlugin = {
   name: "core-lifecycle",
-  apiVersion: "1.0.0",
-  provides: ["lifecycle"],
-  depends: ["events", "executor", "ui"],
+  apiVersion: "2.0.0",
+  capabilities: {
+    provides: ["core-lifecycle:lifecycle.drive"],
+    consumes: [
+      "core-lifecycle:executor.send",
+      "core-lifecycle:ui.input",
+      "core-lifecycle:ui.output",
+    ],
+  },
 
   async setup(ctx) {
-    ctx.getService(CoreEventsServiceToken); // validates CoreEventsService is available
+    ctx.defineCapability("core-lifecycle:lifecycle.drive", {
+      cardinality: "one",
+      description: "Drives the session loop via start(ctx).",
+    });
+    ctx.defineCapability("core-lifecycle:ui.input", {
+      cardinality: "many",
+      description: "Provides user-input channels to the session loop.",
+    });
+    ctx.defineCapability("core-lifecycle:ui.output", {
+      cardinality: "many",
+      description: "Renders session output to a destination.",
+    });
+    ctx.defineCapability("core-lifecycle:executor.send", {
+      cardinality: "many",
+      description: "Sends messages/tools to an executor backend.",
+    });
+    ctx.getService(CoreEventsServiceToken);
   },
 
   async start(ctx) {
