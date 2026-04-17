@@ -209,6 +209,51 @@ export interface PluginContext {
 }
 
 // ---------------------------------------------------------------------------
+// Permissions
+// ---------------------------------------------------------------------------
+
+export type PermissionTier = "trusted" | "scoped" | "unscoped";
+
+export interface PluginPermissions {
+  /** Default: "trusted". TRUSTED = no external I/O; SCOPED = declared grants; UNSCOPED = full access. */
+  tier?: PermissionTier;
+
+  fs?: {
+    /** Glob patterns. Relative paths resolve from workspace root. */
+    read?: string[];
+    write?: string[];
+  };
+
+  net?: {
+    /** host:port allowlist. "*" means any host, any port. "*.example.com:443" ok. */
+    connect?: string[];
+  };
+
+  /** Allowed environment variable names. */
+  env?: string[];
+
+  exec?: {
+    /** Binary name allowlist. No argv-pattern allowlisting in v1. */
+    binaries?: string[];
+  };
+
+  events?: {
+    /** Cross-plugin event subscription patterns, e.g. ["core-lifecycle:tool:before"]. */
+    subscribe?: string[];
+  };
+}
+
+/** Operation passed to PermissionEnforcer.check(). */
+export type PermissionOp =
+  | { kind: "fs.read";  path: string }
+  | { kind: "fs.write"; path: string }
+  | { kind: "net.connect"; host: string; port: number }
+  | { kind: "env.get";  name: string }
+  | { kind: "exec.run"; binary: string }
+  | { kind: "events.subscribe"; event: string }
+  | { kind: "import";   module: string };
+
+// ---------------------------------------------------------------------------
 // Plugin manifest
 // ---------------------------------------------------------------------------
 
@@ -227,6 +272,9 @@ export interface KaizenPlugin {
    * Core enforces: exactly one loaded plugin must provide each required role.
    */
   depends?: string[];
+
+  /** Permission manifest. Defaults to { tier: "trusted" }. */
+  permissions?: PluginPermissions;
 
   /**
    * Called once during INITIALIZING. Register tools, define events, subscribe to events.
