@@ -5,6 +5,7 @@ import type { ToolRegistry } from "./tool-registry.js";
 import type { ExecutorRegistry } from "./executor-registry.js";
 import type { UiRegistry } from "./ui-registry.js";
 import type { ServiceRegistry } from "./service-registry.js";
+import type { CapabilityRegistry } from "./capability-registry.js";
 
 export type CoreState = "INITIALIZING" | "READY" | "RUNNING" | "CLOSED";
 
@@ -21,6 +22,7 @@ export function createPluginContext(
   toolRegistry: ToolRegistry,
   executorRegistry: ExecutorRegistry,
   uiRegistry: UiRegistry,
+  capabilityRegistry: CapabilityRegistry,
   serviceRegistry: ServiceRegistry,
   getState: () => CoreState,
   pluginManagerPublicApi: PluginManagerPublicApi,
@@ -59,6 +61,11 @@ export function createPluginContext(
       uiRegistry.register(impl, pluginName);
     },
 
+    defineCapability(name, spec) {
+      assertInitializing(getState(), "define capabilities");
+      capabilityRegistry.define(name, pluginName, spec);
+    },
+
     defineEvent(name: string): void {
       assertInitializing(getState(), "define events");
       eventBus.defineEvent(name, pluginName);
@@ -75,10 +82,15 @@ export function createPluginContext(
 
     runtime: {
       get executor() {
-        return executorRegistry.get();
+        return executorRegistry.getFirst();
       },
-      get ui() {
-        return uiRegistry.get();
+      executors: {
+        list: () => executorRegistry.list(),
+        getFirst: () => executorRegistry.getFirst(),
+      },
+      ui: {
+        list: () => uiRegistry.list(),
+        getFirst: () => uiRegistry.getFirst(),
       },
       tools: {
         list() {

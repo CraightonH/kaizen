@@ -3,9 +3,8 @@ import { createLLMRuntime } from "../../src/core/llm.js";
 
 const plugin: KaizenPlugin = {
   name: "core-executor-anthropic",
-  apiVersion: "1.0.0",
-  provides: ["executor"],
-  depends: [],
+  apiVersion: "2.0.0",
+  capabilities: { provides: ["core-lifecycle:executor.send"] },
 
   async setup(ctx) {
     const cfg = ctx.config as {

@@ -9,7 +9,7 @@
  * live in the `core-events` plugin, not here. Import them from `core-events`.
  */
 
-export const PLUGIN_API_VERSION = "1";
+export const PLUGIN_API_VERSION = "2";
 
 import { ServiceToken } from "../core/service-registry.js";
 export { ServiceToken };
@@ -138,6 +138,28 @@ export interface UiProvider {
 export type EventHandler = (payload?: unknown) => Promise<unknown | void>;
 
 // ---------------------------------------------------------------------------
+// Capabilities
+// ---------------------------------------------------------------------------
+
+export type Cardinality = "one" | "many";
+
+export interface CapabilitySpec {
+  /** "one": exactly one provider required when consumed. "many": any count, including zero. */
+  cardinality: Cardinality;
+  /** Optional JSON schema validated against provider registrations. */
+  schema?: JsonSchema;
+  /** Optional semver string — future-proofing; currently informational only. */
+  version?: string;
+  /** Human-readable; shown by `kaizen capability show`. */
+  description: string;
+}
+
+export interface PluginCapabilities {
+  provides?: string[];
+  consumes?: string[];
+}
+
+// ---------------------------------------------------------------------------
 // Plugin context — passed to setup() and start()
 // ---------------------------------------------------------------------------
 
@@ -160,6 +182,10 @@ export interface PluginContext {
   // --- UI registration (INITIALIZING state only) ---------------------------
   /** Register the UI provider. Exactly one plugin must call this. */
   registerUi(impl: UiProvider): void;
+
+  // --- Capability registry (INITIALIZING state only) -----------------------
+  /** Declare a capability. Name must be prefixed with the calling plugin's name. */
+  defineCapability(name: string, spec: CapabilitySpec): void;
 
   // --- Event bus -----------------------------------------------------------
 
@@ -191,8 +217,18 @@ export interface PluginContext {
   // --- Runtime primitives --------------------------------------------------
 
   runtime: {
+    /** All registered executors; routing mechanism deferred. */
+    executors: {
+      list(): Executor[];
+      getFirst(): Executor;
+    };
+    /** First-registered executor — preserved for back-compat. Deprecated once routing lands. */
     executor: Executor;
-    ui: UiProvider;
+    /** All registered UI providers, in registration order. */
+    ui: {
+      list(): UiProvider[];
+      getFirst(): UiProvider;
+    };
     tools: {
       /** Returns all registered tools at the time of the call. */
       list(): ToolDefinition[];
@@ -219,27 +255,17 @@ export interface KaizenPlugin {
   /** semver. Core warns if major != PLUGIN_API_VERSION. */
   apiVersion: string;
 
-  /** Capability roles this plugin fulfills (e.g. 'lifecycle', 'ui'). */
-  provides?: string[];
+  /** What this plugin provides and consumes in the capability registry. */
+  capabilities?: PluginCapabilities;
 
   /**
-   * Capability roles or plugin names that must be initialized before this plugin.
-   * Core enforces: exactly one loaded plugin must provide each required role.
+   * Map short or alternative capability names to canonical owner-qualified names.
+   * Resolved when reading the `capabilities` lists above.
+   * e.g. { "ui.input": "core-lifecycle:ui.input" }
    */
-  depends?: string[];
+  aliases?: Record<string, string>;
 
-  /**
-   * Called once during INITIALIZING. Register tools, define events, subscribe to events.
-   * Calling registerTool, defineEvent, on, or registerExecutor/registerUi after
-   * setup() returns throws.
-   */
   setup(ctx: PluginContext): Promise<void>;
-
-  /**
-   * Called by core on the lifecycle role provider after all plugins have initialized.
-   * Only the plugin providing role 'lifecycle' should implement this.
-   * If the lifecycle provider does not export start(): fatal error.
-   */
   start?(ctx: PluginContext): Promise<void>;
 }
 
@@ -267,7 +293,7 @@ export interface KaizenConfig {
 export interface PluginEntry {
   name: string;
   apiVersion: string;
-  provides: string[];
+  capabilities: PluginCapabilities;
   status: "loaded" | "unloaded" | "failed";
 }
 

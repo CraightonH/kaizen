@@ -166,9 +166,8 @@ function createCliTool(
 
 const plugin: KaizenPlugin = {
   name: "core-cli",
-  apiVersion: "1.0.0",
-  provides: [],
-  depends: ["lifecycle"],
+  apiVersion: "2.0.0",
+  capabilities: { consumes: ["core-lifecycle:lifecycle.drive"] },
 
   async setup(ctx) {
     const clis = (ctx.config["clis"] as string[] | undefined) ?? [];
