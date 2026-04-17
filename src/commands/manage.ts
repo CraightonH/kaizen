@@ -152,33 +152,6 @@ export function cmdApply(builtins: Record<string, KaizenPlugin>): void {
 }
 
 // ---------------------------------------------------------------------------
-// kaizen install <harness>
-// ---------------------------------------------------------------------------
-
-export function cmdInstall(harnessArg: string | undefined): void {
-  if (!harnessArg) {
-    console.error("Usage: kaizen install <url-or-path>");
-    console.error("  kaizen install https://example.com/harness/kaizen.json");
-    console.error("  kaizen install ./my-harness");
-    console.error("  kaizen install core-debug  (built-in short name)");
-    process.exit(1);
-  }
-
-  // Update or create .kaizen/kaizen.json to extend the given harness
-  if (findProjectConfig()) {
-    const config = readLocalConfig();
-    config["extends"] = harnessArg;
-    writeLocalConfig(config);
-    console.log(`Updated .kaizen/kaizen.json: extends = "${harnessArg}"`);
-  } else {
-    mkdirSync(".kaizen", { recursive: true });
-    writeLocalConfig({ extends: harnessArg });
-    console.log(`Created .kaizen/kaizen.json: extends = "${harnessArg}"`);
-  }
-  console.log(`Run 'kaizen apply' to install any missing plugins.`);
-}
-
-// ---------------------------------------------------------------------------
 // kaizen plugin install <pkg>
 // ---------------------------------------------------------------------------
 
