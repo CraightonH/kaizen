@@ -4,6 +4,7 @@
     "core-executor-anthropic",
     "core-ui-terminal",
     "core-cli",
+    "core-plugin-manager",
     "core-lifecycle"
   ],
   "core-executor-anthropic": {
