@@ -85,7 +85,7 @@ describe("decideConsent", () => {
     if (decision.kind === "refuse") expect(decision.reason).toMatch(/consent/i);
   });
 
-  test("plugin not in lockfile, scoped, interactive: prompt", () => {
+  test("plugin not in lockfile, scoped, interactive: prompt with pre-built entry", () => {
     const decision = decideConsent({
       pluginName: "p1", version: "1.0", hash: "sha256:abc",
       permissions: BASE_MANIFEST,
@@ -93,9 +93,13 @@ describe("decideConsent", () => {
       interactive: true, allowUnscoped: false,
     });
     expect(decision.kind).toBe("prompt-scoped");
+    if (decision.kind === "prompt-scoped") {
+      expect(decision.entry.hash).toBe("sha256:abc");
+      expect(decision.entry.tier).toBe("scoped");
+    }
   });
 
-  test("plugin not in lockfile, unscoped, interactive: prompt-unscoped", () => {
+  test("plugin not in lockfile, unscoped, interactive: prompt-unscoped with pre-built entry", () => {
     const decision = decideConsent({
       pluginName: "p1", version: "1.0", hash: "sha256:abc",
       permissions: { tier: "unscoped" },
@@ -103,6 +107,10 @@ describe("decideConsent", () => {
       interactive: true, allowUnscoped: true,
     });
     expect(decision.kind).toBe("prompt-unscoped");
+    if (decision.kind === "prompt-unscoped") {
+      expect(decision.entry.hash).toBe("sha256:abc");
+      expect(decision.entry.tier).toBe("unscoped");
+    }
   });
 
   test("plugin not in lockfile, unscoped, non-interactive, allowUnscoped=false: refuse", () => {

@@ -63,8 +63,7 @@ export async function runInstall(args: InstallArgs): Promise<number> {
       process.stdout.write(renderScopedUAC({ pluginName: args.pluginName, version, source, permissions }) + "\n> ");
       const answer = (await readStdinLine()).trim().toLowerCase();
       if (answer === "a" || answer === "accept") {
-        const entry = toEntry(version, hash, permissions);
-        const updated = upsertPluginEntry(lockfile, args.pluginName, entry);
+        const updated = upsertPluginEntry(lockfile, args.pluginName, decision.entry);
         writeLockfile(args.lockfilePath, updated);
         console.log(`kaizen install: plugin '${args.pluginName}' accepted and recorded.`);
         return 0;
@@ -81,7 +80,7 @@ export async function runInstall(args: InstallArgs): Promise<number> {
         console.log(`kaizen install: plugin '${args.pluginName}' rejected (confirmation did not match).`);
         return 1;
       }
-      const entry: LockfileEntry = { ...toEntry(version, hash, permissions), consentMode: "interactive" };
+      const entry: LockfileEntry = { ...decision.entry, consentMode: "interactive" };
       const updated = upsertPluginEntry(lockfile, args.pluginName, entry);
       writeLockfile(args.lockfilePath, updated);
       console.log(`kaizen install: plugin '${args.pluginName}' accepted as UNSCOPED and recorded.`);
@@ -92,23 +91,6 @@ export async function runInstall(args: InstallArgs): Promise<number> {
       console.error(`kaizen install: refused. ${decision.reason}`);
       return 1;
   }
-}
-
-function toEntry(version: string, hash: string, permissions: PluginPermissions): LockfileEntry {
-  const tier = (permissions.tier ?? "trusted") as "trusted" | "scoped" | "unscoped";
-  return {
-    version,
-    hash,
-    tier,
-    consentedAt: new Date().toISOString(),
-    consentedBy: process.env["USER"] ?? "unknown",
-    permissions: stripTier(permissions),
-  };
-}
-
-function stripTier(p: PluginPermissions): Omit<PluginPermissions, "tier"> {
-  const { tier: _t, ...rest } = p;
-  return rest;
 }
 
 function resolvePluginDir(name: string): string | null {

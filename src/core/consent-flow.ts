@@ -14,8 +14,8 @@ export interface ConsentInput {
 export type ConsentDecision =
   | { kind: "accept"; entry: LockfileEntry }          // already in lockfile, matches — proceed
   | { kind: "accept-and-record"; entry: LockfileEntry } // trusted tier, add to lockfile silently
-  | { kind: "prompt-scoped" }                         // caller should render UAC and accept/reject
-  | { kind: "prompt-unscoped" }                       // caller should render loud UAC + typed confirm
+  | { kind: "prompt-scoped"; entry: LockfileEntry }   // caller renders UAC; stamp consentMode then write
+  | { kind: "prompt-unscoped"; entry: LockfileEntry } // caller renders loud UAC + typed confirm; stamp consentMode then write
   | { kind: "refuse"; reason: string };
 
 /** Pure decision function. Performs no I/O. */
@@ -50,12 +50,12 @@ export function decideConsent(input: ConsentInput): ConsentDecision {
 
   if (tier === "scoped") {
     return input.interactive
-      ? { kind: "prompt-scoped" }
+      ? { kind: "prompt-scoped", entry: nowEntry }
       : { kind: "refuse", reason: `plugin '${input.pluginName}' requires SCOPED-tier consent. Run interactively or pre-consent with 'kaizen plugin consent ${input.pluginName}'.` };
   }
 
   // tier === "unscoped"
-  if (input.interactive) return { kind: "prompt-unscoped" };
+  if (input.interactive) return { kind: "prompt-unscoped", entry: nowEntry };
   if (input.allowUnscoped) return { kind: "accept-and-record", entry: { ...nowEntry, consentMode: "flag" } };
   return { kind: "refuse", reason: `plugin '${input.pluginName}' is UNSCOPED; pass --allow-unscoped explicitly to consent from a non-interactive context.` };
 }
