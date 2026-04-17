@@ -1271,6 +1271,17 @@ Assumptions Plan 3 relies on:
 - **Task 8 end-to-end:** Plan step 3 (`rm kaizen.permissions.lock && bun src/cli.ts --harness core-debug`) produces *no* regenerated lockfile because every plugin in the debug harness is built-in (all short-circuit in `consultLockfile`). Step 4 (interactive scoped prompt) could not be exercised from this shell — `process.stdin.isTTY` is false under a piped stdin so `decideConsent` correctly returns refuse in non-interactive mode. Non-interactive refuse path verified via fake-scoped fixture. Full interactive-prompt UAC verified manually via unit tests of `renderScopedUAC`/`renderUnscopedUAC` + `decideConsent` covering the prompt branches.
 - **Task 8 substitute verification:** end-to-end lockfile write path verified with an UNSCOPED fake plugin + `--allow-unscoped --non-interactive` flags, which exercises `decideConsent → accept-and-record → writeLockfile` and then `plugin audit` / `plugin review` of the persisted entry (idempotent re-run prints "already in lockfile (no changes)"; `plugin review` reports "IN SYNC").
 
+**Follow-ups flagged by final reviewer (for Plan 3 or a small bridging task):**
+
+1. **Fix `pluginDir` resolution before Plan 3 flips enforce mode.** `dirname(resolvedPath)` is wrong for npm plugins with subpath entries (e.g. `node_modules/foo/dist/index.js` → `.../dist`, not the package root). Walk up to the nearest `package.json` instead. Blocker for any external-plugin under `enforce` mode.
+2. **Runtime `consultLockfile` silently writes the lockfile on `accept-and-record`.** In read-only filesystems (CI, sealed container images) first load of a TRUSTED external plugin will fail. Consider demoting runtime `accept-and-record` to `accept` + debug-log, requiring explicit `kaizen install` / `plugin consent` to persist.
+3. **Consolidate `LockfileEntry` construction.** `install.ts` currently re-derives an entry via `toEntry`/`stripTier` on the prompt branches, duplicating logic already inside `decideConsent`. Have `prompt-scoped` / `prompt-unscoped` decisions carry a pre-built `entry` that callers stamp with `consentMode` before writing.
+4. **`plugin-review.ts` permission diff should use `normalizeSort`** (exported from `consent-flow.ts`) — otherwise declared-vs-lockfile reordering yields false "DRIFT" reports while `decideConsent` would accept.
+5. **Remove orphan `cmdInstall` export in `src/commands/manage.ts`** (dead since Task 5 replaced the `install` subcommand).
+6. **`trustLockfile` is dead surface.** Either implement or remove. If Plan 3 doesn't consume it, delete.
+7. **TOCTOU note:** `computePluginHash` reads the plugin tree, then `createRequire` re-reads it — attacker with write access to the plugin dir between those ops could swap code. Worth documenting in code / Plan 3 threat-model section.
+8. **Integration test gap:** no `plugin-manager.test.ts` case exercises `consultLockfile → refuse → plugin skipped at initialize`. Add one.
+
 ---
 
 ## Notes for the Implementing Engineer
