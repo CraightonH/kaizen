@@ -5,6 +5,8 @@ import type { ToolRegistry } from "./tool-registry.js";
 import type { ExecutorRegistry } from "./executor-registry.js";
 import type { UiRegistry } from "./ui-registry.js";
 import type { ServiceRegistry } from "./service-registry.js";
+import type { PermissionEnforcer } from "./permission-enforcer.js";
+import { createCtxIo } from "./plugin-ctx-io.js";
 import type { CapabilityRegistry } from "./capability-registry.js";
 
 export type CoreState = "INITIALIZING" | "READY" | "RUNNING" | "CLOSED";
@@ -24,10 +26,12 @@ export function createPluginContext(
   uiRegistry: UiRegistry,
   capabilityRegistry: CapabilityRegistry,
   serviceRegistry: ServiceRegistry,
+  enforcer: PermissionEnforcer,
   getState: () => CoreState,
   pluginManagerPublicApi: PluginManagerPublicApi,
   pluginManagerLifecycleApi: PluginManagerLifecycleApi,
 ): PluginContext {
+  const io = createCtxIo(pluginName, enforcer);
   return {
     config: pluginConfig,
 
@@ -36,6 +40,11 @@ export function createPluginContext(
     },
 
     pluginManager: pluginManagerPublicApi,
+
+    fs: io.fs,
+    net: io.net,
+    secrets: io.secrets,
+    exec: io.exec,
 
     registerService<T>(token: ServiceToken<T>, impl: T): void {
       assertInitializing(getState(), "register services");
@@ -73,6 +82,7 @@ export function createPluginContext(
 
     on(event: string, handler: Parameters<PluginContext["on"]>[1]): void {
       assertInitializing(getState(), "register event handlers");
+      enforcer.check(pluginName, { kind: "events.subscribe", event });
       eventBus.on(event, handler, pluginName);
     },
 

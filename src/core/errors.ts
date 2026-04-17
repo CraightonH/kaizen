@@ -21,3 +21,18 @@ export function debug(message: string): void {
     console.error(`[kaizen] debug: ${message}`);
   }
 }
+
+export class PermissionError extends KaizenError {
+  constructor(
+    public readonly pluginName: string,
+    public readonly op: string,
+    public readonly detail: string,
+  ) {
+    super(
+      `Permission denied: plugin '${pluginName}' attempted ${op} (${detail}). ` +
+      `Declare this in the plugin's permissions manifest, or escalate to a higher tier.`,
+      false,
+    );
+    this.name = "PermissionError";
+  }
+}

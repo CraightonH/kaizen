@@ -71,6 +71,7 @@ export const CoreEventsServiceToken = new ServiceToken<CoreEventsService>("CoreE
 const plugin: KaizenPlugin = {
   name: "core-events",
   apiVersion: "2.0.0",
+  permissions: { tier: "trusted" },
   capabilities: {
     provides: ["core-events:service"],
   },

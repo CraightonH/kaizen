@@ -104,6 +104,10 @@ const mockUiPlugin: KaizenPlugin = {
 const observerPlugin: KaizenPlugin = {
   name: "observer",
   apiVersion: "2.0.0",
+  permissions: {
+    tier: "scoped",
+    events: { subscribe: ["session:*"] },
+  },
   capabilities: {
     consumes: ["core-events:service"],
   },

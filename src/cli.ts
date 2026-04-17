@@ -12,11 +12,14 @@ import {
   readLocalConfig,
   writeLocalConfig,
   cmdApply,
-  cmdInstall,
   cmdPluginInstall,
   cmdPluginRemove,
   cmdPluginList,
 } from "./commands/manage.js";
+import { runInstall } from "./commands/install.js";
+import { runPluginConsent } from "./commands/plugin-consent.js";
+import { runPluginReview } from "./commands/plugin-review.js";
+import { runPluginAudit } from "./commands/plugin-audit.js";
 
 import coreEvents from "core-events";
 import coreLifecycle from "core-lifecycle";
@@ -173,12 +176,21 @@ if (subcommand === "apply") {
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: kaizen install <harness>
+// Subcommand: kaizen install <plugin> [--allow-unscoped] [--non-interactive]
 // ---------------------------------------------------------------------------
 
 if (subcommand === "install") {
-  cmdInstall(rawArgs[1]);
-  process.exit(0);
+  const rest = rawArgs.slice(1);
+  const pluginName = rest.find((a) => !a.startsWith("--"));
+  if (!pluginName) {
+    console.error("usage: kaizen install <plugin> [--allow-unscoped] [--non-interactive]");
+    process.exit(2);
+  }
+  const allowUnscoped = rest.includes("--allow-unscoped");
+  const nonInteractive = rest.includes("--non-interactive");
+  const lockfilePath = join(process.cwd(), "kaizen.permissions.lock");
+  const code = await runInstall({ pluginName, lockfilePath, allowUnscoped, nonInteractive });
+  process.exit(code);
 }
 
 // ---------------------------------------------------------------------------
@@ -187,6 +199,50 @@ if (subcommand === "install") {
 
 if (subcommand === "plugin") {
   const pluginSub = rawArgs[1];
+  const rest = rawArgs.slice(2);
+  const name = rest.find((a) => !a.startsWith("--"));
+  const lockfilePath = join(process.cwd(), "kaizen.permissions.lock");
+
+  if (pluginSub === "dev" && rest.includes("--observe")) {
+    const { runPluginDevObserve } = await import("./commands/plugin-dev.js");
+    const { readFileSync } = await import("fs");
+    const { resolveConfig: resolveConfigInner } = await import("./core/config.js");
+    const nameArg = rest.find((a) => !a.startsWith("--"));
+    if (!nameArg) {
+      console.error("usage: kaizen plugin dev --observe <plugin-dir>");
+      process.exit(2);
+    }
+    const pluginDir = nameArg.startsWith(".") || nameArg.startsWith("/")
+      ? nameArg
+      : join(process.cwd(), nameArg);
+    const pluginName = JSON.parse(readFileSync(join(pluginDir, "package.json"), "utf8")).name as string;
+    const outDir = join(pluginDir, ".kaizen");
+    // Honor --harness flag if provided
+    const harnessIdx = rest.indexOf("--harness");
+    const harnessArg = harnessIdx !== -1 ? rest[harnessIdx + 1] : undefined;
+    const devConfig = resolveConfigInner(harnessArg !== undefined ? { harness: harnessArg } : {});
+    const code = await runPluginDevObserve({ pluginName, pluginDir, outDir, kaizenConfig: devConfig, builtins });
+    process.exit(code);
+  }
+
+  if (pluginSub === "consent" && name) {
+    const code = await runPluginConsent({
+      pluginName: name,
+      lockfilePath,
+      allowUnscoped: rest.includes("--allow-unscoped"),
+      nonInteractive: rest.includes("--non-interactive"),
+    });
+    process.exit(code);
+  }
+  if (pluginSub === "review" && name) {
+    const code = await runPluginReview({ pluginName: name, lockfilePath });
+    process.exit(code);
+  }
+  if (pluginSub === "audit") {
+    const code = await runPluginAudit({ lockfilePath });
+    process.exit(code);
+  }
+
   switch (pluginSub) {
     case "install":
       cmdPluginInstall(rawArgs[2]);
@@ -198,7 +254,7 @@ if (subcommand === "plugin") {
       cmdPluginList(builtins);
       break;
     default:
-      console.error("Usage: kaizen plugin install|remove|list [args]");
+      console.error("Usage: kaizen plugin {install|remove|list|consent|review|audit|dev} [args]");
       process.exit(1);
   }
   process.exit(0);

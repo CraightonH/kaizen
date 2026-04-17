@@ -9,6 +9,7 @@ async function broadcast(channels: Iterable<UiChannel>, msg: AgentMessage): Prom
 const plugin: KaizenPlugin = {
   name: "core-lifecycle",
   apiVersion: "2.0.0",
+  permissions: { tier: "trusted" },
   capabilities: {
     provides: ["core-lifecycle:lifecycle.drive"],
     consumes: [

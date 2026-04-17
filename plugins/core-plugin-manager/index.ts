@@ -3,6 +3,7 @@ import type { KaizenPlugin } from "../../src/types/plugin.js";
 const plugin: KaizenPlugin = {
   name: "core-plugin-manager",
   apiVersion: "2.0.0",
+  permissions: { tier: "trusted" },
   capabilities: { consumes: ["core-lifecycle:lifecycle.drive"] },
 
   async setup(ctx) {

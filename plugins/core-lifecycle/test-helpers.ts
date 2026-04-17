@@ -17,6 +17,11 @@ import { ExecutorRegistry } from "../../src/core/executor-registry.js";
 import { UiRegistry } from "../../src/core/ui-registry.js";
 import { CapabilityRegistry } from "../../src/core/capability-registry.js";
 import { ServiceRegistry } from "../../src/core/service-registry.js";
+import { PermissionEnforcer } from "../../src/core/permission-enforcer.js";
+import { AuditLog } from "../../src/core/audit-log.js";
+import { mkdtempSync } from "fs";
+import { tmpdir } from "os";
+import { join as pathJoin } from "path";
 import coreEvents from "../core-events/index.js";
 import coreLifecycle from "./index.js";
 
@@ -188,6 +193,14 @@ export async function makeTestHarness(opts: {
   const uiRegistry = new UiRegistry();
   const capabilityRegistry = new CapabilityRegistry();
   const serviceRegistry = new ServiceRegistry();
+  const enforcer = new PermissionEnforcer({ mode: "log-only" });
+  const auditLog = new AuditLog({
+    rootDir: mkdtempSync(pathJoin(tmpdir(), "kaizen-test-audit-")),
+    sessionId: "test",
+    enabled: false,
+  });
+  const lockfilePath = pathJoin(mkdtempSync(pathJoin(tmpdir(), "kaizen-test-lock-")), "kaizen.permissions.lock");
+  const options = { trustLockfile: false, allowUnscoped: false, nonInteractive: true };
 
   const manager = new PluginManager(
     config,
@@ -198,6 +211,10 @@ export async function makeTestHarness(opts: {
     uiRegistry,
     capabilityRegistry,
     serviceRegistry,
+    enforcer,
+    auditLog,
+    lockfilePath,
+    options,
   );
   const { lifecycleProvider } = await manager.initialize();
 
@@ -213,6 +230,7 @@ export async function makeTestHarness(opts: {
     uiRegistry,
     capabilityRegistry,
     serviceRegistry,
+    enforcer,
     () => "READY",
     manager.getPublicApi(),
     manager.getLifecycleApi(),

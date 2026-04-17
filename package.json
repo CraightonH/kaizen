@@ -29,11 +29,12 @@
     "core-events": "workspace:*",
     "core-executor-anthropic": "workspace:*",
     "core-executor-debug": "workspace:*",
-    "core-executor-shell": "workspace:*",
-    "core-plugin-manager": "workspace:*",
-    "kaizen-plugin-timestamps": "workspace:*",
     "core-executor-openai": "workspace:*",
+    "core-executor-shell": "workspace:*",
     "core-lifecycle": "workspace:*",
-    "core-ui-terminal": "workspace:*"
+    "core-plugin-manager": "workspace:*",
+    "core-ui-terminal": "workspace:*",
+    "kaizen-plugin-timestamps": "workspace:*",
+    "yaml": "^2.8.3"
   }
 }

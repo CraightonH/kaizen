@@ -1,12 +1,45 @@
-import { describe, expect, test } from "bun:test";
-import { PluginManager } from "./plugin-manager.js";
+import { describe, expect, test, afterEach } from "bun:test";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { PluginManager, findPackageRoot } from "./plugin-manager.js";
 import { EventBus } from "./event-bus.js";
 import { ToolRegistry } from "./tool-registry.js";
 import { ExecutorRegistry } from "./executor-registry.js";
 import { UiRegistry } from "./ui-registry.js";
 import { ServiceRegistry } from "./service-registry.js";
 import { CapabilityRegistry } from "./capability-registry.js";
+import { PermissionEnforcer } from "./permission-enforcer.js";
+import { AuditLog } from "./audit-log.js";
 import type { KaizenPlugin, KaizenConfig, Executor, UiProvider } from "../types/plugin.js";
+
+describe("findPackageRoot", () => {
+  let tmpDir: string;
+  afterEach(() => { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }); });
+
+  test("returns directory itself when package.json is at the entry dir", () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "kaizen-pkgroot-"));
+    writeFileSync(join(tmpDir, "package.json"), "{}");
+    writeFileSync(join(tmpDir, "index.js"), "");
+    expect(findPackageRoot(join(tmpDir, "index.js"))).toBe(tmpDir);
+  });
+
+  test("walks up from dist/index.js to find package.json at parent", () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "kaizen-pkgroot-"));
+    mkdirSync(join(tmpDir, "dist"));
+    writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "foo", main: "dist/index.js" }));
+    writeFileSync(join(tmpDir, "dist", "index.js"), "");
+    const result = findPackageRoot(join(tmpDir, "dist", "index.js"));
+    expect(result).toBe(tmpDir);
+  });
+
+  test("throws when no package.json found", () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "kaizen-pkgroot-"));
+    mkdirSync(join(tmpDir, "deep", "path"), { recursive: true });
+    writeFileSync(join(tmpDir, "deep", "path", "index.js"), "");
+    expect(() => findPackageRoot(join(tmpDir, "deep", "path", "index.js"))).toThrow(/no package.json found/);
+  });
+});
 
 const stubExecutor: Executor = {
   send: async () => ({ content: "", tool_calls: [], stop_reason: "end_turn" }),
@@ -23,6 +56,18 @@ function makeRegistries() {
     capabilityRegistry: new CapabilityRegistry(),
     serviceRegistry: new ServiceRegistry(),
   };
+}
+
+function makeSandboxStubs() {
+  const enforcer = new PermissionEnforcer({ mode: "log-only" });
+  const auditLog = new AuditLog({
+    rootDir: mkdtempSync(join(tmpdir(), "kaizen-test-audit-")),
+    sessionId: "test",
+    enabled: false,
+  });
+  const lockfilePath = join(mkdtempSync(join(tmpdir(), "kaizen-test-lock-")), "kaizen.permissions.lock");
+  const options = { trustLockfile: false, allowUnscoped: false, nonInteractive: true };
+  return { enforcer, auditLog, lockfilePath, options };
 }
 
 function makePlugin(
@@ -59,9 +104,12 @@ describe("PluginManager.initialize", () => {
       async start() {},
     };
 
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       config, { "core-lifecycle": lifecyclePlugin },
       eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
     );
     const { lifecycleProvider } = await manager.initialize();
     expect(setupCalls).toEqual(["core-lifecycle"]);
@@ -90,10 +138,13 @@ describe("PluginManager.initialize", () => {
       async start() {},
     };
 
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: ["tool-plugin", "core-lifecycle"] },
       { "tool-plugin": toolPlugin, "core-lifecycle": lifecyclePlugin },
       eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
     );
     await manager.initialize();
     expect(toolRegistry.list().map((t) => t.name)).toContain("my-tool");
@@ -107,9 +158,12 @@ describe("PluginManager.load + unload + reload", () => {
     const newPlugin = makePlugin("dyn-plugin", async (ctx) => {
       ctx.registerTool({ name: "dyn-tool", description: "", parameters: {}, execute: async () => ({ ok: true }) });
     });
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       config, { "dyn-plugin": newPlugin },
       eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
     );
     await manager.load("dyn-plugin");
     expect(toolRegistry.list().map((t) => t.name)).toContain("dyn-tool");
@@ -121,9 +175,12 @@ describe("PluginManager.load + unload + reload", () => {
     const plugin = makePlugin("rm-plugin", async (ctx) => {
       ctx.registerTool({ name: "rm-tool", description: "", parameters: {}, execute: async () => ({ ok: true }) });
     });
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       config, { "rm-plugin": plugin },
       eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
     );
     await manager.load("rm-plugin");
     await manager.unload("rm-plugin");
@@ -142,9 +199,12 @@ describe("PluginManager.load + unload + reload", () => {
         execute: async () => ({ ok: true }),
       });
     });
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: [] }, { "swap-plugin": plugin },
       eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
     );
     await manager.load("swap-plugin");
     await manager.reload("swap-plugin");
@@ -156,10 +216,13 @@ describe("PluginManager.load + unload + reload", () => {
 describe("PluginManager.drainPendingReloads", () => {
   test("no-op when queue is empty", async () => {
     const registries = makeRegistries();
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: [] }, {},
       registries.eventBus, registries.toolRegistry, registries.executorRegistry,
       registries.uiRegistry, registries.capabilityRegistry, registries.serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
     );
     await expect(manager.drainPendingReloads()).resolves.toBeUndefined();
   });
@@ -169,9 +232,12 @@ describe("PluginManager.drainPendingReloads", () => {
     const drained: string[] = [];
     const pluginA = makePlugin("a", async () => { drained.push("a"); });
     const pluginB = makePlugin("b", async () => { drained.push("b"); });
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: [] }, { a: pluginA, b: pluginB },
       eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
     );
     await manager.load("a");
     await manager.load("b");
@@ -183,13 +249,75 @@ describe("PluginManager.drainPendingReloads", () => {
   });
 });
 
+describe("PluginManager runtime accept-and-record (item 2)", () => {
+  test("trusted external plugin on first runtime load does NOT write lockfile", async () => {
+    // Create a real plugin file on disk (non-builtin path) with a TRUSTED manifest.
+    // The runtime load path uses persistOnAcceptAndRecord=false, so accept-and-record
+    // must not write the lockfile even when decideConsent returns that decision.
+    const pluginDir = mkdtempSync(join(tmpdir(), "kaizen-test-ext-plugin-"));
+    const lockDir = mkdtempSync(join(tmpdir(), "kaizen-test-lock-"));
+    const lockfilePath = join(lockDir, "kaizen.permissions.lock");
+
+    writeFileSync(join(pluginDir, "package.json"), JSON.stringify({ name: "ext-trusted", version: "1.0.0", main: "index.js" }));
+    // Plugin file exports a minimal trusted plugin + lifecycle role
+    writeFileSync(join(pluginDir, "index.js"), [
+      "exports.default = {",
+      "  name: 'ext-trusted',",
+      "  apiVersion: '2',",
+      "  capabilities: { provides: [] },",
+      "  permissions: { tier: 'trusted' },",
+      "  async setup() {},",
+      "};",
+    ].join("\n"));
+
+    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    const enforcer = new PermissionEnforcer({ mode: "log-only" });
+    const auditLog = new AuditLog({
+      rootDir: mkdtempSync(join(tmpdir(), "kaizen-test-audit-")),
+      sessionId: "test",
+      enabled: false,
+    });
+    const options = { trustLockfile: false, allowUnscoped: false, nonInteractive: true };
+
+    // Need a lifecycle provider for initialize() to succeed.
+    const lifePlugin: KaizenPlugin = {
+      name: "core-lifecycle", apiVersion: "2",
+      capabilities: { provides: ["core-lifecycle:lifecycle.drive"] },
+      async setup(ctx) {
+        ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "" });
+      },
+      async start() {},
+    };
+
+    // Load via absolute path so resolvedPath is non-null → consultLockfile is exercised.
+    const manager = new PluginManager(
+      { plugins: [pluginDir, "core-lifecycle"] },
+      { "core-lifecycle": lifePlugin },
+      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+
+    await manager.initialize();
+
+    // Lockfile must NOT have been created by the runtime path.
+    expect(existsSync(lockfilePath)).toBe(false);
+
+    rmSync(pluginDir, { recursive: true, force: true });
+    rmSync(lockDir, { recursive: true, force: true });
+  });
+});
+
 describe("PluginManager.list", () => {
   test("returns loaded plugin entries", async () => {
     const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
     const plugin = makePlugin("listed-plugin");
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: [] }, { "listed-plugin": plugin },
       eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
     );
     await manager.load("listed-plugin");
     const entries = manager.list();
@@ -201,6 +329,7 @@ describe("PluginManager.list", () => {
 
 describe("PluginManager capability validation", () => {
   function baseRegistries() {
+    const stubs = makeSandboxStubs();
     return {
       eventBus: new EventBus(),
       toolRegistry: new ToolRegistry(),
@@ -208,6 +337,10 @@ describe("PluginManager capability validation", () => {
       uiRegistry: new UiRegistry(),
       capabilityRegistry: new CapabilityRegistry(),
       serviceRegistry: new ServiceRegistry(),
+      enforcer: stubs.enforcer,
+      auditLog: stubs.auditLog,
+      lockfilePath: stubs.lockfilePath,
+      options: stubs.options,
     };
   }
 
@@ -228,6 +361,8 @@ describe("PluginManager capability validation", () => {
     const manager = new PluginManager(
       { plugins: ["owner", "consumer"] }, { owner, consumer },
       regs.eventBus, regs.toolRegistry, regs.executorRegistry, regs.uiRegistry, regs.capabilityRegistry, regs.serviceRegistry,
+      regs.enforcer, regs.auditLog,
+      regs.lockfilePath, regs.options,
     );
     await expect(manager.initialize()).rejects.toThrow();
   });
@@ -256,6 +391,8 @@ describe("PluginManager capability validation", () => {
     const manager = new PluginManager(
       { plugins: ["owner", "a", "b", "consumer"] }, { owner, a, b, consumer },
       regs.eventBus, regs.toolRegistry, regs.executorRegistry, regs.uiRegistry, regs.capabilityRegistry, regs.serviceRegistry,
+      regs.enforcer, regs.auditLog,
+      regs.lockfilePath, regs.options,
     );
     await expect(manager.initialize()).rejects.toThrow(/Multiple plugins provide/);
   });
@@ -286,6 +423,8 @@ describe("PluginManager capability validation", () => {
       { plugins: ["owner", "consumer", "core-lifecycle"] },
       { owner, consumer, "core-lifecycle": life },
       regs.eventBus, regs.toolRegistry, regs.executorRegistry, regs.uiRegistry, regs.capabilityRegistry, regs.serviceRegistry,
+      regs.enforcer, regs.auditLog,
+      regs.lockfilePath, regs.options,
     );
     await expect(manager.initialize()).resolves.toBeDefined();
   });
@@ -305,6 +444,8 @@ describe("PluginManager capability validation", () => {
     const manager = new PluginManager(
       { plugins: ["a", "b"] }, { a, b },
       regs.eventBus, regs.toolRegistry, regs.executorRegistry, regs.uiRegistry, regs.capabilityRegistry, regs.serviceRegistry,
+      regs.enforcer, regs.auditLog,
+      regs.lockfilePath, regs.options,
     );
     await expect(manager.initialize()).rejects.toThrow(/Cycle/i);
   });
@@ -330,6 +471,8 @@ describe("PluginManager capability validation", () => {
       { plugins: ["consumer", "core-lifecycle"] },
       { consumer, "core-lifecycle": life },
       regs.eventBus, regs.toolRegistry, regs.executorRegistry, regs.uiRegistry, regs.capabilityRegistry, regs.serviceRegistry,
+      regs.enforcer, regs.auditLog,
+      regs.lockfilePath, regs.options,
     );
     await manager.initialize();
     expect(consumerRan).toBe(true);
@@ -356,6 +499,8 @@ describe("PluginManager capability validation", () => {
       { plugins: ["bad", "core-lifecycle"] },
       { bad, "core-lifecycle": life },
       regs.eventBus, regs.toolRegistry, regs.executorRegistry, regs.uiRegistry, regs.capabilityRegistry, regs.serviceRegistry,
+      regs.enforcer, regs.auditLog,
+      regs.lockfilePath, regs.options,
     );
     await manager.initialize();
     const entries = manager.list();
