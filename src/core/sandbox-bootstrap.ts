@@ -19,7 +19,7 @@ export function initializeSandbox(enforcer: PermissionEnforcer): void {
   // --- Patch Module.prototype.require -------------------------------------
   originalRequire = Module.prototype.require;
   const origReq = originalRequire;
-  Module.prototype.require = function patchedRequire(id: string) {
+  Module.prototype.require = function patchedRequire(this: Module, id: string) {
     const plugin = getCurrentPlugin();
     if (plugin) enforcer.check(plugin, { kind: "import", module: id });
     return origReq.call(this, id);
@@ -28,7 +28,7 @@ export function initializeSandbox(enforcer: PermissionEnforcer): void {
   // --- Patch global fetch -------------------------------------------------
   originalFetch = globalThis.fetch;
   const origFetch = originalFetch;
-  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = ((input: Request | string | URL, init?: RequestInit) => {
     const plugin = getCurrentPlugin();
     if (plugin) {
       try {
