@@ -67,6 +67,7 @@ async function runSession(channel: UiChannel, ctx: PluginContext, events: CoreEv
 const plugin: KaizenPlugin = {
   name: "core-lifecycle",
   apiVersion: "1.0.0",
+  permissions: { tier: "trusted" },
   provides: ["lifecycle"],
   depends: ["events", "executor", "ui"],
 

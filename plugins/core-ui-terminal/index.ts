@@ -51,6 +51,7 @@ function createTerminalChannel(opts: {
 const plugin: KaizenPlugin = {
   name: "core-ui-terminal",
   apiVersion: "1.0.0",
+  permissions: { tier: "trusted" },
   provides: ["ui"],
   depends: [],
 
