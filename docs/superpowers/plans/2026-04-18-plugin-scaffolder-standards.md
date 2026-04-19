@@ -10,10 +10,17 @@ and existing authors can check compliance with a single command.
 **Spec:** `docs/superpowers/specs/2026-04-18-plugin-scaffolder-standards-design.md`
 
 **Prerequisites:**
-- Spec 1 (marketplace format) — `kaizen marketplace create` emits `.kaizen/marketplace.json`
-- Spec 2 (unified config) — scaffolded plugins emit `config.schema` pattern
+- Spec 1 (marketplace format) — `kaizen marketplace create` emits
+  `.kaizen/marketplace.json` using the `entries[]` catalog shape with
+  `kind: "plugin" | "harness"` tags and names unique across kinds.
+- Spec 2 (unified config + secrets) — scaffolded plugins emit `config.schema`
+  with `secrets: [...]` declarations, access secrets via `ctx.secrets.get()`,
+  and (when any secret is declared) explicitly list
+  `core-secrets:provider` in `capabilities.consumes`.
 
 Both can be implemented in parallel; integrate templates after Specs 1+2 land.
+This plan assumes Specs 1 and 2 are at least in draft with the current
+revisions — templates here are written against those revisions.
 
 ---
 
@@ -108,7 +115,17 @@ If `plugin.config` declared:
 - `plugin.config.schema` is a valid JSON Schema (use `validateSchemaItself` from
   Spec 2's `config-validator.ts`).
 - Every key in `plugin.config.secrets` appears in `plugin.config.schema.properties`.
-- Every key in `plugin.config.secrets` appears in `plugin.permissions.env`.
+- If `plugin.config.secrets` is non-empty and `capabilities.consumes` does NOT
+  include `"core-secrets:provider"`: emit a `warn`-level `ValidationResult`
+  with message "core-secrets:provider dependency is implicit per Spec 2; list
+  it explicitly for discoverability." Never fail on this — the dep is
+  implicit and the runtime enforcer treats it as declared.
+
+**Not checked here (intentionally):** Provider-existence for
+`StructuredSecretRef.provider` names. That requires a live harness and
+provider registry; it is enforced at `kaizen install` and `kaizen run`, not
+by static `plugin validate`. Do NOT cross-reference `config.secrets` against
+`permissions.env` — Spec 2 decouples secrets from env grants.
 
 - [ ] **Step 5: Implement import scan**
 
@@ -150,21 +167,41 @@ inline as temp dirs in tests, not checked-in fixtures.
 
 - [ ] **Step 1: Implement `runMarketplaceValidate(dir: string)`**
 
-Checks:
+Checks (against the Spec 1 `entries[]` catalog shape):
 - `.kaizen/marketplace.json` exists.
 - `version` equals `"1.0.0"`.
 - `name` non-empty string.
 - `url` non-empty string.
-- `plugins` is an array.
-- `harnesses` is an array.
-- Each plugin entry: `name`, `description`, `versions` (array, non-empty).
-- Each harness entry: `name`, `description`, `versions` (array, non-empty).
-- Each version entry: `version` (semver), `source` present.
-- `file` source paths: `existsSync(join(dir, entry.source.path))`.
+- `entries` is an array.
+- **Legacy shape rejection.** If the catalog has top-level `plugins` or
+  `harnesses` arrays (the pre-revision shape), fail with a migration error:
+  "marketplace.json uses the legacy `{plugins, harnesses}` shape; convert to
+  `entries[]` with `kind` tags per Spec 1."
+- Each entry has `kind ∈ {"plugin", "harness"}`.
+- Each entry `name` matches `^[a-z][a-z0-9-]*$`.
+- Names unique across **all** entries (a plugin and harness cannot share a
+  name).
+- Each entry has `description` (non-empty), `versions` (array, non-empty).
+- Each version entry: `version` (semver parse).
+- **Plugin versions** require `source`; validate as a tagged union:
+  - `source.type === "npm"`: `name` (non-empty), `version` (semver).
+  - `source.type === "tarball"`: `url` (non-empty); optional `sha256`
+    (hex, 64 chars).
+  - `source.type === "file"`: `path` (non-empty);
+    `existsSync(join(dir, source.path))`.
+- **Harness versions** require `path` (non-empty);
+  `existsSync(join(dir, version.path))`.
+- Optional `minKaizenVersion`: if present, must be a valid semver range.
 
 - [ ] **Step 2: Write `src/commands/marketplace-validate.test.ts`**
 
-Valid catalog, missing required fields, bad version, missing file source.
+- Valid `entries[]` catalog (mixed plugin + harness).
+- Legacy `{plugins, harnesses}` catalog → migration error.
+- Cross-kind name collision → fatal.
+- Each source-type variant (`npm`, `tarball`, `file`) — valid + malformed.
+- Missing `file` source path on disk → fatal.
+- Missing harness `path` on disk → fatal.
+- Bad semver in `version` or `minKaizenVersion`.
 
 ---
 
@@ -202,7 +239,48 @@ function generateIndexTestTs(cfg: PluginScaffoldConfig): string
 function generateReadme(cfg: PluginScaffoldConfig): string
 ```
 
-Each returns a string. Follow templates from the spec exactly.
+Each returns a string. Follow templates from the spec exactly. Key behaviours
+the generators must implement:
+
+- **`generateIndexTs`:**
+  - Import type from `"kaizen/types"`. (In-tree scaffolding is not supported
+    — see spec Future Work.)
+  - If `cfg.configKeys` has any `secret: true` entry: include
+    `"core-secrets:provider"` in `capabilities.consumes` alongside any
+    user-specified consumes.
+  - Do NOT add an `env:` grant for secret keys (secrets are decoupled from
+    the permissions env surface).
+  - `config.secrets` lists every secret key; `config.schema.properties`
+    includes every config key (secret or not); `config.defaults` only for
+    non-secret keys with reasonable defaults.
+  - `setup()` body demonstrates `await ctx.secrets.get("<first-secret>")` if
+    any secrets exist, and a `ctx.log` call.
+
+- **`generateIndexTestTs`:**
+  - `makeCtx()` helper exposes async `ctx.secrets.get/refresh` (returning
+    `Promise<string | undefined>`) and a `ctx.config` object pre-populated
+    from `config.defaults`.
+  - One test asserts plugin metadata; one test calls `plugin.setup(ctx)`
+    with a stubbed secret value and asserts `ctx.log` was called.
+
+- **`generateReadme`:**
+  - Install example uses a placeholder marketplace-qualified ref
+    (`<marketplace>/<plugin-name>`), with a footnote explaining shorthand is
+    accepted at the CLI and canonicalised into harness files.
+  - Config table includes a `Secret` column (yes/no).
+  - Harness snippet uses canonical `<marketplace>/<plugin-name>@<version>`
+    for the plugin ref and a bare-string secret ref (default provider
+    `kaizen`); shows the structured `{ provider, ref }` alternative
+    immediately after.
+  - Includes `kaizen config set-secret <plugin> <key>` as the recommended
+    way to populate a secret.
+  - Permissions section explicitly notes that secrets do NOT need an `env`
+    grant.
+
+- **`generatePackageJson`:** unchanged from prior draft — still emits
+  `"type": "module"`, `exports["."]`, `"kaizen-plugin"` keyword, and
+  `peerDependencies: { "kaizen": "*" }` (the peer dep is authoritative once
+  Spec 4 ships `kaizen` as an npm package).
 
 - [ ] **Step 3: Implement `runPluginCreate(targetPath: string, opts)`**
 
@@ -244,10 +322,14 @@ Prompts: name, description, URL. `--defaults`: use `<path>` basename as name.
 1. Check `targetPath` does not exist.
 2. Prompt.
 3. Create:
-   - `<path>/.kaizen/marketplace.json` (from spec template).
+   - `<path>/.kaizen/marketplace.json` — emit the Spec 1 `entries[]` shape
+     (top-level `version`, `name`, `description`, `url`, `entries: []`). Do
+     NOT emit legacy `plugins: []` / `harnesses: []` fields.
    - `<path>/plugins/.gitkeep`.
    - `<path>/harnesses/.gitkeep`.
-   - `<path>/README.md`.
+   - `<path>/README.md` — include a short section showing how to add a
+     plugin entry (with `kind: "plugin"`) and a harness entry (with
+     `kind: "harness"`), referencing the tagged-union source shape.
 4. Print next steps including `kaizen marketplace validate .`.
 
 - [ ] **Step 3: Write `src/commands/marketplace-create.test.ts`**
@@ -316,7 +398,7 @@ Add `create` and `validate` to the usage strings.
 
 ### Task 7: End-to-end integration test
 
-- [ ] **Step 1: Full workflow test**
+- [ ] **Step 1: Full workflow test (default scaffold, no secrets)**
 
 ```
 kaizen plugin create ./test-plugin --defaults
@@ -324,6 +406,18 @@ cd test-plugin && bun install && bun test
 kaizen plugin validate ./test-plugin       # must exit 0
 ```
 Run this as a subprocess-based integration test.
+
+- [ ] **Step 1b: Workflow test (scaffold with secrets)**
+
+Non-interactive variant that drives the prompts with a secret key selected.
+Verify:
+- Generated `index.ts` lists `core-secrets:provider` in `consumes`.
+- Generated `config.secrets` includes the selected key and it appears in
+  `config.schema.properties`.
+- Generated `index.test.ts` `makeCtx()` exposes async
+  `ctx.secrets.get/refresh`.
+- `bun test` passes.
+- `kaizen plugin validate .` exits 0 (no `permissions.env` grant required).
 
 - [ ] **Step 2: Marketplace workflow test**
 

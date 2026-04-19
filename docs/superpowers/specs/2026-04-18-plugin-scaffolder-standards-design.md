@@ -1,11 +1,12 @@
 # Design: Plugin & Marketplace Scaffolders + Coding Standards
 
 Date: 2026-04-18
-Status: APPROVED
+Status: DRAFT
 Related:
 - `docs/plugin-api.md` (the authoring reference this spec extends)
-- `docs/superpowers/specs/2026-04-18-plugin-marketplace-design.md` (Spec 1 — marketplace format)
-- `docs/superpowers/specs/2026-04-18-unified-plugin-config-design.md` (Spec 2 — config schema)
+- `docs/superpowers/specs/2026-04-18-plugin-marketplace-design.md` (Spec 1 — marketplace `entries[]` catalog shape; canonical refs; install layout)
+- `docs/superpowers/specs/2026-04-18-unified-plugin-config-design.md` (Spec 2 — `config.schema`, `ctx.secrets.get`, `core-secrets:provider` capability)
+- `docs/superpowers/specs/2026-04-18-builtin-plugins-repo-decoupling-design.md` (Spec 4 — depends on scaffolded plugins passing `kaizen plugin validate`)
 
 ---
 
@@ -23,6 +24,8 @@ Common failure modes:
 - Permissions not declared (defaults to `trusted` silently when the plugin actually
   needs `scoped`).
 - Config accessed raw without a schema declaration (pre-Spec 2).
+- Secrets read directly from `process.env` via the `api_key_env` indirection
+  rather than the `ctx.secrets` provider pipeline (pre-Spec 2).
 - Publishing to npm without the `kaizen-plugin` keyword.
 
 Marketplace authoring is even more undefined — there is no tooling to create or
@@ -89,7 +92,8 @@ Capabilities consumed: (space-separated, e.g. core-events:service)
 Declare config schema? [y/N]
   (if y) Config keys: (name:type pairs, e.g. api_key:string timeout_ms:number)
   (if y) Required keys: (subset of above)
-  (if y) Secret keys: (subset of above, for env var resolution)
+  (if y) Secret keys: (subset of above; resolved via the core-secrets:provider
+                       capability, default provider is `kaizen` — OS keychain)
 ```
 
 All prompts have defaults and can be skipped (enter = accept default). Non-interactive
@@ -144,7 +148,10 @@ Key rules enforced:
 
 #### `index.ts`
 
-Generated from the prompt answers. Example for a scoped plugin with env grant:
+Generated from the prompt answers. Example for a scoped plugin that declares a
+secret. Note: selecting any secret keys causes the scaffolder to emit an explicit
+`consumes: ["core-secrets:provider"]` entry (it is implicit per Spec 2, but
+surfacing it in the template is a documentation win).
 
 ```typescript
 import type { KaizenPlugin } from "kaizen/types";
@@ -154,31 +161,41 @@ const plugin: KaizenPlugin = {
   apiVersion: "2.0.0",
   permissions: {
     tier: "scoped",
-    env: ["MY_API_KEY"],
+    net: ["api.example.com"],
   },
   capabilities: {
-    consumes: ["core-events:service"],
+    consumes: ["core-events:service", "core-secrets:provider"],
   },
   config: {
     schema: {
       type: "object",
       properties: {
-        api_key: { type: "string", description: "API key." },
+        api_key:    { type: "string", description: "API key." },
+        timeout_ms: { type: "number", description: "Request timeout in ms." },
       },
       required: ["api_key"],
     },
-    defaults: {},
+    defaults: {
+      timeout_ms: 5000,
+    },
     secrets: ["api_key"],
   },
 
   async setup(ctx) {
+    const apiKey = await ctx.secrets.get("api_key");
+    ctx.log(`my-plugin setup complete (timeout=${ctx.config.timeout_ms}ms)`);
     // TODO: register tools, subscribe to events.
-    ctx.log("my-plugin setup complete");
   },
 };
 
 export default plugin;
 ```
+
+**Import path.** The template uses `"kaizen/types"`, which resolves after Spec 4
+(built-in plugin repo decoupling) lands and plugins live outside the main
+kaizen repo. Scaffolding a new plugin *inside* the main kaizen repo's
+`plugins/` tree pre-Spec-4 is not a supported workflow — authors should
+scaffold into a standalone directory.
 
 #### `index.test.ts`
 
@@ -186,15 +203,22 @@ export default plugin;
 import { describe, it, expect, mock } from "bun:test";
 import plugin from "./index.ts";
 
-const makeCtx = () => ({
+const makeCtx = (overrides: Record<string, unknown> = {}) => ({
   log: mock(() => {}),
-  config: {},
+  // Validated + merged non-secret config. Fill in defaults matching the schema
+  // so setup() sees realistic values.
+  config: { timeout_ms: 5000 },
   registerTool: mock(() => {}),
   on: mock(() => {}),
   defineEvent: mock(() => {}),
   emit: mock(async () => []),
-  secrets: { get: mock(() => undefined) },
-  // Add other ctx fields as needed.
+  // Secrets are async and provider-backed. Tests stub per-key values.
+  secrets: {
+    get: mock(async (_key: string): Promise<string | undefined> => undefined),
+    refresh: mock(async (_key: string): Promise<string | undefined> => undefined),
+  },
+  capabilities: { register: mock(() => {}) },
+  ...overrides,
 } as any);
 
 describe("my-plugin", () => {
@@ -204,7 +228,12 @@ describe("my-plugin", () => {
   });
 
   it("setup runs without error", async () => {
-    const ctx = makeCtx();
+    const ctx = makeCtx({
+      secrets: {
+        get: mock(async (key: string) => (key === "api_key" ? "test-key" : undefined)),
+        refresh: mock(async () => undefined),
+      },
+    });
     await plugin.setup(ctx);
     expect(ctx.log).toHaveBeenCalled();
   });
@@ -223,29 +252,55 @@ A kaizen plugin that does X.
 ## Installation
 
 \`\`\`bash
-kaizen install my-plugin
+kaizen install my-org/my-plugin
 \`\`\`
+
+`my-org/my-plugin` is a marketplace-qualified ref (see
+`docs/superpowers/specs/2026-04-18-plugin-marketplace-design.md`). Shorthand
+(`kaizen install my-plugin`) is accepted at the CLI and canonicalized before
+being written into harness files.
 
 ## Configuration
 
-| Key | Type | Required | Description |
-|-----|------|----------|-------------|
-| api_key | string | yes | API key (env var name). |
+| Key | Type | Required | Secret | Description |
+|-----|------|----------|--------|-------------|
+| api_key    | string | yes | yes | Provider-backed API key. |
+| timeout_ms | number | no  | no  | Request timeout in ms. |
 
-Add to your harness:
+Add to your harness. Plugin entries in shipped harnesses must be canonical
+`<marketplace>/<name>@<version>`. The `my-plugin` block keys config values;
+secret values are references (the actual secret lives in the OS keychain or
+another registered provider — see Spec 2 on unified config + secrets):
 
 \`\`\`json
 {
-  "plugins": ["my-plugin"],
+  "plugins": ["my-org/my-plugin@0.1.0"],
   "my-plugin": {
-    "api_key": "MY_API_KEY_ENV_VAR"
+    "api_key": "my-plugin-prod",
+    "timeout_ms": 3000
   }
 }
 \`\`\`
 
+The bare-string secret (`"my-plugin-prod"`) targets the default provider
+(`kaizen`, the OS keychain). To target a different provider, use the
+structured form:
+
+\`\`\`json
+"api_key": { "provider": "doppler", "ref": "MY_PLUGIN_API_KEY" }
+\`\`\`
+
+Store the secret value interactively:
+
+\`\`\`bash
+kaizen config set-secret my-plugin api_key
+\`\`\`
+
 ## Permissions
 
-Tier: **scoped** — requires `env: ["MY_API_KEY"]`.
+Tier: **scoped** — declare `net: [...]` / `fs: [...]` grants as needed.
+Secrets do NOT require an `env` grant in the permissions block — they resolve
+through the `core-secrets:provider` capability pipeline.
 
 ## Development
 
@@ -285,14 +340,17 @@ Marketplace URL: (git URL or leave blank for local-only)
 
 #### `.kaizen/marketplace.json`
 
+Matches the `entries[]` catalog shape from Spec 1. Plugin and harness entries
+share a single list and are distinguished by `kind`; names must be unique
+across all entries.
+
 ```json
 {
   "version": "1.0.0",
   "name": "my-org-plugins",
   "description": "Kaizen plugins for my-org.",
   "url": "https://github.com/my-org/kaizen-plugins.git",
-  "plugins": [],
-  "harnesses": []
+  "entries": []
 }
 ```
 
@@ -333,7 +391,14 @@ Validates a plugin at `<path>` (defaults to current directory).
 |------|-------|
 | Schema is valid JSON Schema | ajv compile succeeds |
 | `secrets` keys are in schema | Each secret key appears in `schema.properties` |
-| `secrets` keys are in `permissions.env` | Cross-check with permissions |
+| Implicit `core-secrets:provider` dep | If `config.secrets` non-empty, `capabilities.consumes` either lists `core-secrets:provider` explicitly OR validator emits an informational note that the dep is implicit per Spec 2 (not a failure). |
+
+**Note on provider existence.** `kaizen plugin validate` does NOT check that
+any `StructuredSecretRef.provider` named in a harness resolves to a registered
+`core-secrets:provider`. That check happens at `kaizen install <ref>`
+(install-time) and `kaizen run` (load-time) where the provider registry is
+live. Static `plugin validate` operates on a plugin in isolation, without a
+harness or provider set, so it cannot and must not enforce it.
 
 **Import scan (static analysis):**
 
@@ -359,7 +424,8 @@ kaizen plugin validate ./my-plugin
   ✓ apiVersion: 2.0.0
   ✓ permissions.tier: scoped
   ✓ config.schema valid
-  ✗ config secrets key "api_key" not in permissions.env
+  ✗ config secrets key "api_key" not declared in config.schema.properties
+  ℹ config.secrets is non-empty; core-secrets:provider dependency is implicit
   ✓ tests present: index.test.ts
   ✓ README.md present
 
@@ -382,11 +448,17 @@ Validates a marketplace directory at `<path>` (defaults to current directory).
 | Schema version is `"1.0.0"` | Field equals expected |
 | `name` present | Non-empty string |
 | `url` present | Non-empty string |
-| `plugins` is array | Type check |
-| `harnesses` is array | Type check |
-| Each plugin entry has `name`, `description`, `versions[]` | Field checks |
-| Each harness entry has `name`, `description`, `versions[]` | Field checks |
-| `file` source paths exist relative to root | `existsSync` check |
+| `entries` is array | Type check (rejects legacy `plugins`/`harnesses` arrays with a migration error) |
+| Each entry has `kind` | `kind ∈ {"plugin", "harness"}` |
+| Entry `name` is kebab-case | Regex `^[a-z][a-z0-9-]*$` |
+| Names unique across all entries | Cross-kind uniqueness (a plugin and a harness cannot share a name) |
+| Each entry has `description`, `versions[]` | Non-empty array |
+| Each version has `version` (semver) | Semver parse |
+| Plugin version has valid `source` | Tagged union by `source.type`: `npm` requires `name`+`version`; `tarball` requires `url` (optional `sha256`); `file` requires `path` |
+| Harness version has `path` | Non-empty string |
+| `file` source `path` exists | `existsSync(join(dir, source.path))` relative to marketplace root |
+| Harness `path` exists | `existsSync(join(dir, version.path))` |
+| `minKaizenVersion` parses | Optional; if present, must be a valid semver range |
 
 ---
 
@@ -413,6 +485,9 @@ validate` unless explicitly marked `[guideline]`.
    - Required: permissions.tier declared
    - Required: capabilities field (empty object acceptable)
    - Guideline: config.schema for any configurable plugin
+   - Guideline: if config.secrets is non-empty, explicitly list
+     "core-secrets:provider" in capabilities.consumes (it is implicit, but
+     listing it aids discoverability)
 
 ## 3. Permission Tier Selection
    - Default to trusted. Escalate only when you hit a real need.
@@ -426,9 +501,12 @@ validate` unless explicitly marked `[guideline]`.
 
 ## 5. Configuration
    - Declare config.schema for any configurable behaviour
-   - Use config.secrets for env var references (not api_key_env pattern)
-   - Provide defaults for optional keys
-   - Document all config keys in README
+   - Use config.secrets to declare secret keys; access via ctx.secrets.get()
+     (not the legacy api_key_env / process.env pattern)
+   - Secret values are harness-level references resolved via a
+     core-secrets:provider (default: `kaizen`, the OS keychain)
+   - Provide defaults for optional non-secret keys
+   - Document all config keys in README (including which are secrets)
 
 ## 6. Testing
    - Each plugin must have at least one test that calls setup()
@@ -510,8 +588,34 @@ Wire new subcommands:
 | Scaffolder output | Scaffolded plugin: `bun test` passes, `kaizen plugin validate .` passes |
 | Marketplace scaffolder | Scaffolded marketplace: `kaizen marketplace validate .` passes |
 | `validate` rules | One test per rule: passing case + failing case |
+| Catalog shape | Legacy `{ plugins, harnesses }` catalog rejected with migration error; `entries[]` + `kind` accepted |
+| Cross-kind name uniqueness | Plugin and harness with same `name` in one catalog → fatal |
+| Secrets rule | `config.secrets: ["api_key"]` without `api_key` in `schema.properties` → fail |
+| Secrets/permissions decoupling | `config.secrets` with NO `permissions.env` grant → pass (no cross-check) |
+| Implicit provider dep | `config.secrets` non-empty with `core-secrets:provider` absent from `consumes` → informational note, not fail |
 | Import scan | Static scan detects `import fs from "node:fs"` in TRUSTED plugin |
 | Non-interactive mode | `--defaults` generates valid plugin with no prompts |
+| Scaffolded secrets test | `makeCtx()` exposes async `ctx.secrets.get/refresh`; sample plugin setup resolves the secret |
+
+---
+
+## Migration
+
+Kaizen is pre-adoption; there is no on-disk migration of existing plugins. Any
+author who scaffolded a plugin against prior drafts of this spec should:
+
+1. Update generated `index.ts` to remove the `env: [<SECRET_ENV_VAR>]`
+   permission grant *for the secret alone* (env grants for real non-secret
+   env reads still apply) and switch secret access to `ctx.secrets.get("...")`.
+2. Update harness config: replace `"api_key": "MY_API_KEY_ENV_VAR"` with either
+   a bare-string ref (`"my-plugin-prod"`, default provider `kaizen`) or the
+   structured form `{ "provider": "...", "ref": "..." }`.
+3. If scaffolded a marketplace with the old `{ plugins, harnesses }` shape,
+   convert to `entries[]` with `kind` tags. `kaizen marketplace validate`
+   emits a migration error pointing at this step.
+
+Existing built-in plugins migrate as part of Spec 4 (repo decoupling) and
+Spec 2 (Phase 9); this spec's scaffolder only affects newly-created plugins.
 
 ---
 
@@ -525,3 +629,10 @@ Wire new subcommands:
   boilerplate.
 - **IDE integration** — JSON Schema for `kaizen.json` harness files to enable
   autocompletion in VS Code and other editors.
+- **Env-var collision warning** — validate emits a warning when two config
+  keys uppercase-collapse to the same `KAIZEN_<PLUGIN>_<KEY>` env var.
+- **In-tree scaffolding mode** — `--in-tree` flag that generates with
+  relative imports for authors working inside a kaizen monorepo checkout
+  (pre-Spec-4 workflow).
+- **Harness scaffolder** (`kaizen harness create`) — scaffolds a harness JSON
+  with canonical refs pre-populated from added marketplaces.
