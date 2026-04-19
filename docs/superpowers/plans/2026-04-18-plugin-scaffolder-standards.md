@@ -191,7 +191,9 @@ Checks (against the Spec 1 `entries[]` catalog shape):
     `existsSync(join(dir, source.path))`.
 - **Harness versions** require `path` (non-empty);
   `existsSync(join(dir, version.path))`.
-- Optional `minKaizenVersion`: if present, must be a valid semver range.
+- Optional `minKaizenVersion`: if present, must be a bare semver (reject
+  ranges like `^1.4.0` or `>=1.4.0` — field semantics per Spec 1 is
+  ">= this version", like k8s minimum version).
 
 - [ ] **Step 2: Write `src/commands/marketplace-validate.test.ts`**
 

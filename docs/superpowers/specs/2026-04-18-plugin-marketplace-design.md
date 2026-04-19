@@ -189,7 +189,17 @@ interface PluginVersionEntry {
   version: string;             // semver
   source: PluginSource;
   changelog?: string;
-  minKaizenVersion?: string;   // semver range
+  /**
+   * Minimum kaizen version required to install this plugin version. A bare
+   * semver (e.g. `"1.4.0"`), NOT a range — analogous to how a Kubernetes
+   * workload declares "needs k8s >= 1.30". Enforced at install-time: if
+   * `semver.gte(kaizenVersion, minKaizenVersion)` is false, `kaizen install`
+   * fails hard with a `KaizenVersionTooOldError`. Not re-checked at
+   * load-time — once installed, the plugin loads regardless of subsequent
+   * kaizen upgrades/downgrades (the lockfile is authoritative). There is
+   * no upper bound; plugins do not declare maximum-supported kaizen.
+   */
+  minKaizenVersion?: string;
 }
 
 interface HarnessVersionEntry {
@@ -609,6 +619,8 @@ verb for everything under `<id>/`.
 | Harness plugin entry is shorthand (not canonical) | Fatal: "harness plugin refs must be canonical `<marketplace>/<name>@<version>`. Run `kaizen install <name>` to canonicalize." |
 | Legacy `kaizen-plugin-*` bare-npm ref | Deprecation warning; auto-resolve against `official`. Hard error in v-next. |
 | Consent denied | Exit 1, no install |
+| `minKaizenVersion` unsatisfied at install | Fatal (`KaizenVersionTooOldError`): "<plugin>@<version> requires kaizen >= <min>; running <current>. Upgrade kaizen or pick an older plugin version."; exit 1 |
+| `minKaizenVersion` not a bare semver (e.g. a range like `^1.4.0`) | Fatal at `marketplace add` / `update`: "minKaizenVersion must be a bare semver, not a range."; exit 1 |
 | `--trust-lockfile` with missing lockfile entry | Fatal: "Plugin <name> not in lockfile. Run `kaizen install <ref>` first." |
 | Harness `marketplaces` entry clone fails during bootstrap, and a plugin ref needs it | Fatal: "cannot add marketplace <id> from <url>: <git error>"; bootstrap aborts |
 | Harness `marketplaces` entry clone fails, no plugin ref depends on it | Warning; bootstrap continues |

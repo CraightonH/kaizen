@@ -458,7 +458,7 @@ Validates a marketplace directory at `<path>` (defaults to current directory).
 | Harness version has `path` | Non-empty string |
 | `file` source `path` exists | `existsSync(join(dir, source.path))` relative to marketplace root |
 | Harness `path` exists | `existsSync(join(dir, version.path))` |
-| `minKaizenVersion` parses | Optional; if present, must be a valid semver range |
+| `minKaizenVersion` parses | Optional; if present, must be a bare semver (NOT a range — analogous to k8s ">= 1.30") |
 
 ---
 
