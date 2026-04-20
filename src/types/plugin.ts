@@ -16,6 +16,12 @@ export { ServiceToken };
 
 export type { CtxFs, CtxNet, CtxSecrets, CtxExec, CtxLog, CtxIo, ExecOpts, ExecResult } from "../core/plugin-ctx-io.js";
 
+// Re-exports so first-party plugins can import everything they need from `kaizen/types`.
+export { readStdinLine } from "../core/stdin.js";
+export { SecretsProviderToken } from "../core/secrets.js";
+export type { SecretProvider } from "../core/secret-providers/types.js";
+export { createLLMRuntime } from "../core/llm.js";
+
 // ---------------------------------------------------------------------------
 // JSON Schema (subset used for tool parameter definitions)
 // ---------------------------------------------------------------------------

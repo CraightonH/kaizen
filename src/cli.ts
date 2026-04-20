@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /**
  * kaizen CLI entrypoint
- * Built-in plugins are statically imported so bun build --compile bundles them.
+ * The binary ships with zero built-in plugins. All plugins load dynamically
+ * through the marketplace install path (~/.kaizen/marketplaces/<id>/).
  */
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -19,30 +20,9 @@ import {
 import { runPluginConsent } from "./commands/plugin-consent.js";
 import { runPluginReview } from "./commands/plugin-review.js";
 import { runPluginAudit } from "./commands/plugin-audit.js";
+import type { KaizenPlugin } from "./types/plugin.js";
 
-import coreEvents from "core-events";
-import coreLifecycle from "core-lifecycle";
-import coreUiTerminal from "core-ui-terminal";
-import coreExecutorAnthropic from "core-executor-anthropic";
-import coreExecutorDebug from "core-executor-debug";
-import coreExecutorShell from "core-executor-shell";
-import kaizenPluginTimestamps from "kaizen-plugin-timestamps";
-import coreCli from "core-cli";
-import corePluginManager from "core-plugin-manager";
-import coreSecrets from "core-secrets";
-
-const builtins = {
-  [coreEvents.name]: coreEvents,
-  [coreLifecycle.name]: coreLifecycle,
-  [coreUiTerminal.name]: coreUiTerminal,
-  [coreExecutorAnthropic.name]: coreExecutorAnthropic,
-  [coreExecutorDebug.name]: coreExecutorDebug,
-  [coreExecutorShell.name]: coreExecutorShell,
-  [kaizenPluginTimestamps.name]: kaizenPluginTimestamps,
-  [coreCli.name]: coreCli,
-  [corePluginManager.name]: corePluginManager,
-  [coreSecrets.name]: coreSecrets,
-};
+const builtins: Record<string, KaizenPlugin> = {};
 
 // ---------------------------------------------------------------------------
 // Arg parsing
@@ -65,11 +45,11 @@ function setCliList(config: Record<string, unknown>, clis: string[]): void {
 
 const DEFAULT_PLUGINS = {
   plugins: [
-    "core-events",
-    "core-executor-anthropic",
-    "core-ui-terminal",
-    "core-cli",
-    "core-lifecycle",
+    "official/core-events@0.1.0",
+    "official/core-executor-anthropic@0.1.0",
+    "official/core-ui-terminal@0.1.0",
+    "official/core-cli@0.1.0",
+    "official/core-lifecycle@0.1.0",
   ],
   "core-executor-anthropic": {
     model: "claude-opus-4-6",

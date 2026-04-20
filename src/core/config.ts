@@ -4,13 +4,6 @@ import { homedir } from "os";
 import type { KaizenConfig } from "../types/plugin.js";
 import { fatal, warn } from "./errors.js";
 
-// Built-in harnesses are imported as JSON so they are bundled into the compiled
-// binary. import.meta.url resolves to a virtual path inside the Bun binary and
-// cannot be used for filesystem resolution at runtime.
-import coreAnthropicHarness from "../../harnesses/core-anthropic/kaizen.json";
-import coreDebugHarness from "../../harnesses/core-debug/kaizen.json";
-import coreShellHarness from "../../harnesses/core-shell/kaizen.json";
-
 // ---------------------------------------------------------------------------
 // Well-known paths
 // ---------------------------------------------------------------------------
@@ -34,19 +27,11 @@ export const RESERVED_KEYS = new Set(["plugins", "extends"]);
 // ---------------------------------------------------------------------------
 // Harness resolution
 //
-// Priority (first match wins):
-//   1. .kaizen/harnesses/<name>/kaizen.json  — project-scoped
-//   2. ~/.kaizen/harnesses/<name>/kaizen.json — global
-//   3. Built-in short name (bundled in binary)
-//   4. Local path (./path/to/kaizen.json or directory)
-//   5. URL — coming soon
+// Harnesses are resolved through the marketplace install path. A canonical
+// ref (`<marketplace>/<name>@<version>`) is materialized by cli.ts before
+// reaching this function; here we handle the resulting local paths and the
+// project/home fallback directories.
 // ---------------------------------------------------------------------------
-
-const BUILTIN_HARNESSES: Record<string, KaizenConfig> = {
-  "core-anthropic": coreAnthropicHarness as KaizenConfig,
-  "core-debug": coreDebugHarness as KaizenConfig,
-  "core-shell": coreShellHarness as KaizenConfig,
-};
 
 export function loadHarnessConfig(nameOrPath: string): KaizenConfig {
   // 1. Project-scoped harness
@@ -57,27 +42,24 @@ export function loadHarnessConfig(nameOrPath: string): KaizenConfig {
   const homeHarness = join(KAIZEN_HOME_HARNESSES, nameOrPath, "kaizen.json");
   if (existsSync(homeHarness)) return parseAndValidateHarness(homeHarness, nameOrPath);
 
-  // 3. Built-in by short name (bundled in binary)
-  if (BUILTIN_HARNESSES[nameOrPath]) return BUILTIN_HARNESSES[nameOrPath]!;
-
-  // 4. Explicit path (./relative or /absolute)
+  // 3. Explicit path (./relative or /absolute)
   if (nameOrPath.startsWith("./") || nameOrPath.startsWith("/") || nameOrPath.startsWith("../")) {
     const filePath = nameOrPath.endsWith(".json") ? nameOrPath : join(nameOrPath, "kaizen.json");
     if (!existsSync(filePath)) fatal(`Harness not found at path: ${filePath}`);
     return parseAndValidateHarness(filePath, nameOrPath);
   }
 
-  // 5. URL — not yet implemented
+  // 4. URL — not supported; use marketplace
   if (nameOrPath.startsWith("http://") || nameOrPath.startsWith("https://")) {
     fatal(
-      `URL harnesses are not yet supported.\n` +
-      `Download the kaizen.json and reference it as a local path instead.`,
+      `URL harnesses are not supported.\n` +
+      `Publish the harness in a marketplace and reference it as '<marketplace>/<name>@<version>'.`,
     );
   }
 
   fatal(
     `Harness '${nameOrPath}' not found.\n` +
-    `  Built-in:       ${Object.keys(BUILTIN_HARNESSES).join(", ")}\n` +
+    `  Marketplace:    kaizen install <marketplace>/${nameOrPath}@<version>\n` +
     `  Project-scoped: .kaizen/harnesses/${nameOrPath}/kaizen.json\n` +
     `  Global:         ~/.kaizen/harnesses/${nameOrPath}/kaizen.json\n` +
     `  Path:           ./path/to/kaizen.json`,
@@ -231,6 +213,6 @@ export function resolveConfig(opts: { harness?: string; configPath?: string }): 
     `No config found.\n` +
     `  Project config: kaizen init\n` +
     `  Global config:  kaizen init --global\n` +
-    `  Harness:        kaizen --harness core-anthropic`,
+    `  Harness:        kaizen --harness <marketplace>/<name>@<version>`,
   );
 }

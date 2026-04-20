@@ -129,24 +129,13 @@ src/
   types/
     plugin.ts          Public plugin API types — the contract for plugin authors
 
-plugins/               Built-in plugins (workspace packages, compiled into binary)
-  core-events/
-  core-executor-anthropic/
-  core-executor-debug/
-  core-executor-shell/
-  core-lifecycle/
-  core-ui-terminal/
-  core-cli/
-  kaizen-plugin-timestamps/
-
-harnesses/             Built-in harnesses (JSON, bundled into binary via static import)
-  core-anthropic/      Full default stack (Anthropic LLM)
-  core-debug/          Debug executor (echoes messages, prints events)
-  core-shell/          Shell executor (bash passthrough)
-
 scripts/
-  install.sh           One-liner installer (downloads binary + runs kaizen init --global)
+  install.sh           One-liner installer (downloads binary + seeds official marketplace)
+  dev-setup.sh         From-source dev: seed the sibling kaizen-official-plugins repo
 ```
+
+First-party plugins and harnesses live in a separate repo:
+[kaizen-official-plugins](https://github.com/CraightonH/kaizen-official-plugins).
 
 ### Runtime layout
 
@@ -167,11 +156,17 @@ scripts/
 
 ### Plugin resolution order
 
-1. Built-in (compiled into binary)
+Canonical refs (`<marketplace>/<name>@<version>`) resolve through the installed
+marketplace tree only:
+
+1. `~/.kaizen/marketplaces/<id>/plugins/<name>@<version>/` — the sole supported path.
+
+Bare names in legacy configs still walk these fallbacks before failing:
+
 2. `.kaizen/plugins/<name>/` — project-scoped authored plugin
 3. `~/.kaizen/plugins/<name>/` — global authored plugin
 4. `.kaizen/node_modules/<name>` — project npm-installed plugin
-5. `~/.kaizen/node_modules/<name>` — globally npm-installed plugin (`kaizen plugin install`)
+5. `~/.kaizen/node_modules/<name>` — globally npm-installed plugin
 6. Standard npm resolution (bun global, npm global, `./node_modules`)
 
 ## Marketplaces & plugin resolution

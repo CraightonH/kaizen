@@ -211,7 +211,7 @@ export async function cmdConfigSetSecret(
   const providerName = flags.provider ?? "kaizen";
 
   if (providerName === "kaizen") {
-    const { fileProvider } = await import("../../plugins/core-secrets/file-fallback.js");
+    const { fileProvider } = await import("../core/secret-providers/file-fallback.js");
     const ref = `${pluginName}-${key}`;
     if (!fileProvider.set) {
       console.error("File provider does not support writing secrets.");

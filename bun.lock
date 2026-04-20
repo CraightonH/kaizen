@@ -9,103 +9,8 @@
         "@ai-sdk/openai": "^3.0.50",
         "ai": "^6.0.146",
         "ajv": "^8.18.0",
-        "core-cli": "workspace:*",
-        "core-events": "workspace:*",
-        "core-executor-anthropic": "workspace:*",
-        "core-executor-debug": "workspace:*",
-        "core-executor-openai": "workspace:*",
-        "core-executor-shell": "workspace:*",
-        "core-lifecycle": "workspace:*",
-        "core-plugin-manager": "workspace:*",
-        "core-secrets": "workspace:*",
-        "core-ui-terminal": "workspace:*",
-        "kaizen-plugin-timestamps": "workspace:*",
         "yaml": "^2.8.3",
       },
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5.4.0",
-      },
-    },
-    "plugins/core-cli": {
-      "name": "core-cli",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5.4.0",
-      },
-    },
-    "plugins/core-events": {
-      "name": "core-events",
-      "version": "1.0.0",
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5.4.0",
-      },
-    },
-    "plugins/core-executor-anthropic": {
-      "name": "core-executor-anthropic",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5.4.0",
-      },
-    },
-    "plugins/core-executor-debug": {
-      "name": "core-executor-debug",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5.4.0",
-      },
-    },
-    "plugins/core-executor-openai": {
-      "name": "core-executor-openai",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5.4.0",
-      },
-    },
-    "plugins/core-executor-shell": {
-      "name": "core-executor-shell",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5.4.0",
-      },
-    },
-    "plugins/core-lifecycle": {
-      "name": "core-lifecycle",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5.4.0",
-      },
-    },
-    "plugins/core-plugin-manager": {
-      "name": "core-plugin-manager",
-      "version": "0.1.0",
-    },
-    "plugins/core-secrets": {
-      "name": "core-secrets",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5.4.0",
-      },
-    },
-    "plugins/core-ui-terminal": {
-      "name": "core-ui-terminal",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5.4.0",
-      },
-    },
-    "plugins/kaizen-plugin-timestamps": {
-      "name": "kaizen-plugin-timestamps",
-      "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "latest",
         "typescript": "^5.4.0",
@@ -139,26 +44,6 @@
 
     "bun-types": ["bun-types@1.3.11", "", { "dependencies": { "@types/node": "*" } }, "sha512-1KGPpoxQWl9f6wcZh57LvrPIInQMn2TQ7jsgxqpRzg+l0QPOFvJVH7HmvHo/AiPgwXy+/Thf6Ov3EdVn1vOabg=="],
 
-    "core-cli": ["core-cli@workspace:plugins/core-cli"],
-
-    "core-events": ["core-events@workspace:plugins/core-events"],
-
-    "core-executor-anthropic": ["core-executor-anthropic@workspace:plugins/core-executor-anthropic"],
-
-    "core-executor-debug": ["core-executor-debug@workspace:plugins/core-executor-debug"],
-
-    "core-executor-openai": ["core-executor-openai@workspace:plugins/core-executor-openai"],
-
-    "core-executor-shell": ["core-executor-shell@workspace:plugins/core-executor-shell"],
-
-    "core-lifecycle": ["core-lifecycle@workspace:plugins/core-lifecycle"],
-
-    "core-plugin-manager": ["core-plugin-manager@workspace:plugins/core-plugin-manager"],
-
-    "core-secrets": ["core-secrets@workspace:plugins/core-secrets"],
-
-    "core-ui-terminal": ["core-ui-terminal@workspace:plugins/core-ui-terminal"],
-
     "eventsource-parser": ["eventsource-parser@3.0.6", "", {}, "sha512-Vo1ab+QXPzZ4tCa8SwIHJFaSzy4R6SHf7BY79rFBDf0idraZWAkYrDjDj8uWaSm3S2TK+hJ7/t1CEmZ7jXw+pg=="],
 
     "fast-deep-equal": ["fast-deep-equal@3.1.3", "", {}, "sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q=="],
@@ -169,8 +54,6 @@
 
     "json-schema-traverse": ["json-schema-traverse@1.0.0", "", {}, "sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug=="],
 
-    "kaizen-plugin-timestamps": ["kaizen-plugin-timestamps@workspace:plugins/kaizen-plugin-timestamps"],
-
     "require-from-string": ["require-from-string@2.0.2", "", {}, "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw=="],
 
     "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
@@ -180,9 +63,5 @@
     "yaml": ["yaml@2.8.3", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-AvbaCLOO2Otw/lW5bmh9d/WEdcDFdQp2Z2ZUH3pX9U2ihyUY0nvLv7J6TrWowklRGPYbB/IuIMfYgxaCPg5Bpg=="],
 
     "zod": ["zod@4.3.6", "", {}, "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg=="],
-
-    "core-secrets/@types/bun": ["@types/bun@1.3.12", "", { "dependencies": { "bun-types": "1.3.12" } }, "sha512-DBv81elK+/VSwXHDlnH3Qduw+KxkTIWi7TXkAeh24zpi5l0B2kUg9Ga3tb4nJaPcOFswflgi/yAvMVBPrxMB+A=="],
-
-    "core-secrets/@types/bun/bun-types": ["bun-types@1.3.12", "", { "dependencies": { "@types/node": "*" } }, "sha512-HqOLj5PoFajAQciOMRiIZGNoKxDJSr6qigAttOX40vJuSp6DN/CxWp9s3C1Xwm4oH7ybueITwiaOcWXoYVoRkA=="],
   }
 }

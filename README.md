@@ -2,6 +2,13 @@
 
 Platform for LLM harnesses built from composable plugins.
 
+The binary ships with **zero plugins**. All first-party plugins and harnesses
+live in a separate repo:
+[`kaizen-official-plugins`](https://github.com/CraightonH/kaizen-official-plugins).
+The installer seeds the `official` marketplace and pre-installs a default
+stack. From source, run `scripts/dev-setup.sh` to do the same against a
+sibling checkout — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Security model
 
 Kaizen plugins run in the same process as core but are constrained by a
