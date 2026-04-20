@@ -11,16 +11,20 @@
 
 export const PLUGIN_API_VERSION = "2";
 
-import { ServiceToken } from "../core/service-registry.js";
-export { ServiceToken };
+/**
+ * Type-only declarations live here. Runtime values that plugins need are
+ * exposed via the `kaizen/types` virtual module (see `src/host-api.ts`
+ * and `src/core/host-api-register.ts`). Internal kaizen code should
+ * import runtime symbols from their owning modules, not from here.
+ */
 
 export type { CtxFs, CtxNet, CtxSecrets, CtxExec, CtxLog, CtxIo, ExecOpts, ExecResult } from "../core/plugin-ctx-io.js";
-
-// Re-exports so first-party plugins can import everything they need from `kaizen/types`.
-export { readStdinLine } from "../core/stdin.js";
-export { SecretsProviderToken } from "../core/secrets.js";
 export type { SecretProvider } from "../core/secret-providers/types.js";
-export { createLLMRuntime } from "../core/llm.js";
+
+// ServiceToken is the type of the class instance; the class itself is
+// exposed to plugins through host-api.ts. Internal consumers import the
+// class directly from service-registry.js.
+export type { ServiceToken } from "../core/service-registry.js";
 
 // ---------------------------------------------------------------------------
 // JSON Schema (subset used for tool parameter definitions)
