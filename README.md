@@ -69,6 +69,10 @@ Review and paste into your plugin's default export.
 
 ### Commands reference
 
+**Plugin authoring:**
+- `kaizen plugin create <path>` — scaffold a new plugin at `<path>` (interactive, or `--defaults` for non-interactive).
+- `kaizen plugin validate [<path>]` — check a plugin directory for compliance (package.json, manifest shape, test file, README). Defaults to `.` if `<path>` is omitted.
+
 **Plugin management:**
 - `kaizen install <plugin>` — resolve, read manifest, run consent flow, write lockfile.
 - `kaizen plugin consent <plugin>` — re-run consent (after version bump or drift).
@@ -85,6 +89,10 @@ Review and paste into your plugin's default export.
 ### Marketplace & plugin management
 
 ```bash
+# Marketplace authoring
+kaizen marketplace create <path>            # Scaffold a new marketplace at <path> (--defaults for non-interactive)
+kaizen marketplace validate [<path>]        # Check marketplace structure (defaults to .)
+
 # Marketplace management
 kaizen marketplace add <url> [--id <id>]   # Register a git-backed marketplace
 kaizen marketplace list                     # List registered marketplaces

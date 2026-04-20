@@ -6,6 +6,49 @@ A kaizen plugin is an npm package that exports a `KaizenPlugin` as its default
 export. Plugins register tools, subscribe to lifecycle events, and optionally
 provide capability roles (executor, UI, lifecycle).
 
+## Creating a plugin
+
+The fastest way to start is the scaffolder:
+
+```bash
+kaizen plugin create ./my-plugin
+```
+
+This runs an interactive prompt and writes all required files under `./my-plugin`.
+Use `--defaults` to skip prompts and accept generated defaults:
+
+```bash
+kaizen plugin create --defaults ./my-plugin
+```
+
+The scaffolder creates:
+- `package.json` — `type: "module"`, `keywords: ["kaizen-plugin"]`, correct `exports`
+- `tsconfig.json` — strict ESNext config
+- `index.ts` — minimal `KaizenPlugin` default export
+- `index.test.ts` — bun:test stubs for metadata and setup smoke-test
+- `README.md` — placeholder docs
+- `.kaizen/.gitkeep` — directory for runtime state and proposed-permissions output
+
+See [`docs/plugin-standards.md`](./plugin-standards.md) for the full coding
+standards that `kaizen plugin validate` enforces.
+
+### Checking compliance
+
+```bash
+kaizen plugin validate [<path>]
+```
+
+Runs structural checks on the plugin directory: `package.json` shape, manifest
+loadability, import scan for flagged modules, presence of a test file and
+`README.md`. Defaults to `.` when `<path>` is omitted. Returns exit code 0 when
+all checks pass (warnings are non-blocking), 1 when any check fails.
+
+> **Note:** `kaizen plugin validate` loads your plugin's entry file at check
+> time. If your plugin imports `kaizen/types` or other workspace packages that
+> are not yet installed locally, the manifest-loadable check will fail. Run
+> `bun install` (or `npm install`) in the plugin directory first, or install the
+> `kaizen` package as a dev dependency.
+
 ## Minimal plugin
 
 ```typescript
