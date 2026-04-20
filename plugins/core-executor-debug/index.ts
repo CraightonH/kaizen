@@ -126,6 +126,15 @@ const plugin: KaizenPlugin = {
     consumes: ["core-events:service"],
   },
 
+  config: {
+    schema: {
+      properties: {
+        color: { type: "boolean" },
+      },
+    },
+    defaults: { color: true },
+  },
+
   async setup(ctx) {
     const useColor = (ctx.config["color"] as boolean | undefined) ?? true;
 

@@ -13,6 +13,8 @@ import { renderScopedUAC, renderUnscopedUAC } from "../core/uac-renderer.js";
 import { decideConsent } from "../core/consent-flow.js";
 import { readStdinLine } from "../core/stdin.js";
 import { PROJECT_CONFIG } from "../core/config.js";
+import { mergePluginConfig, separateSecrets } from "../core/config-merge.js";
+import { validateConfig, validateSchemaItself } from "../core/config-validator.js";
 
 export interface UnifiedInstallArgs {
   ref: string;
@@ -41,6 +43,31 @@ export async function runUnifiedInstall(args: UnifiedInstallArgs): Promise<numbe
   const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { version?: string };
   const version = pkg.version ?? resolved.version;
   const plugin = await loadPluginFromInstallDir(resolved.marketplaceId, resolved.entry.name, resolved.version);
+
+  // Install-time config validation
+  if (plugin.config?.schema) {
+    if (!validateSchemaItself(plugin.config.schema)) {
+      console.error(`plugin '${plugin.name}': config.schema is not valid JSON Schema`);
+      return 1;
+    }
+    const harnessConfig = (() => {
+      try {
+        if (existsSync(PROJECT_CONFIG)) {
+          const cfg = JSON.parse(readFileSync(PROJECT_CONFIG, "utf8")) as Record<string, unknown>;
+          return (cfg[plugin.name] as Record<string, unknown>) ?? {};
+        }
+      } catch { /* ignore */ }
+      return {};
+    })();
+    const merged = mergePluginConfig(plugin.config, {}, harnessConfig);
+    const { config: nonSecretConfig } = separateSecrets(merged, plugin.config.secrets ?? []);
+    const errors = validateConfig(plugin.config.schema, nonSecretConfig);
+    if (errors.length > 0) {
+      console.error(`plugin '${plugin.name}' config invalid:\n${errors.map((e) => `  - ${e.path}: ${e.message}`).join("\n")}`);
+      return 1;
+    }
+  }
+
   const permissions: PluginPermissions = plugin.permissions ?? { tier: "trusted" };
   const hash = canonicalTierGrantHash(permissions);
 

@@ -44,6 +44,16 @@ const plugin: KaizenPlugin = {
   },
   capabilities: { provides: ["core-lifecycle:executor.send"] },
 
+  config: {
+    schema: {
+      properties: {
+        cwd: { type: "string" },
+        shell: { type: "string" },
+      },
+    },
+    defaults: { shell: "bash" },
+  },
+
   async setup(ctx) {
     const cwd = (ctx.config["cwd"] as string | undefined) ?? process.cwd();
     const shell = (ctx.config["shell"] as string | undefined) ?? "bash";

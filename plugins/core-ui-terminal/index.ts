@@ -54,6 +54,18 @@ const plugin: KaizenPlugin = {
   permissions: { tier: "trusted" },
   capabilities: { provides: ["core-lifecycle:ui.input", "core-lifecycle:ui.output"] },
 
+  config: {
+    schema: {
+      properties: {
+        prompt: { type: "string" },
+        responsePrefix: { type: "string" },
+        initial_prompt: { type: "string" },
+        one_shot: { type: "boolean" },
+      },
+    },
+    defaults: { prompt: "> ", responsePrefix: "" },
+  },
+
   async setup(ctx) {
     const prompt = (ctx.config["prompt"] as string | undefined) ?? "> ";
     const responsePrefix = (ctx.config["responsePrefix"] as string | undefined) ?? "";

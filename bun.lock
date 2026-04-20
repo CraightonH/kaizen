@@ -17,6 +17,7 @@
         "core-executor-shell": "workspace:*",
         "core-lifecycle": "workspace:*",
         "core-plugin-manager": "workspace:*",
+        "core-secrets": "workspace:*",
         "core-ui-terminal": "workspace:*",
         "kaizen-plugin-timestamps": "workspace:*",
         "yaml": "^2.8.3",
@@ -86,6 +87,14 @@
       "name": "core-plugin-manager",
       "version": "0.1.0",
     },
+    "plugins/core-secrets": {
+      "name": "core-secrets",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.4.0",
+      },
+    },
     "plugins/core-ui-terminal": {
       "name": "core-ui-terminal",
       "version": "0.1.0",
@@ -146,6 +155,8 @@
 
     "core-plugin-manager": ["core-plugin-manager@workspace:plugins/core-plugin-manager"],
 
+    "core-secrets": ["core-secrets@workspace:plugins/core-secrets"],
+
     "core-ui-terminal": ["core-ui-terminal@workspace:plugins/core-ui-terminal"],
 
     "eventsource-parser": ["eventsource-parser@3.0.6", "", {}, "sha512-Vo1ab+QXPzZ4tCa8SwIHJFaSzy4R6SHf7BY79rFBDf0idraZWAkYrDjDj8uWaSm3S2TK+hJ7/t1CEmZ7jXw+pg=="],
@@ -169,5 +180,9 @@
     "yaml": ["yaml@2.8.3", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-AvbaCLOO2Otw/lW5bmh9d/WEdcDFdQp2Z2ZUH3pX9U2ihyUY0nvLv7J6TrWowklRGPYbB/IuIMfYgxaCPg5Bpg=="],
 
     "zod": ["zod@4.3.6", "", {}, "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg=="],
+
+    "core-secrets/@types/bun": ["@types/bun@1.3.12", "", { "dependencies": { "bun-types": "1.3.12" } }, "sha512-DBv81elK+/VSwXHDlnH3Qduw+KxkTIWi7TXkAeh24zpi5l0B2kUg9Ga3tb4nJaPcOFswflgi/yAvMVBPrxMB+A=="],
+
+    "core-secrets/@types/bun/bun-types": ["bun-types@1.3.12", "", { "dependencies": { "@types/node": "*" } }, "sha512-HqOLj5PoFajAQciOMRiIZGNoKxDJSr6qigAttOX40vJuSp6DN/CxWp9s3C1Xwm4oH7ybueITwiaOcWXoYVoRkA=="],
   }
 }

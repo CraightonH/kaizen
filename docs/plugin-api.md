@@ -216,26 +216,210 @@ const plugin: KaizenPlugin = {
 };
 ```
 
-## Plugin config
+## Plugin Config & Secrets
 
-Config is read from the plugin's namespace in `kaizen.json`:
+Plugins declare config schema and defaults in their manifest, then access merged
+config via `ctx.config` and secrets via `await ctx.secrets.get(key)`.
 
+### Declaring config on your plugin
+
+Add `config` to your plugin's `manifest()`:
+
+```typescript
+import type { KaizenPlugin, ConfigSchema } from "kaizen/types";
+
+const plugin: KaizenPlugin = {
+  name: "my-api",
+  apiVersion: "1.0.0",
+  
+  config: {
+    schema: {
+      type: "object",
+      properties: {
+        timeout_ms: {
+          type: "number",
+          description: "Request timeout in milliseconds",
+        },
+        api_key: {
+          type: "string",
+          description: "API key (stored as secret)",
+          secret: true, // marks this as a secret
+        },
+        endpoint: {
+          type: "string",
+          description: "API endpoint URL",
+        },
+      },
+      required: ["api_key"],
+    },
+    defaults: {
+      timeout_ms: 5000,
+      endpoint: "https://api.example.com",
+    },
+    secrets: ["api_key"], // keys that are secrets
+  },
+
+  async setup(ctx) {
+    // ctx.config contains non-secret merged values
+    const timeout = ctx.config.timeout_ms as number;
+    const endpoint = ctx.config.endpoint as string;
+    
+    // Secrets are fetched separately
+    const apiKey = await ctx.secrets.get("api_key");
+  },
+};
+```
+
+### What `ctx.config` contains
+
+`ctx.config` is a plain object containing the merged, non-secret config values:
+- User config from `kaizen.json` (or harness config)
+- Defaults from your plugin's `config.defaults`
+- Environment overrides via `KAIZEN_<PLUGIN>_<KEY>` (see below)
+
+Secret values are **not** included in `ctx.config`.
+
+### Accessing secrets with `ctx.secrets.get(key)`
+
+Secrets are fetched separately using `await ctx.secrets.get(key)`:
+
+```typescript
+async setup(ctx) {
+  const apiKey = await ctx.secrets.get("api_key");
+  const password = await ctx.secrets.get("password");
+}
+```
+
+`get()` throws if the secret is not configured or unavailable. Use try-catch
+if you need graceful fallbacks.
+
+### Secret refs in harness config
+
+Secrets can reference different storage backends. In `kaizen.json`, use:
+
+**Bare string (simple case):**
 ```json
 {
-  "my-plugin": {
-    "api_key_env": "MY_API_KEY",
-    "timeout_ms": 5000
+  "my-api": {
+    "api_key": "my-secret-api-key"
   }
 }
 ```
 
-Access it in `setup()`:
-```typescript
-const key = process.env[ctx.config["api_key_env"] as string];
-const timeout = ctx.config["timeout_ms"] as number ?? 5000;
+**Full ref (explicit provider):**
+```json
+{
+  "my-api": {
+    "api_key": {
+      "provider": "vault",
+      "ref": "secret/data/my-api/key",
+      "envOverride": "MY_API_KEY_OVERRIDE"
+    }
+  }
+}
 ```
 
-The config namespace key must exactly match `plugin.name`.
+The `{ provider, ref, envOverride? }` shape lets harnesses use custom secret
+providers (see `docs/plugin-secrets.md` for writing one).
+
+- `provider` — name of the secret provider (e.g., `"vault"`, `"doppler"`)
+- `ref` — provider-specific reference (e.g., vault path, Doppler key name)
+- `envOverride?` — (optional) env var to check first before hitting the provider
+
+### Environment override convention
+
+Secrets can be overridden by environment variables using `KAIZEN_<PLUGIN>_<KEY>`:
+
+```bash
+export KAIZEN_MY_API_API_KEY="sk-prod-12345"
+kaizen start
+```
+
+This takes precedence over `kaizen.json` config and explicit providers.
+
+The env name is constructed as:
+- `KAIZEN_` prefix
+- plugin name in UPPER_SNAKE_CASE
+- secret key in UPPER_SNAKE_CASE
+
+Example: plugin `my-api`, secret `api_key` → `KAIZEN_MY_API_API_KEY`
+
+### Shallow merge caveat
+
+Config objects are shallow-merged (one level deep):
+
+```json
+{
+  "my-plugin": {
+    "database": {
+      "host": "localhost"
+    }
+  }
+}
+```
+
+If your defaults specify `database.port`, the merge **replaces** `database`
+entirely, not merging nested keys. To avoid surprises, avoid nesting config
+objects; use flat keys like `database_host` and `database_port` instead.
+
+```typescript
+// Flat config: safe
+defaults: {
+  database_host: "localhost",
+  database_port: 5432,
+}
+
+// Nested config: risky
+defaults: {
+  database: { host: "localhost", port: 5432 }
+}
+```
+
+### Migration from old pattern (deprecated)
+
+The old pattern used `api_key_env` indirection:
+
+```typescript
+// BEFORE (deprecated)
+{
+  "my-plugin": {
+    "api_key_env": "MY_API_KEY"
+  }
+}
+
+async setup(ctx) {
+  const key = process.env[ctx.config["api_key_env"] as string];
+}
+```
+
+The new pattern is direct and type-safe:
+
+```typescript
+// AFTER
+{
+  "my-plugin": {
+    "api_key": { provider: "env", ref: "MY_API_KEY" }
+  }
+}
+
+async setup(ctx) {
+  const key = await ctx.secrets.get("api_key");
+}
+```
+
+Or, if the secret is stored in the OS keychain:
+
+```typescript
+// AFTER (keychain)
+{
+  "my-plugin": {
+    "api_key": "stored-in-keychain"
+  }
+}
+
+async setup(ctx) {
+  const key = await ctx.secrets.get("api_key");
+}
 
 ## Logging
 
