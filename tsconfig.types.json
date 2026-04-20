@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "verbatimModuleSyntax": false,
+    "outDir": "dist/types",
+    "rootDir": "src"
+  },
+  "include": [
+    "src/host-api.ts",
+    "src/types/plugin.ts",
+    "src/core/plugin-ctx-io.ts",
+    "src/core/secret-providers/types.ts",
+    "src/core/service-registry.ts"
+  ]
+}

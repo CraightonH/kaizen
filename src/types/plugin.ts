@@ -24,7 +24,8 @@ export type { SecretProvider } from "../core/secret-providers/types.js";
 // ServiceToken is the type of the class instance; the class itself is
 // exposed to plugins through host-api.ts. Internal consumers import the
 // class directly from service-registry.js.
-export type { ServiceToken } from "../core/service-registry.js";
+import type { ServiceToken } from "../core/service-registry.js";
+export type { ServiceToken };
 
 // ---------------------------------------------------------------------------
 // JSON Schema (subset used for tool parameter definitions)
