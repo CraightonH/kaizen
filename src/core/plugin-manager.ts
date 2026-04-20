@@ -10,6 +10,7 @@ import { SecretsRegistry, createSecretsContext, SecretsProviderToken } from "./s
 import { fatal, warn, debug } from "./errors.js";
 import { RESERVED_KEYS, KAIZEN_HOME, KAIZEN_HOME_PLUGINS, PROJECT_PLUGINS } from "./config.js";
 import { pluginInstallDir } from "./kaizen-config.js";
+import { parseRef } from "./ref-resolver.js";
 import type { EventBus } from "./event-bus.js";
 import type { ToolRegistry } from "./tool-registry.js";
 import type { ExecutorRegistry } from "./executor-registry.js";
@@ -119,8 +120,49 @@ function loadPluginFromPath(path: string, name: string): LoadedPlugin | null {
   }
 }
 
-function resolvePlugin(name: string, builtins: Builtins): LoadedPlugin | null {
+async function loadPluginFromMarketplaceInstall(
+  marketplaceId: string, pluginName: string, version: string, displayName: string,
+): Promise<LoadedPlugin | null> {
+  const dir = pluginInstallDir(marketplaceId, pluginName, version);
+  const pkgPath = join(dir, "package.json");
+  if (!existsSync(pkgPath)) return null;
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { main?: string; module?: string };
+  const entry = pkg.module ?? pkg.main ?? "index.js";
+  const abs = join(dir, entry);
+  try {
+    const mod = (await import(abs)) as { default?: unknown };
+    const plugin = mod.default;
+    if (
+      typeof plugin !== "object" || plugin === null ||
+      typeof (plugin as Record<string, unknown>)["name"] !== "string" ||
+      typeof (plugin as Record<string, unknown>)["setup"] !== "function"
+    ) {
+      warn(`Plugin '${displayName}' at ${abs} does not export a valid KaizenPlugin. Skipping.`);
+      return null;
+    }
+    return { plugin: plugin as KaizenPlugin, resolvedPath: abs };
+  } catch (err) {
+    warn(`Failed to load plugin at '${abs}': ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+async function resolvePlugin(name: string, builtins: Builtins): Promise<LoadedPlugin | null> {
   if (builtins[name]) return { plugin: builtins[name]!, resolvedPath: null };
+
+  // Canonical marketplace ref: "<id>/<name>@<version>" → marketplace install dir.
+  if (!name.startsWith("./") && !name.startsWith("/") && !name.startsWith("../")) {
+    try {
+      const parsed = parseRef(name);
+      if (parsed.kind === "marketplace" && parsed.version) {
+        const loaded = await loadPluginFromMarketplaceInstall(
+          parsed.marketplaceId, parsed.name, parsed.version, name,
+        );
+        if (loaded) return loaded;
+      }
+    } catch { /* not a canonical ref — fall through to legacy paths */ }
+  }
+
   const isPath = name.startsWith("./") || name.startsWith("/") || name.startsWith("../");
   if (!isPath) {
     const projectPlugin = join(process.cwd(), PROJECT_PLUGINS, name);
@@ -329,7 +371,7 @@ export class PluginManager {
         warn(`Plugin name '${name}' collides with reserved config key. Skipping.`);
         continue;
       }
-      const loaded = resolvePlugin(String(name), this.builtins);
+      const loaded = await resolvePlugin(String(name), this.builtins);
       if (!loaded) continue;
       const pluginDir = loaded.resolvedPath ? findPackageRoot(loaded.resolvedPath) : null;
       if (!this.consultLockfile(loaded.plugin, pluginDir)) continue;
@@ -420,7 +462,7 @@ export class PluginManager {
   // --------------------------------------------------------------------------
 
   async load(name: string): Promise<void> {
-    const loaded = resolvePlugin(name, this.builtins);
+    const loaded = await resolvePlugin(name, this.builtins);
     if (!loaded) {
       warn(`Cannot load plugin '${name}': not found.`);
       return;
