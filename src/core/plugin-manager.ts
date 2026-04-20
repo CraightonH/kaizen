@@ -6,6 +6,7 @@ import type { KaizenPlugin, KaizenConfig, PluginEntry, PluginManagerPublicApi, P
 import { PLUGIN_API_VERSION } from "../types/plugin.js";
 import { fatal, warn, debug } from "./errors.js";
 import { RESERVED_KEYS, KAIZEN_HOME, KAIZEN_HOME_PLUGINS, PROJECT_PLUGINS } from "./config.js";
+import { pluginInstallDir } from "./kaizen-config.js";
 import type { EventBus } from "./event-bus.js";
 import type { ToolRegistry } from "./tool-registry.js";
 import type { ExecutorRegistry } from "./executor-registry.js";
@@ -76,6 +77,12 @@ export function findPackageRoot(startPath: string): string {
     if (parent === dir) throw new Error(`no package.json found walking up from ${startPath}`);
     dir = parent;
   }
+}
+
+export async function isInstalled(
+  marketplaceId: string, name: string, version: string,
+): Promise<boolean> {
+  return existsSync(join(pluginInstallDir(marketplaceId, name, version), "package.json"));
 }
 
 // ---------------------------------------------------------------------------

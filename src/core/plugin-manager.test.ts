@@ -1,8 +1,9 @@
-import { describe, expect, test, afterEach } from "bun:test";
+import { describe, expect, test, afterEach, beforeEach, it } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { PluginManager, findPackageRoot } from "./plugin-manager.js";
+import { PluginManager, findPackageRoot, isInstalled } from "./plugin-manager.js";
+import { pluginInstallDir } from "./kaizen-config.js";
 import { EventBus } from "./event-bus.js";
 import { ToolRegistry } from "./tool-registry.js";
 import { ExecutorRegistry } from "./executor-registry.js";
@@ -505,5 +506,27 @@ describe("PluginManager capability validation", () => {
     await manager.initialize();
     const entries = manager.list();
     expect(entries.find((e) => e.name === "bad")?.status).toBe("failed");
+  });
+});
+
+describe("isInstalled(marketplaceId, name, version)", () => {
+  let home: string;
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), "kz-home-"));
+    process.env.KAIZEN_HOME_OVERRIDE = home;
+  });
+  afterEach(() => {
+    rmSync(home, { recursive: true, force: true });
+    delete process.env.KAIZEN_HOME_OVERRIDE;
+  });
+
+  it("returns false when install dir absent", async () => {
+    expect(await isInstalled("m", "demo", "1.0.0")).toBe(false);
+  });
+  it("returns true when install dir has package.json", async () => {
+    const dir = pluginInstallDir("m", "demo", "1.0.0");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "package.json"), "{}");
+    expect(await isInstalled("m", "demo", "1.0.0")).toBe(true);
   });
 });
