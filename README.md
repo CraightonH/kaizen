@@ -75,6 +75,32 @@ Review and paste into your plugin's default export.
 - `kaizen plugin audit` — list lockfile entries; flag UNSCOPED.
 - `kaizen plugin dev --observe <dir>` — record operations, generate proposed manifest.
 
+### Marketplace & plugin management
+
+```bash
+# Marketplace management
+kaizen marketplace add <url> [--id <id>]   # Register a git-backed marketplace
+kaizen marketplace list                     # List registered marketplaces
+kaizen marketplace remove <id>             # Remove a marketplace
+kaizen marketplace update [<id>]           # Pull latest catalog from upstream
+kaizen marketplace browse [<id>]           # Browse available plugins
+
+# Plugin install / manage
+kaizen install <ref>                        # Install a plugin by ref
+kaizen uninstall <ref> [--purge]           # Remove from harness config (--purge clears bits + lockfile)
+kaizen update [<ref>]                       # Update plugins (silent when permissions unchanged)
+
+# Ref forms
+#   official/timestamps@1.2.3              marketplace-qualified (recommended)
+#   timestamps@1.2.3                       shorthand (errors if ambiguous)
+#   timestamps                             shorthand, resolves latest
+#
+# Raw URLs are rejected — publish harnesses in a marketplace instead.
+
+# Run with a marketplace harness
+kaizen --harness official/anthropic-default@1.0.0
+```
+
 ### CLI flags
 
 - `--trust-lockfile` — use the existing lockfile for consent; do not prompt.

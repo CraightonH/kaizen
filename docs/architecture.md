@@ -173,3 +173,56 @@ scripts/
 4. `.kaizen/node_modules/<name>` — project npm-installed plugin
 5. `~/.kaizen/node_modules/<name>` — globally npm-installed plugin (`kaizen plugin install`)
 6. Standard npm resolution (bun global, npm global, `./node_modules`)
+
+## Marketplaces & plugin resolution
+
+Kaizen uses a federated git-backed marketplace model for third-party plugins.
+
+### Install tree
+
+All marketplace data lives under `~/.kaizen/` (or `$KAIZEN_HOME_OVERRIDE` in tests):
+
+```
+~/.kaizen/
+  kaizen.json                              # global config (KaizenGlobalConfig)
+  marketplaces/
+    <id>/
+      repo/                                # git clone (or symlink for local dev)
+        .kaizen/marketplace.json           # MarketplaceCatalog
+        plugins/<name>/                    # plugin source files
+        harnesses/<name>.json              # harness source files
+      plugins/
+        <name>@<version>/                  # installed plugin bits
+          package.json
+          index.mjs
+      harnesses/
+        <name>/
+          kaizen.json                      # installed harness config
+```
+
+All paths are computed by `src/core/kaizen-config.ts` — never hardcode `~/.kaizen/...` or concatenate path fragments manually elsewhere.
+
+### Ref forms
+
+| Form | Example | Notes |
+|------|---------|-------|
+| Marketplace-qualified | `official/timestamps@1.2.3` | Explicit marketplace + version |
+| Shorthand | `timestamps@1.2.3` | Resolves across all marketplaces; errors if ambiguous |
+| Legacy npm | `kaizen-plugin-timestamps` | Deprecated; resolves against `official` |
+
+**Rejected forms:** raw URLs (`https://...`), local paths (`./`, `/`, `../`), scoped npm (`@scope/pkg`).
+
+### Third-party plugin loading
+
+Marketplace plugins are imported by **absolute path** from their install directory — there is no `node_modules` involvement. `src/core/plugin-loader.ts` reads `package.json` for the entry point and calls dynamic `import(absolutePath)`.
+
+### Key modules
+
+| Module | Responsibility |
+|--------|---------------|
+| `src/core/kaizen-config.ts` | All `~/.kaizen/` path helpers; global config I/O |
+| `src/core/marketplace.ts` | git clone/pull, catalog read/validate, background refresh |
+| `src/core/ref-resolver.ts` | Parse and resolve plugin refs against catalogs |
+| `src/core/plugin-installer.ts` | Materialize plugin bits (file/tarball/npm sources) |
+| `src/core/plugin-loader.ts` | Import marketplace plugins by absolute path |
+| `src/core/bootstrap.ts` | Auto-add marketplaces + install plugins for `--harness` |
