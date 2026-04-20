@@ -21,6 +21,12 @@ import { runPluginConsent } from "./commands/plugin-consent.js";
 import { runPluginReview } from "./commands/plugin-review.js";
 import { runPluginAudit } from "./commands/plugin-audit.js";
 import type { KaizenPlugin } from "./types/plugin.js";
+import { registerHostApi } from "./core/host-api-register.js";
+
+// Register the `kaizen/types` virtual module for plugin imports.
+// Must run before any dynamic plugin import (bootstrap, plugin dev,
+// capability list, tests, etc.).
+registerHostApi();
 
 const builtins: Record<string, KaizenPlugin> = {};
 
