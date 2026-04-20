@@ -15,6 +15,23 @@ The installer seeds the `official` marketplace and pre-installs a default
 stack. From source, run `scripts/dev-setup.sh` against a sibling checkout — see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CraightonH/kaizen/master/scripts/install.sh | bash
+```
+
+The script detects your platform (macOS/Linux, x64/arm64), downloads the
+matching release binary from GitHub, verifies its checksum, installs it to
+`/usr/local/bin/kaizen`, and seeds the `official` marketplace under
+`$KAIZEN_HOME` (default `~/.kaizen`).
+
+Environment overrides:
+
+- `KAIZEN_HOME` — marketplace/state dir (default `~/.kaizen`)
+- `INSTALL_DIR` — binary install dir (default `/usr/local/bin`)
+- `KAIZEN_REPO` — GitHub repo to pull releases from (default `CraightonH/kaizen`)
+
 ## Concepts
 
 ### Harnesses

@@ -7,7 +7,7 @@ set -euo pipefail
 
 KAIZEN_HOME="${KAIZEN_HOME:-$HOME/.kaizen}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
-REPO="${REPO:-CraightonH/kaizen}"
+KAIZEN_REPO="${KAIZEN_REPO:-CraightonH/kaizen}"
 BINARY="kaizen"
 
 # ---------------------------------------------------------------------------
@@ -121,7 +121,7 @@ bootstrap() {
 }
 
 latest_release_tag() {
-  local api_url="https://api.github.com/repos/${REPO}/releases/latest"
+  local api_url="https://api.github.com/repos/${KAIZEN_REPO}/releases/latest"
   local tag
   if command -v curl >/dev/null 2>&1; then
     tag="$(curl -fsSL "$api_url" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')"
@@ -158,7 +158,7 @@ main() {
   asset_name="$(detect_platform)"
   info "Asset:   $asset_name"
 
-  local base_url="https://github.com/${REPO}/releases/download/${version}"
+  local base_url="https://github.com/${KAIZEN_REPO}/releases/download/${version}"
 
   local tmpdir
   tmpdir="$(mktemp -d)"
