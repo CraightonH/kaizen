@@ -3,7 +3,7 @@
 export default {
   name: "fixture-ui",
   apiVersion: "2",
-  capabilities: { provides: ["core-lifecycle:ui"] },
+  capabilities: { provides: ["fixture-lifecycle:ui"] },
   async setup(ctx) {
     ctx.registerUi({
       async *accept() {

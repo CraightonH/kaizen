@@ -97,9 +97,8 @@ describe("PluginManager.initialize", () => {
     const lifecyclePlugin: KaizenPlugin = {
       name: "core-lifecycle",
       apiVersion: "2",
-      capabilities: { provides: ["core-lifecycle:lifecycle.drive"] },
-      async setup(ctx) {
-        ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "lifecycle" });
+      lifecycle: true,
+      async setup() {
         setupCalls.push("core-lifecycle");
       },
       async start() {},
@@ -132,10 +131,8 @@ describe("PluginManager.initialize", () => {
     });
     const lifecyclePlugin: KaizenPlugin = {
       name: "core-lifecycle", apiVersion: "2",
-      capabilities: { provides: ["core-lifecycle:lifecycle.drive"] },
-      async setup(ctx) {
-        ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "lifecycle" });
-      },
+      lifecycle: true,
+      async setup() {},
       async start() {},
     };
 
@@ -149,6 +146,105 @@ describe("PluginManager.initialize", () => {
     );
     await manager.initialize();
     expect(toolRegistry.list().map((t) => t.name)).toContain("my-tool");
+  });
+
+  test("plugin with lifecycle:true is treated as critical — setup throws are fatal", async () => {
+    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    executorRegistry.register(stubExecutor, "test-exec");
+    uiRegistry.register(stubUi, "test-ui");
+
+    const life: KaizenPlugin = {
+      name: "core-lifecycle",
+      apiVersion: "2",
+      lifecycle: true,
+      async setup() { throw new Error("boom"); },
+      async start() {},
+    };
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: ["core-lifecycle"] }, { "core-lifecycle": life },
+      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+    await expect(manager.initialize()).rejects.toThrow(/provides critical capability.*boom/i);
+  });
+
+  test("finds session driver via lifecycle:true flag — no capability required", async () => {
+    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    executorRegistry.register(stubExecutor, "test-exec");
+    uiRegistry.register(stubUi, "test-ui");
+
+    const driver: KaizenPlugin = {
+      name: "fixture-lifecycle",
+      apiVersion: "2",
+      lifecycle: true,
+      async setup() {},
+      async start() {},
+    };
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: ["fixture-lifecycle"] }, { "fixture-lifecycle": driver },
+      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+    const { lifecycleProvider } = await manager.initialize();
+    expect(lifecycleProvider.name).toBe("fixture-lifecycle");
+  });
+
+  test("fatals when no plugin declares lifecycle:true", async () => {
+    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    const plain = makePlugin("tool-only", async () => {});
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: ["tool-only"] }, { "tool-only": plain },
+      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+    await expect(manager.initialize()).rejects.toThrow(/No lifecycle plugin found.*lifecycle: true/);
+  });
+
+  test("fatals with names listed when two plugins declare lifecycle:true", async () => {
+    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    executorRegistry.register(stubExecutor, "test-exec");
+    uiRegistry.register(stubUi, "test-ui");
+    const a: KaizenPlugin = { name: "a-life", apiVersion: "2", lifecycle: true, async setup() {}, async start() {} };
+    const b: KaizenPlugin = { name: "b-life", apiVersion: "2", lifecycle: true, async setup() {}, async start() {} };
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: ["a-life", "b-life"] }, { "a-life": a, "b-life": b },
+      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+    await expect(manager.initialize()).rejects.toThrow(
+      /Multiple lifecycle plugins loaded: 'a-life', 'b-life'.*exactly one/,
+    );
+  });
+
+  test("fatals when lifecycle plugin has no start() function", async () => {
+    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    executorRegistry.register(stubExecutor, "test-exec");
+    uiRegistry.register(stubUi, "test-ui");
+    // Deliberately omit start().
+    const broken: KaizenPlugin = {
+      name: "broken-life",
+      apiVersion: "2",
+      lifecycle: true,
+      async setup() {},
+    };
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: ["broken-life"] }, { "broken-life": broken },
+      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+    await expect(manager.initialize()).rejects.toThrow(
+      /'broken-life' declares 'lifecycle: true' but does not export a start\(\) function/,
+    );
   });
 });
 
@@ -283,10 +379,8 @@ describe("PluginManager runtime accept-and-record (item 2)", () => {
     // Need a lifecycle provider for initialize() to succeed.
     const lifePlugin: KaizenPlugin = {
       name: "core-lifecycle", apiVersion: "2",
-      capabilities: { provides: ["core-lifecycle:lifecycle.drive"] },
-      async setup(ctx) {
-        ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "" });
-      },
+      lifecycle: true,
+      async setup() {},
       async start() {},
     };
 
@@ -414,10 +508,8 @@ describe("PluginManager capability validation", () => {
     };
     const life: KaizenPlugin = {
       name: "core-lifecycle", apiVersion: "2",
-      capabilities: { provides: ["core-lifecycle:lifecycle.drive"] },
-      async setup(ctx) {
-        ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "" });
-      },
+      lifecycle: true,
+      async setup() {},
       async start() {},
     };
     const manager = new PluginManager(
@@ -455,17 +547,18 @@ describe("PluginManager capability validation", () => {
     const regs = baseRegistries();
     const life: KaizenPlugin = {
       name: "core-lifecycle", apiVersion: "2",
-      capabilities: { provides: ["core-lifecycle:lifecycle.drive"] },
+      lifecycle: true,
+      capabilities: { provides: ["core-lifecycle:executor.send"] },
       async setup(ctx) {
-        ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "" });
+        ctx.defineCapability("core-lifecycle:executor.send", { cardinality: "many", description: "" });
       },
       async start() {},
     };
     let consumerRan = false;
     const consumer: KaizenPlugin = {
       name: "consumer", apiVersion: "2",
-      aliases: { "lifecycle": "core-lifecycle:lifecycle.drive" },
-      capabilities: { consumes: ["lifecycle"] },
+      aliases: { "executor": "core-lifecycle:executor.send" },
+      capabilities: { consumes: ["executor"] },
       async setup() { consumerRan = true; },
     };
     const manager = new PluginManager(
@@ -483,10 +576,8 @@ describe("PluginManager capability validation", () => {
     const regs = baseRegistries();
     const life: KaizenPlugin = {
       name: "core-lifecycle", apiVersion: "2",
-      capabilities: { provides: ["core-lifecycle:lifecycle.drive"] },
-      async setup(ctx) {
-        ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "" });
-      },
+      lifecycle: true,
+      async setup() {},
       async start() {},
     };
     const bad: KaizenPlugin = {

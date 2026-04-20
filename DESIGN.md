@@ -7,6 +7,10 @@ Status: APPROVED (rev 2 — executor-as-plugin)
 Mode: Builder (Open Source Platform)
 Supersedes: craighton-master-design-20260402-203112.md
 
+> **Note (2026-04-20, issue #13):** "Role" terminology is deprecated. See the
+> Platform Contract / Capability definitions below and the lifecycle-driver
+> decoupling spec at `docs/superpowers/specs/2026-04-20-lifecycle-driver-decoupling-design.md`.
+
 ## Problem Statement
 
 LLM coding agents are locked to single providers and extend only via MCP — which
@@ -64,11 +68,25 @@ This is VS Code extensions for LLM assistants, without the IDE.
 
 ## Definitions
 
-**Role:** A named capability that a plugin may provide (e.g. `'lifecycle'`, `'ui'`).
-Roles decouple plugins from specific implementations — `depends: ['lifecycle']` works
-with any lifecycle plugin. Core enforces: if any loaded plugin declares a role in its
-`depends[]`, exactly one loaded plugin must `provide[]` that role. Roles with no
-dependents are not enforced.
+**Platform Contract:** After `bootstrap()`, core calls `start()` on exactly one
+loaded plugin — the **session driver**. A plugin declares itself as the driver
+by setting `lifecycle: true` on its default export. Exactly one loaded plugin
+must declare this; zero or more than one is a fatal startup error. This is the
+sole plugin-to-core contract; everything else (executor, UI, tools) is
+plugin-to-plugin and modeled as capabilities.
+
+**Capability:** A named plugin-to-plugin interface (`<owner-plugin>:<name>`)
+registered at startup. Providers register their implementation; consumers
+declare they'll use it. Core validates cardinality (`one` vs `many`) but
+holds no opinion about semantics — capabilities are agreements between
+plugins. The owner-prefix rule (name must match the defining plugin's name)
+prevents namespace hijacking.
+
+**(Historical note: earlier drafts used "role" as a first-class concept. The
+capability registry subsumed roles for plugin-to-plugin interfaces; the
+session-driver hand-off was decoupled from capabilities entirely via the
+`lifecycle` flag. Other "role" language in this document is stale and
+will be revised incrementally.)**
 
 **Plugin:** A self-contained npm package that exports a `KaizenPlugin` default.
 
