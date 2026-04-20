@@ -97,9 +97,8 @@ describe("PluginManager.initialize", () => {
     const lifecyclePlugin: KaizenPlugin = {
       name: "core-lifecycle",
       apiVersion: "2",
-      capabilities: { provides: ["core-lifecycle:lifecycle.drive"] },
-      async setup(ctx) {
-        ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "lifecycle" });
+      lifecycle: true,
+      async setup() {
         setupCalls.push("core-lifecycle");
       },
       async start() {},
@@ -132,10 +131,8 @@ describe("PluginManager.initialize", () => {
     });
     const lifecyclePlugin: KaizenPlugin = {
       name: "core-lifecycle", apiVersion: "2",
-      capabilities: { provides: ["core-lifecycle:lifecycle.drive"] },
-      async setup(ctx) {
-        ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "lifecycle" });
-      },
+      lifecycle: true,
+      async setup() {},
       async start() {},
     };
 
@@ -328,10 +325,8 @@ describe("PluginManager runtime accept-and-record (item 2)", () => {
     // Need a lifecycle provider for initialize() to succeed.
     const lifePlugin: KaizenPlugin = {
       name: "core-lifecycle", apiVersion: "2",
-      capabilities: { provides: ["core-lifecycle:lifecycle.drive"] },
-      async setup(ctx) {
-        ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "" });
-      },
+      lifecycle: true,
+      async setup() {},
       async start() {},
     };
 
@@ -459,10 +454,8 @@ describe("PluginManager capability validation", () => {
     };
     const life: KaizenPlugin = {
       name: "core-lifecycle", apiVersion: "2",
-      capabilities: { provides: ["core-lifecycle:lifecycle.drive"] },
-      async setup(ctx) {
-        ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "" });
-      },
+      lifecycle: true,
+      async setup() {},
       async start() {},
     };
     const manager = new PluginManager(
@@ -500,17 +493,18 @@ describe("PluginManager capability validation", () => {
     const regs = baseRegistries();
     const life: KaizenPlugin = {
       name: "core-lifecycle", apiVersion: "2",
-      capabilities: { provides: ["core-lifecycle:lifecycle.drive"] },
+      lifecycle: true,
+      capabilities: { provides: ["core-lifecycle:executor.send"] },
       async setup(ctx) {
-        ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "" });
+        ctx.defineCapability("core-lifecycle:executor.send", { cardinality: "many", description: "" });
       },
       async start() {},
     };
     let consumerRan = false;
     const consumer: KaizenPlugin = {
       name: "consumer", apiVersion: "2",
-      aliases: { "lifecycle": "core-lifecycle:lifecycle.drive" },
-      capabilities: { consumes: ["lifecycle"] },
+      aliases: { "executor": "core-lifecycle:executor.send" },
+      capabilities: { consumes: ["executor"] },
       async setup() { consumerRan = true; },
     };
     const manager = new PluginManager(
@@ -528,10 +522,8 @@ describe("PluginManager capability validation", () => {
     const regs = baseRegistries();
     const life: KaizenPlugin = {
       name: "core-lifecycle", apiVersion: "2",
-      capabilities: { provides: ["core-lifecycle:lifecycle.drive"] },
-      async setup(ctx) {
-        ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "" });
-      },
+      lifecycle: true,
+      async setup() {},
       async start() {},
     };
     const bad: KaizenPlugin = {
