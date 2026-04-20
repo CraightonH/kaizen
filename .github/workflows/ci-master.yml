@@ -35,7 +35,6 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun test
-      - run: bun run test:core
       - name: Installer shell test
         run: bash tests/install-sh-test.sh
 
