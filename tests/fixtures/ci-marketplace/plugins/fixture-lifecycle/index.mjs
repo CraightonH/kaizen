@@ -1,14 +1,21 @@
 // Minimal lifecycle provider. Drives exactly one session turn, emits
 // test:lifecycle:start / :end bracketing the work, then returns so
 // bootstrap() resolves.
+// Identify as "core-lifecycle" so the core-lifecycle:* capability namespace
+// is legitimately ours to own — core hardcodes lookup of
+// "core-lifecycle:lifecycle.drive" to find the session driver.
 export default {
-  name: "fixture-lifecycle",
+  name: "core-lifecycle",
   apiVersion: "2",
   capabilities: {
     provides: ["core-lifecycle:lifecycle.drive"],
-    consumes: ["core-lifecycle:executor.send", "core-lifecycle:ui.input", "core-lifecycle:ui.output"],
+    consumes: ["core-lifecycle:executor.send", "core-lifecycle:ui"],
   },
-  async setup() {},
+  async setup(ctx) {
+    ctx.defineCapability("core-lifecycle:lifecycle.drive", { cardinality: "one", description: "lifecycle driver" });
+    ctx.defineCapability("core-lifecycle:executor.send", { cardinality: "one", description: "LLM executor" });
+    ctx.defineCapability("core-lifecycle:ui", { cardinality: "many", description: "UI provider" });
+  },
   async start(ctx) {
     await ctx.emit("test:lifecycle:start");
     await ctx.emit("session:start");
