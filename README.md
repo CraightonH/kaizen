@@ -2,7 +2,7 @@
 
 **A platform for building LLM harnesses from composable plugins.**
 
-> Let code handle determinism. Let LLMs solve problems.
+> Code for what's deterministic. LLMs for what isn't.
 
 Kaizen is not a harness. It's the **harness platform** — a plugin loader, event
 bus, permissioned host API, and resolver. You compose a harness by declaring the
