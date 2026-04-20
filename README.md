@@ -109,10 +109,3 @@ kaizen --harness official/anthropic-default@1.0.0
 - `KAIZEN_SANDBOX_MODE=log-only` — run the enforcer in log-only mode (records
   denials to the audit log but does not throw). Escape hatch; not for
   production.
-
-### Adversarial review
-
-This security model addresses findings 2, 3, 4, 7, 11, 13, and 17 (partial) from
-[`docs/adversarial-review.md`](./docs/adversarial-review.md). Findings 5, 6, 8,
-9, 10, 12, 14, 18, 19, and 20 are out of scope for this effort and tracked
-separately.
