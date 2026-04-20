@@ -1,0 +1,50 @@
+# .github/workflows/ci-pr.yml
+# Runs on PRs to master when build-affecting files change. See
+# docs/superpowers/specs/2026-04-20-build-and-release-design.md for rationale.
+name: ci-pr
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/build-*.sh'
+      - 'scripts/build-*.ts'
+      - 'scripts/install.sh'
+      - 'scripts/smoke-install.sh'
+      - 'package.json'
+      - 'bun.lock'
+      - 'tsconfig*.json'
+      - '.github/workflows/ci-pr.yml'
+      - '.github/workflows/ci-master.yml'
+      - '.github/workflows/release.yml'
+
+concurrency:
+  group: ci-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # NOTE: bun-version is 'latest' during early development. Pin to a
+      # specific version once the project stabilizes.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run typecheck
+
+      - run: bun test
+
+      - name: Installer shell test
+        run: bash tests/install-sh-test.sh
+
+      - name: Compile (linux-x64)
+        run: bun build --compile --target=bun-linux-x64 ./src/cli.ts --outfile kaizen

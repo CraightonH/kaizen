@@ -14,8 +14,7 @@
     "test": "bun test",
     "test:integration": "bun test --integration",
     "smoke": "scripts/smoke-install.sh",
-    "spike": "bun build --compile src/spike/loader-probe.ts --outfile /tmp/kaizen-probe && echo 'Binary built — running probe...' && /tmp/kaizen-probe",
-    "test:core": "bun scripts/test-core.ts"
+    "spike": "bun build --compile src/spike/loader-probe.ts --outfile /tmp/kaizen-probe && echo 'Binary built — running probe...' && /tmp/kaizen-probe"
   },
   "devDependencies": {
     "@types/bun": "latest",
