@@ -205,6 +205,7 @@ function resolveCapName(name: string, aliases: Record<string, string>): string {
 }
 
 function isCritical(plugin: KaizenPlugin, reg: CapabilityRegistry): boolean {
+  if (plugin.lifecycle === true) return true;
   const aliases = plugin.aliases ?? {};
   for (const raw of plugin.capabilities?.provides ?? []) {
     const cap = resolveCapName(raw, aliases);

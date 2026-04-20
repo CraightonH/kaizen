@@ -150,6 +150,28 @@ describe("PluginManager.initialize", () => {
     await manager.initialize();
     expect(toolRegistry.list().map((t) => t.name)).toContain("my-tool");
   });
+
+  test("plugin with lifecycle:true is treated as critical — setup throws are fatal", async () => {
+    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    executorRegistry.register(stubExecutor, "test-exec");
+    uiRegistry.register(stubUi, "test-ui");
+
+    const life: KaizenPlugin = {
+      name: "core-lifecycle",
+      apiVersion: "2",
+      lifecycle: true,
+      async setup() { throw new Error("boom"); },
+      async start() {},
+    };
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: ["core-lifecycle"] }, { "core-lifecycle": life },
+      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+    await expect(manager.initialize()).rejects.toThrow(/provides critical capability.*boom/i);
+  });
 });
 
 describe("PluginManager.load + unload + reload", () => {
