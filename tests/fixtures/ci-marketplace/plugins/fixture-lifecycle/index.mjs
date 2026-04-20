@@ -1,9 +1,11 @@
 // Minimal lifecycle provider. Drives exactly one session turn, emits
 // test:lifecycle:start / :end bracketing the work, then returns so
 // bootstrap() resolves.
-// Identify as "core-lifecycle" so the core-lifecycle:* capability namespace
-// is legitimately ours to own — core hardcodes lookup of
-// "core-lifecycle:lifecycle.drive" to find the session driver.
+// Workaround for issue #13: core hardcodes "core-lifecycle:lifecycle.drive"
+// as the session-driver lookup, and the capability-namespace ownership rule
+// requires the defining plugin's name to match the namespace prefix. Until
+// that coupling is removed, any lifecycle-driver plugin must identify as
+// "core-lifecycle". Rename to "fixture-lifecycle" once #13 lands.
 export default {
   name: "core-lifecycle",
   apiVersion: "2",
