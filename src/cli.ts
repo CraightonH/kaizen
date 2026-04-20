@@ -220,6 +220,20 @@ if (subcommand === "marketplace") {
   const idIdx = rest.indexOf("--id");
   const id = idIdx >= 0 ? rest[idIdx + 1] : undefined;
 
+  if (sub === "create") {
+    const { runMarketplaceCreate } = await import("./commands/marketplace-create.js");
+    const targetPath = rawArgs[2] ?? ".";
+    const code = await runMarketplaceCreate(targetPath, { defaults: rawArgs.includes("--defaults") });
+    process.exit(code);
+  }
+
+  if (sub === "validate") {
+    const { runMarketplaceValidate } = await import("./commands/marketplace-validate.js");
+    const targetPath = rawArgs[2] ?? ".";
+    const code = await runMarketplaceValidate(targetPath);
+    process.exit(code);
+  }
+
   let code = 0;
   switch (sub) {
     case "add": {
@@ -248,7 +262,7 @@ if (subcommand === "marketplace") {
       break;
     }
     default:
-      console.error("Usage: kaizen marketplace {add|list|remove|update|browse} [args]");
+      console.error("Usage: kaizen marketplace {add|list|remove|update|browse|create|validate} [args]");
       code = 2;
   }
   process.exit(code);
@@ -356,6 +370,20 @@ if (subcommand === "plugin") {
     process.exit(code);
   }
 
+  if (pluginSub === "create") {
+    const { runPluginCreate } = await import("./commands/plugin-create.js");
+    const targetPath = name ?? ".";
+    const code = await runPluginCreate(targetPath, { defaults: rest.includes("--defaults") });
+    process.exit(code);
+  }
+
+  if (pluginSub === "validate") {
+    const { runPluginValidate } = await import("./commands/plugin-validate.js");
+    const targetPath = name ?? ".";
+    const code = await runPluginValidate(targetPath);
+    process.exit(code);
+  }
+
   switch (pluginSub) {
     case "install":
       cmdPluginInstall(rawArgs[2]);
@@ -367,7 +395,7 @@ if (subcommand === "plugin") {
       cmdPluginList(builtins);
       break;
     default:
-      console.error("Usage: kaizen plugin {install|remove|list|consent|review|audit|dev} [args]");
+      console.error("Usage: kaizen plugin {install|remove|list|consent|review|audit|dev|create|validate} [args]");
       process.exit(1);
   }
   process.exit(0);
