@@ -1,7 +1,7 @@
 # Design: Plugin Marketplace, Kaizen-Level Config & Install Rework
 
 Date: 2026-04-18
-Status: DRAFT
+Status: APPROVED
 Related:
 - `docs/architecture.md` (plugin resolution order, runtime layout)
 - `docs/plugin-security.md` (consent + lockfile — unchanged by this spec)

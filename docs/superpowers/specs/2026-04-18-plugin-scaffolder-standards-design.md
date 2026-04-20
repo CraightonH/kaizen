@@ -1,7 +1,7 @@
 # Design: Plugin & Marketplace Scaffolders + Coding Standards
 
 Date: 2026-04-18
-Status: DRAFT
+Status: APPROVED
 Related:
 - `docs/plugin-api.md` (the authoring reference this spec extends)
 - `docs/superpowers/specs/2026-04-18-plugin-marketplace-design.md` (Spec 1 — marketplace `entries[]` catalog shape; canonical refs; install layout)

@@ -1,7 +1,7 @@
 # Design: Unified Plugin Configuration & Pluggable Secrets
 
 Date: 2026-04-18
-Status: DRAFT
+Status: APPROVED
 Related:
 - `docs/plugin-api.md` (current `ctx.config` usage — this spec replaces that section)
 - `docs/superpowers/specs/2026-04-18-plugin-marketplace-design.md` (Spec 1 — consumes `kaizen-config.ts` module; marketplace-qualified refs)

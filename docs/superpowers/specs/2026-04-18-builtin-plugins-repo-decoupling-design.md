@@ -1,7 +1,7 @@
 # Design: Extract Plugins from Kaizen Binary
 
 Date: 2026-04-18
-Status: DRAFT
+Status: APPROVED
 Related:
 - `docs/architecture.md` (current built-in plugin layout)
 - `docs/superpowers/specs/2026-04-18-plugin-marketplace-design.md` (Spec 1 — marketplace format + install layout + runtime loader)
