@@ -342,6 +342,13 @@ export interface KaizenPlugin {
   /** semver. Core warns if major != PLUGIN_API_VERSION. */
   apiVersion: string;
 
+  /**
+   * True if this plugin drives the session loop. Core calls start() on the
+   * one plugin with lifecycle=true after bootstrap. Exactly one loaded
+   * plugin must declare this; zero or two+ is a fatal startup error.
+   */
+  lifecycle?: boolean;
+
   /** What this plugin provides and consumes in the capability registry. */
   capabilities?: PluginCapabilities;
 
