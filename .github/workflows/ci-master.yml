@@ -36,6 +36,8 @@ jobs:
       - run: bun run typecheck
       - run: bun test
       - run: bun run test:core
+      - name: Installer shell test
+        run: bash tests/install-sh-test.sh
 
   build:
     needs: test
