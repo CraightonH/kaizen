@@ -1,6 +1,7 @@
 import { readFileSync, existsSync, statSync, readdirSync } from "fs";
 import { join, relative, sep } from "path";
 import { createHash } from "crypto";
+import type { PluginPermissions } from "../types/plugin.js";
 
 /**
  * Hash a plugin package. Recursively walks the plugin directory, ignoring
@@ -18,6 +19,35 @@ export function computePluginHash(pluginDir: string): string {
     hash.update("\0");
   }
   return `sha256:${hash.digest("hex")}`;
+}
+
+/**
+ * SHA-256 of a canonical serialization of { tier, permissions-minus-tier }:
+ * object keys sorted; arrays sorted. Any change (value, presence, tier) flips
+ * the hash. Silent updates only apply when hash is byte-equal.
+ */
+export function canonicalTierGrantHash(perms: PluginPermissions): string {
+  const canon = canonicalize({
+    tier: perms.tier ?? "trusted",
+    permissions: stripTier(perms),
+  });
+  return "sha256:" + createHash("sha256").update(canon).digest("hex");
+}
+
+function stripTier(p: PluginPermissions): Omit<PluginPermissions, "tier"> {
+  const { tier: _tier, ...rest } = p;
+  return rest;
+}
+
+function canonicalize(v: unknown): string {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) {
+    const sorted = [...v].map(canonicalize).sort();
+    return "[" + sorted.join(",") + "]";
+  }
+  const obj = v as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalize(obj[k])).join(",") + "}";
 }
 
 function collectFiles(dir: string): string[] {

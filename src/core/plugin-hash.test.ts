@@ -1,8 +1,9 @@
-import { describe, test, expect, afterEach } from "bun:test";
+import { describe, test, expect, afterEach, it } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { computePluginHash } from "./plugin-hash.js";
+import { computePluginHash, canonicalTierGrantHash } from "./plugin-hash.js";
+import type { PluginPermissions } from "../types/plugin.js";
 
 describe("computePluginHash", () => {
   let dir: string;
@@ -42,5 +43,51 @@ describe("computePluginHash", () => {
     writeFileSync(join(dir, "node_modules", "foo", "index.js"), "lots of data");
     const h2 = computePluginHash(dir);
     expect(h1).toBe(h2);
+  });
+});
+
+describe("canonicalTierGrantHash", () => {
+  const base: PluginPermissions = {
+    tier: "scoped",
+    fs: { read: ["a", "b"], write: ["c"] },
+    net: { connect: ["x:1", "y:2"] },
+    env: ["HOME"],
+    exec: { binaries: ["git"] },
+    events: { subscribe: ["core-lifecycle:tool:before"] },
+  };
+
+  it("is stable under key reorder", () => {
+    const reordered: PluginPermissions = {
+      exec: { binaries: ["git"] },
+      events: { subscribe: ["core-lifecycle:tool:before"] },
+      env: ["HOME"],
+      net: { connect: ["x:1", "y:2"] },
+      fs: { write: ["c"], read: ["a", "b"] },
+      tier: "scoped",
+    };
+    expect(canonicalTierGrantHash(reordered)).toBe(canonicalTierGrantHash(base));
+  });
+
+  it("is stable under array reorder", () => {
+    const shuffled: PluginPermissions = {
+      ...base,
+      fs: { read: ["b", "a"], write: ["c"] },
+      net: { connect: ["y:2", "x:1"] },
+    };
+    expect(canonicalTierGrantHash(shuffled)).toBe(canonicalTierGrantHash(base));
+  });
+
+  it("changes when tier changes", () => {
+    expect(canonicalTierGrantHash({ ...base, tier: "trusted" }))
+      .not.toBe(canonicalTierGrantHash(base));
+  });
+
+  it("changes when a grant value changes", () => {
+    expect(canonicalTierGrantHash({ ...base, env: ["HOME", "USER"] }))
+      .not.toBe(canonicalTierGrantHash(base));
+  });
+
+  it("returns sha256:<64-hex>", () => {
+    expect(canonicalTierGrantHash(base)).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 });

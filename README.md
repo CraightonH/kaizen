@@ -75,6 +75,32 @@ Review and paste into your plugin's default export.
 - `kaizen plugin audit` — list lockfile entries; flag UNSCOPED.
 - `kaizen plugin dev --observe <dir>` — record operations, generate proposed manifest.
 
+### Marketplace & plugin management
+
+```bash
+# Marketplace management
+kaizen marketplace add <url> [--id <id>]   # Register a git-backed marketplace
+kaizen marketplace list                     # List registered marketplaces
+kaizen marketplace remove <id>             # Remove a marketplace
+kaizen marketplace update [<id>]           # Pull latest catalog from upstream
+kaizen marketplace browse [<id>]           # Browse available plugins
+
+# Plugin install / manage
+kaizen install <ref>                        # Install a plugin by ref
+kaizen uninstall <ref> [--purge]           # Remove from harness config (--purge clears bits + lockfile)
+kaizen update [<ref>]                       # Update plugins (silent when permissions unchanged)
+
+# Ref forms
+#   official/timestamps@1.2.3              marketplace-qualified (recommended)
+#   timestamps@1.2.3                       shorthand (errors if ambiguous)
+#   timestamps                             shorthand, resolves latest
+#
+# Raw URLs are rejected — publish harnesses in a marketplace instead.
+
+# Run with a marketplace harness
+kaizen --harness official/anthropic-default@1.0.0
+```
+
 ### CLI flags
 
 - `--trust-lockfile` — use the existing lockfile for consent; do not prompt.
@@ -83,10 +109,3 @@ Review and paste into your plugin's default export.
 - `KAIZEN_SANDBOX_MODE=log-only` — run the enforcer in log-only mode (records
   denials to the audit log but does not throw). Escape hatch; not for
   production.
-
-### Adversarial review
-
-This security model addresses findings 2, 3, 4, 7, 11, 13, and 17 (partial) from
-[`docs/adversarial-review.md`](./docs/adversarial-review.md). Findings 5, 6, 8,
-9, 10, 12, 14, 18, 19, and 20 are out of scope for this effort and tracked
-separately.

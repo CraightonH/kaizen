@@ -161,6 +161,12 @@ export function cmdPluginInstall(pkgArg: string | undefined): void {
     process.exit(1);
   }
 
+  console.warn("note: 'kaizen plugin install' is deprecated. Use 'kaizen install <ref>'.");
+
+  if (pkgArg.startsWith("kaizen-plugin-")) {
+    console.warn(`legacy plugin name '${pkgArg}' — auto-resolving against 'official' marketplace (deprecated, remove before v-next)`);
+  }
+
   console.log(`Installing ${pkgArg}...\n`);
   const ok = npmInstallToHome(pkgArg);
   if (!ok) {
@@ -205,6 +211,8 @@ export function cmdPluginRemove(nameArg: string | undefined, uninstall: boolean)
     console.error("Usage: kaizen plugin remove <plugin-name> [--uninstall]");
     process.exit(1);
   }
+
+  console.warn("note: 'kaizen plugin remove' is deprecated. Use 'kaizen uninstall <ref>'.");
 
   if (findProjectConfig()) {
     const config = readLocalConfig();
