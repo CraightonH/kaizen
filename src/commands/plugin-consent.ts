@@ -1,5 +1,12 @@
-import { runInstall, type InstallArgs } from "./install.js";
+import { runInstall } from "./install.js";
 import { readLockfile, removePluginEntry, writeLockfile } from "../core/lockfile.js";
+
+export interface InstallArgs {
+  pluginName: string;
+  lockfilePath: string;
+  allowUnscoped: boolean;
+  nonInteractive: boolean;
+}
 
 /**
  * Force re-consent for a plugin. Removes any existing lockfile entry, then

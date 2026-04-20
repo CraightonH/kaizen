@@ -1,104 +1,132 @@
-import { createRequire } from "module";
-import { dirname, join } from "path";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync, writeFileSync } from "fs";
+import { join } from "path";
+import type { PluginPermissions, MarketplaceCatalog } from "../types/plugin.js";
+import { parseRef, resolveRef } from "../core/ref-resolver.js";
+import { loadKaizenGlobalConfig } from "../core/kaizen-config.js";
+import { readCatalog } from "../core/marketplace.js";
+import { installPlugin, installHarness } from "../core/plugin-installer.js";
+import { loadPluginFromInstallDir } from "../core/plugin-loader.js";
+import { pluginInstallDir } from "../core/kaizen-config.js";
 import { readLockfile, writeLockfile, upsertPluginEntry, type LockfileEntry } from "../core/lockfile.js";
-import { computePluginHash } from "../core/plugin-hash.js";
+import { canonicalTierGrantHash } from "../core/plugin-hash.js";
 import { renderScopedUAC, renderUnscopedUAC } from "../core/uac-renderer.js";
 import { decideConsent } from "../core/consent-flow.js";
 import { readStdinLine } from "../core/stdin.js";
-import type { KaizenPlugin, PluginPermissions } from "../types/plugin.js";
+import { PROJECT_CONFIG } from "../core/config.js";
 
-export interface InstallArgs {
-  pluginName: string;
+export interface UnifiedInstallArgs {
+  ref: string;
   lockfilePath: string;
   allowUnscoped: boolean;
   nonInteractive: boolean;
 }
 
-export async function runInstall(args: InstallArgs): Promise<number> {
-  const pluginDir = resolvePluginDir(args.pluginName);
-  if (!pluginDir) {
-    console.error(`kaizen install: could not resolve plugin '${args.pluginName}'.`);
-    return 1;
+export async function runUnifiedInstall(args: UnifiedInstallArgs): Promise<number> {
+  const parsed = parseRef(args.ref);
+  const catalogs = await loadAllCatalogs();
+  const resolved = resolveRef(parsed, catalogs);
+
+  if (resolved.entry.kind === "harness") {
+    const hv = resolved.entry.versions.find((v) => v.version === resolved.version)!;
+    await installHarness(resolved.marketplaceId, resolved.entry.name, hv.path);
+    console.log(`installed harness ${resolved.marketplaceId}/${resolved.entry.name}@${resolved.version}`);
+    return 0;
   }
 
-  const pkg = JSON.parse(readFileSync(join(pluginDir, "package.json"), "utf8")) as { version?: string; main?: string };
-  const version = pkg.version ?? "unknown";
-  const hash = computePluginHash(pluginDir);
+  // plugin
+  const pv = resolved.pluginVersion!;
+  await installPlugin(resolved.marketplaceId, resolved.entry.name, resolved.version, pv.source);
 
-  const req = createRequire(process.execPath);
-  const mod = req(pluginDir) as { default?: KaizenPlugin };
-  const plugin = mod.default;
-  if (!plugin || typeof plugin !== "object") {
-    console.error(`kaizen install: plugin '${args.pluginName}' has no default export.`);
-    return 1;
-  }
+  const dir = pluginInstallDir(resolved.marketplaceId, resolved.entry.name, resolved.version);
+  const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { version?: string };
+  const version = pkg.version ?? resolved.version;
+  const plugin = await loadPluginFromInstallDir(resolved.marketplaceId, resolved.entry.name, resolved.version);
   const permissions: PluginPermissions = plugin.permissions ?? { tier: "trusted" };
+  const hash = canonicalTierGrantHash(permissions);
 
   const lockfile = readLockfile(args.lockfilePath);
   const decision = decideConsent({
-    pluginName: args.pluginName,
-    version,
-    hash,
-    permissions,
-    lockfile,
+    pluginName: resolved.entry.name,
+    version, hash, permissions, lockfile,
     interactive: !args.nonInteractive && process.stdin.isTTY === true,
     allowUnscoped: args.allowUnscoped,
   });
 
+  const canonical = `${resolved.marketplaceId}/${resolved.entry.name}@${resolved.version}`;
+
   switch (decision.kind) {
     case "accept":
-      console.log(`kaizen install: plugin '${args.pluginName}' already in lockfile (no changes).`);
+      console.log(`plugin '${resolved.entry.name}' already in lockfile (no changes).`);
+      await maybeAppendProjectPlugin(canonical);
       return 0;
 
     case "accept-and-record": {
-      const updated = upsertPluginEntry(lockfile, args.pluginName, decision.entry);
-      writeLockfile(args.lockfilePath, updated);
-      console.log(`kaizen install: plugin '${args.pluginName}' recorded (tier: ${decision.entry.tier}).`);
+      writeLockfile(args.lockfilePath, upsertPluginEntry(lockfile, resolved.entry.name, decision.entry));
+      await maybeAppendProjectPlugin(canonical);
+      console.log(`plugin '${resolved.entry.name}' recorded (tier: ${decision.entry.tier}).`);
       return 0;
     }
 
     case "prompt-scoped": {
-      const source = `npm:${args.pluginName}@${version}`;
-      process.stdout.write(renderScopedUAC({ pluginName: args.pluginName, version, source, permissions }) + "\n> ");
+      const source = `${resolved.marketplaceId}:${resolved.entry.name}@${version}`;
+      process.stdout.write(renderScopedUAC({ pluginName: resolved.entry.name, version, source, permissions }) + "\n> ");
       const answer = (await readStdinLine()).trim().toLowerCase();
       if (answer === "a" || answer === "accept") {
-        const updated = upsertPluginEntry(lockfile, args.pluginName, decision.entry);
-        writeLockfile(args.lockfilePath, updated);
-        console.log(`kaizen install: plugin '${args.pluginName}' accepted and recorded.`);
+        writeLockfile(args.lockfilePath, upsertPluginEntry(lockfile, resolved.entry.name, decision.entry));
+        await maybeAppendProjectPlugin(canonical);
+        console.log(`plugin '${resolved.entry.name}' accepted and recorded.`);
         return 0;
       }
-      console.log(`kaizen install: plugin '${args.pluginName}' rejected.`);
+      console.log(`plugin '${resolved.entry.name}' rejected.`);
       return 1;
     }
 
     case "prompt-unscoped": {
-      const source = `npm:${args.pluginName}@${version}`;
-      process.stdout.write(renderUnscopedUAC({ pluginName: args.pluginName, version, source, permissions }) + "\n> ");
+      const source = `${resolved.marketplaceId}:${resolved.entry.name}@${version}`;
+      process.stdout.write(renderUnscopedUAC({ pluginName: resolved.entry.name, version, source, permissions }) + "\n> ");
       const typed = (await readStdinLine()).trim();
-      if (typed !== args.pluginName) {
-        console.log(`kaizen install: plugin '${args.pluginName}' rejected (confirmation did not match).`);
+      if (typed !== resolved.entry.name) {
+        console.log(`plugin '${resolved.entry.name}' rejected (confirmation did not match).`);
         return 1;
       }
       const entry: LockfileEntry = { ...decision.entry, consentMode: "interactive" };
-      const updated = upsertPluginEntry(lockfile, args.pluginName, entry);
-      writeLockfile(args.lockfilePath, updated);
-      console.log(`kaizen install: plugin '${args.pluginName}' accepted as UNSCOPED and recorded.`);
+      writeLockfile(args.lockfilePath, upsertPluginEntry(lockfile, resolved.entry.name, entry));
+      await maybeAppendProjectPlugin(canonical);
+      console.log(`plugin '${resolved.entry.name}' accepted as UNSCOPED and recorded.`);
       return 0;
     }
 
     case "refuse":
-      console.error(`kaizen install: refused. ${decision.reason}`);
+      console.error(`install refused: ${decision.reason}`);
       return 1;
   }
 }
 
-function resolvePluginDir(name: string): string | null {
-  const req = createRequire(process.execPath);
-  try {
-    const resolved = req.resolve(name);
-    return dirname(resolved);
-  } catch {
-    return null;
+async function loadAllCatalogs(): Promise<Record<string, MarketplaceCatalog>> {
+  const cfg = await loadKaizenGlobalConfig();
+  const out: Record<string, MarketplaceCatalog> = {};
+  for (const ref of cfg.marketplaces ?? []) {
+    try { out[ref.id] = await readCatalog(ref.id); } catch { /* skip bad */ }
   }
+  return out;
+}
+
+async function maybeAppendProjectPlugin(canonicalRef: string): Promise<void> {
+  if (!existsSync(PROJECT_CONFIG)) return;
+  const cfg = JSON.parse(readFileSync(PROJECT_CONFIG, "utf8")) as { plugins?: string[] };
+  cfg.plugins ??= [];
+  if (!cfg.plugins.includes(canonicalRef)) {
+    cfg.plugins.push(canonicalRef);
+    writeFileSync(PROJECT_CONFIG, JSON.stringify(cfg, null, 2) + "\n", "utf8");
+  }
+}
+
+/** @deprecated use runUnifiedInstall. Retained for one release for cli.ts callers. */
+export async function runInstall(args: { pluginName: string; lockfilePath: string; allowUnscoped: boolean; nonInteractive: boolean }): Promise<number> {
+  return runUnifiedInstall({
+    ref: args.pluginName,
+    lockfilePath: args.lockfilePath,
+    allowUnscoped: args.allowUnscoped,
+    nonInteractive: args.nonInteractive,
+  });
 }
