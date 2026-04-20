@@ -1,6 +1,6 @@
 # Plugin Host-API Resolution — Design
 
-**Status:** Draft
+**Status:** APPROVED
 **Spec Date:** 2026-04-20
 **Author:** Craighton Hancock + Claude
 
