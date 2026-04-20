@@ -447,12 +447,28 @@ export class PluginManager {
       if (!claimedKeys.has(key)) warn(`Unknown config key '${key}'. No plugin claimed it.`);
     }
 
-    // Resolve lifecycle provider — sole provider of core-lifecycle:lifecycle.drive
-    const lifeProviders = this.capabilityRegistry.providersOf("core-lifecycle:lifecycle.drive");
-    if (lifeProviders.length === 0) fatal("No lifecycle plugin found. Add one to kaizen.json.");
-    const lifecycleProvider = this.plugins.get(lifeProviders[0]!)?.plugin;
+    // Resolve lifecycle provider — the one plugin with `lifecycle: true`.
+    // Core's single cross-plugin contract: call start() on the session driver.
+    const lifecyclePluginNames: string[] = [];
+    for (const [name, entry] of this.plugins) {
+      if (entry.plugin.lifecycle === true && entry.entry.status === "loaded") {
+        lifecyclePluginNames.push(name);
+      }
+    }
+    if (lifecyclePluginNames.length === 0) {
+      fatal("No lifecycle plugin found. A plugin with 'lifecycle: true' must be loaded. Add one to kaizen.json.");
+    }
+    if (lifecyclePluginNames.length > 1) {
+      const quoted = lifecyclePluginNames.map((n) => `'${n}'`).join(", ");
+      fatal(
+        `Multiple lifecycle plugins loaded: ${quoted}. ` +
+        `A harness may have exactly one plugin with 'lifecycle: true'. Remove one from your kaizen.json.`,
+      );
+    }
+    const lifecycleName = lifecyclePluginNames[0]!;
+    const lifecycleProvider = this.plugins.get(lifecycleName)?.plugin;
     if (!lifecycleProvider || typeof lifecycleProvider.start !== "function") {
-      fatal("No lifecycle plugin found. Add one to kaizen.json.");
+      fatal(`Plugin '${lifecycleName}' declares 'lifecycle: true' but does not export a start() function.`);
     }
 
     return { lifecycleProvider: lifecycleProvider! };

@@ -172,6 +172,29 @@ describe("PluginManager.initialize", () => {
     );
     await expect(manager.initialize()).rejects.toThrow(/provides critical capability.*boom/i);
   });
+
+  test("finds session driver via lifecycle:true flag — no capability required", async () => {
+    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    executorRegistry.register(stubExecutor, "test-exec");
+    uiRegistry.register(stubUi, "test-ui");
+
+    const driver: KaizenPlugin = {
+      name: "fixture-lifecycle",
+      apiVersion: "2",
+      lifecycle: true,
+      async setup() {},
+      async start() {},
+    };
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: ["fixture-lifecycle"] }, { "fixture-lifecycle": driver },
+      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+    const { lifecycleProvider } = await manager.initialize();
+    expect(lifecycleProvider.name).toBe("fixture-lifecycle");
+  });
 });
 
 describe("PluginManager.load + unload + reload", () => {
