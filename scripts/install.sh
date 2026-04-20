@@ -37,15 +37,15 @@ detect_platform() {
   case "$os" in
     Linux)
       case "$arch" in
-        x86_64)  echo "bun-linux-x64" ;;
-        aarch64) echo "bun-linux-arm64" ;;
+        x86_64)  echo "kaizen-linux-x64" ;;
+        aarch64) echo "kaizen-linux-arm64" ;;
         *) die "unsupported Linux architecture: $arch" ;;
       esac
       ;;
     Darwin)
       case "$arch" in
-        x86_64)  echo "bun-darwin-x64" ;;
-        arm64)   echo "bun-darwin-arm64" ;;
+        x86_64)  echo "kaizen-darwin-x64" ;;
+        arm64)   echo "kaizen-darwin-arm64" ;;
         *) die "unsupported macOS architecture: $arch" ;;
       esac
       ;;
@@ -68,6 +68,58 @@ download() {
   fi
 }
 
+verify_checksum() {
+  local file="$1" sums="$2" name="$3"
+  local expected actual
+  expected="$(grep " ${name}$" "$sums" | awk '{print $1}')"
+  [ -n "$expected" ] || die "no checksum for ${name} in SHA256SUMS"
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "$file" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    actual="$(shasum -a 256 "$file" | awk '{print $1}')"
+  else
+    die "neither sha256sum nor shasum found"
+  fi
+  [ "$expected" = "$actual" ] || die "checksum mismatch for ${name} (expected ${expected}, got ${actual})"
+}
+
+# Register the official marketplace and install the default harness. Plugin
+# resolution is deferred to the binary — kaizen auto-installs a harness's
+# plugins on first run via src/core/bootstrap.ts. Each step is best-effort:
+# failures warn and continue, never abort the installer.
+#
+# Opt out by setting KAIZEN_NO_BOOTSTRAP=1 or passing --no-bootstrap.
+bootstrap() {
+  if [ "${KAIZEN_NO_BOOTSTRAP:-0}" = "1" ]; then
+    info "Skipping bootstrap (KAIZEN_NO_BOOTSTRAP=1)."
+    return 0
+  fi
+
+  if ! command -v git >/dev/null 2>&1; then
+    red "  ! git not found on PATH; skipping marketplace bootstrap."
+    info "    Install git and run: kaizen marketplace add https://github.com/CraightonH/kaizen-official-plugins.git --id official"
+    return 0
+  fi
+
+  local market_url="https://github.com/CraightonH/kaizen-official-plugins.git"
+  info "Registering marketplace 'official'..."
+  if kaizen marketplace add "$market_url" --id official; then
+    green "  ✓ marketplace 'official' registered"
+  else
+    red "  ! marketplace add failed; run manually: kaizen marketplace add $market_url --id official"
+    return 0
+  fi
+
+  local default_harness="official/core-shell@1.0.0"
+  info "Installing default harness ${default_harness}..."
+  if kaizen install "$default_harness"; then
+    green "  ✓ ${default_harness} installed"
+  else
+    red "  ! harness install failed; run manually: kaizen install $default_harness"
+    return 0
+  fi
+}
+
 latest_release_tag() {
   local api_url="https://api.github.com/repos/${REPO}/releases/latest"
   local tag
@@ -85,10 +137,16 @@ latest_release_tag() {
 # ---------------------------------------------------------------------------
 
 main() {
+  # Parse --no-bootstrap flag; everything else is ignored.
+  for arg in "$@"; do
+    case "$arg" in
+      --no-bootstrap) KAIZEN_NO_BOOTSTRAP=1 ;;
+    esac
+  done
+
   bold "kaizen installer"
   echo ""
 
-  # Allow pinning a version via env
   local version="${VERSION:-}"
   if [ -z "$version" ]; then
     info "Fetching latest release..."
@@ -96,34 +154,37 @@ main() {
   fi
   info "Version: $version"
 
-  local platform
-  platform="$(detect_platform)"
-  info "Platform: $platform"
+  local asset_name
+  asset_name="$(detect_platform)"
+  info "Asset:   $asset_name"
 
-  # Build download URL (adjust to your release asset naming convention)
-  local asset_name="${BINARY}-${version}-${platform}"
-  local download_url="https://github.com/${REPO}/releases/download/${version}/${asset_name}"
+  local base_url="https://github.com/${REPO}/releases/download/${version}"
 
-  # Temp dir
   local tmpdir
   tmpdir="$(mktemp -d)"
   trap 'rm -rf "$tmpdir"' EXIT
 
   info "Downloading ${asset_name}..."
-  download "$download_url" "${tmpdir}/${BINARY}"
-  chmod +x "${tmpdir}/${BINARY}"
+  download "${base_url}/${asset_name}" "${tmpdir}/${asset_name}"
 
-  # Install binary
+  info "Downloading SHA256SUMS..."
+  download "${base_url}/SHA256SUMS" "${tmpdir}/SHA256SUMS"
+
+  info "Verifying checksum..."
+  verify_checksum "${tmpdir}/${asset_name}" "${tmpdir}/SHA256SUMS" "${asset_name}"
+  green "  ✓ Checksum OK"
+
+  chmod +x "${tmpdir}/${asset_name}"
+
   if [ -w "$INSTALL_DIR" ]; then
-    mv "${tmpdir}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+    mv "${tmpdir}/${asset_name}" "${INSTALL_DIR}/${BINARY}"
   else
     info "Requesting sudo to install to ${INSTALL_DIR}..."
-    sudo mv "${tmpdir}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+    sudo mv "${tmpdir}/${asset_name}" "${INSTALL_DIR}/${BINARY}"
   fi
 
   green "  ✓ Installed ${BINARY} → ${INSTALL_DIR}/${BINARY}"
 
-  # Initialize global kaizen home if missing
   local global_config="${KAIZEN_HOME}/kaizen.json"
   if [ ! -f "$global_config" ]; then
     info "Setting up ~/.kaizen/..."
@@ -135,15 +196,21 @@ main() {
   fi
 
   echo ""
+  bootstrap
+
+  echo ""
   bold "Done!"
   echo ""
   info "Quick start:"
-  info "  kaizen --harness core-anthropic          # use built-in Anthropic harness"
-  info "  kaizen init                              # create .kaizen/kaizen.json in current project"
-  info "  kaizen install <harness-url-or-name>     # extend a harness"
-  info "  kaizen plugin install <npm-package>      # add a plugin"
+  info "  kaizen --harness official/core-shell@1.0.0   # default shell harness (installed)"
+  info "  kaizen marketplace list                      # see registered marketplaces"
+  info "  kaizen install <ref>                         # install another plugin or harness"
   echo ""
-  info "ANTHROPIC_API_KEY must be set for core-anthropic harness."
+  info "On first --harness run, kaizen prompts for consent on each plugin."
 }
 
-main "$@"
+# Only run main if the script is executed directly, not sourced. Lets tests
+# source the file to unit-test individual helpers.
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+  main "$@"
+fi
