@@ -4,6 +4,9 @@
   "description": "Platform for LLM harnesses",
   "type": "module",
   "module": "src/cli.ts",
+  "exports": {
+    "./types": "./src/types/plugin.ts"
+  },
   "scripts": {
     "build": "bun build --compile --target=bun-linux-x64 ./src/cli.ts --outfile kaizen",
     "build:all": "scripts/build-all.sh",
@@ -13,9 +16,6 @@
     "spike": "bun build --compile src/spike/loader-probe.ts --outfile /tmp/kaizen-probe && echo 'Binary built — running probe...' && /tmp/kaizen-probe",
     "test:core": "bun scripts/test-core.ts"
   },
-  "workspaces": [
-    "plugins/*"
-  ],
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.4.0"
@@ -25,17 +25,6 @@
     "@ai-sdk/openai": "^3.0.50",
     "ai": "^6.0.146",
     "ajv": "^8.18.0",
-    "core-cli": "workspace:*",
-    "core-events": "workspace:*",
-    "core-secrets": "workspace:*",
-    "core-executor-anthropic": "workspace:*",
-    "core-executor-debug": "workspace:*",
-    "core-executor-openai": "workspace:*",
-    "core-executor-shell": "workspace:*",
-    "core-lifecycle": "workspace:*",
-    "core-plugin-manager": "workspace:*",
-    "core-ui-terminal": "workspace:*",
-    "kaizen-plugin-timestamps": "workspace:*",
     "yaml": "^2.8.3"
   }
 }

@@ -4,7 +4,7 @@ import { validateConfig } from "../config-validator.js";
 import { SecretsRegistry, createSecretsContext } from "../secrets.js";
 import type { SecretRef, StructuredSecretRef, PluginConfigDeclaration } from "../../types/plugin.js";
 import type { SecretProvider } from "../secret-providers/types.js";
-import { fileProvider } from "../../../plugins/core-secrets/file-fallback.js";
+import { fileProvider } from "../secret-providers/file-fallback.js";
 
 describe("Plugin Config Integration Tests", () => {
   // ============================================================================

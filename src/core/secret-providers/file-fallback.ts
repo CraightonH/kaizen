@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import type { SecretProvider } from "../../src/core/secret-providers/types.js";
+import type { SecretProvider } from "./types.js";
 
 const credentialsPath = join(homedir(), ".kaizen", ".credentials.json");
 
@@ -36,7 +36,6 @@ export const fileProvider: SecretProvider = {
   },
 
   async prefetch(_refs: string[]): Promise<void> {
-    // Pre-load JSON once — readCredentials caches nothing, just reads on demand.
-    // No-op for now; file reads are cheap.
+    // no-op
   },
 };

@@ -1,115 +1,84 @@
-# Plugin Loading Internals
+# Plugin Loading
 
-How kaizen resolves and loads plugins from a compiled Bun binary.
+How kaizen resolves and loads plugins at session start.
+
 Relevant to anyone working on `src/core/` or debugging plugin load failures.
 
-## The core problem
+## The model
 
-Inside a compiled Bun binary, `import.meta.url` resolves to `/$bunfs/root/<binary-name>` —
-Bun's virtual filesystem. `createRequire(import.meta.url)` cannot traverse the real
-filesystem from there, so `require.resolve()` fails for any installed package.
+kaizen ships with zero plugins. Every plugin — including the first-party core
+stack — reaches a session through the **marketplace install path**. A plugin ref
+in `kaizen.json` is either:
 
-**Fix:** anchor `createRequire` to `process.execPath` (always a real on-disk path) and
-pass explicit resolution paths derived from the known global/local roots.
+- **Canonical:** `<marketplace>/<name>@<version>` — the only form shipped
+  harnesses use. Resolves against installed marketplaces only.
+- **Legacy bare name:** resolved through fallback directories for authored
+  plugins and npm installs.
 
-```typescript
-import { createRequire } from "module";
+## The core problem (compiled binary)
 
-const require = createRequire(process.execPath);
-const resolved = require.resolve("kaizen-plugin-foo", { paths: resolvePaths });
-const plugin = await import(resolved); // import() with absolute path works fine
+Inside a compiled Bun binary, `import.meta.url` resolves to
+`/$bunfs/root/<binary-name>` — Bun's virtual filesystem.
+`createRequire(import.meta.url)` cannot traverse the real filesystem from there,
+so `require.resolve()` fails for any installed package.
+
+**Fix:** anchor `createRequire` to `process.execPath` (always a real on-disk
+path) and pass explicit resolution paths derived from the known global/local
+roots. See `src/core/plugin-manager.ts::RESOLVE_PATHS`.
+
+## Loader flow (canonical ref)
+
 ```
-
-Validated in `src/spike/loader-probe.ts`.
-
-## Resolution path order
-
-```typescript
-const resolvePaths = [
-  getBunGlobalRoot(),    // ~/.bun/install/global/node_modules  (primary)
-  getNpmGlobalRoot(),    // npm root -g                         (fallback)
-  cwd + "/node_modules", // project-local install
-];
+harness → <id>/<name>@<version>
+   │
+   ▼
+ref-resolver.ts       parseRef + resolveRef against read catalogs
+   │
+   ▼
+plugin-installer.ts   installPlugin(id, name, version, source)
+                      → ~/.kaizen/marketplaces/<id>/plugins/<name>@<version>/
+   │
+   ▼
+plugin-loader.ts      loadPluginFromInstallDir(id, name, version)
+                      → await import(<install-dir>/index.ts)
+                      → returns the default export (a KaizenPlugin)
 ```
-
-`getBunGlobalRoot()` parses the first line of `bun pm ls --global`.
-`getNpmGlobalRoot()` calls `npm root -g`. Both have a 5-second timeout; failures return `""`.
-
-Plugins referenced by path (`./my-plugin`, `/absolute/path`) bypass this lookup —
-`require.resolve()` is called directly on the path.
-
-## How deps resolve at runtime
-
-When kaizen calls `import(resolvedAbsolutePath)` and the plugin does its own imports
-(`import foo from 'some-dep'`), Node/Bun resolves deps by walking up the directory tree
-from the plugin file's location looking for `node_modules/`.
-
-**Globally installed plugin** (`bun add --global kaizen-plugin-foo`):
-- Plugin lands at `~/.bun/install/global/node_modules/kaizen-plugin-foo/index.js`
-- Deps are colocated: `~/.bun/install/global/node_modules/some-dep/`
-- Upward traversal from plugin file finds them immediately — works automatically
-
-**Locally installed plugin** (`"plugins": ["./my-plugin"]` in kaizen.json):
-- Plugin is loaded from its absolute path on disk
-- Deps must be present in the plugin's own `node_modules/` (`bun install` inside the plugin dir)
-- Upward traversal from plugin file finds `./my-plugin/node_modules/some-dep/` — works
 
 ## Plugin package requirements
-
-A plugin package must:
 
 ```json
 {
   "type": "module",
-  "exports": { ".": "./index.js" }
+  "exports": { ".": "./index.ts" },
+  "keywords": ["kaizen-plugin"],
+  "peerDependencies": { "kaizen": "*" }
 }
 ```
 
-- `"type": "module"` — kaizen plugins are ESM
-- `"exports"` field — kaizen uses this for resolution; `"main"` alone is not sufficient
-- Default export must satisfy the `KaizenPlugin` shape (`name`, `apiVersion`, `setup`)
+- `"type": "module"` — kaizen plugins are ESM.
+- `"exports"` field — kaizen uses this for resolution; `"main"` alone is not
+  sufficient.
+- Default export must satisfy the `KaizenPlugin` shape (`name`, `apiVersion`,
+  `setup`).
+- `"keywords": ["kaizen-plugin"]` — required by `kaizen plugin validate`.
+- `peerDependencies.kaizen: "*"` — plugin imports its types from
+  `kaizen/types`.
 
-No special build step required. Bun loads TypeScript directly during development;
-published plugins should ship compiled JS.
+Authoritative rules live in `docs/plugin-standards.md`.
 
-## Development workflow for plugin authors
+## Dep resolution at runtime
 
-```
-my-plugin/
-  package.json   # type: module, exports, name matches plugin.name
-  index.ts       # default export: KaizenPlugin
-  node_modules/  # run `bun install` — required for dep resolution at runtime
-```
+When kaizen calls `import(<install-dir>/index.ts)` and the plugin does its own
+imports (`import foo from 'some-dep'`), Node/Bun resolves deps by walking up
+the directory tree from the plugin file's location looking for `node_modules/`.
 
-Reference in `kaizen.json`:
-```json
-{
-  "plugins": ["./my-plugin"]
-}
-```
-
-The plugin is loaded from its absolute path. **`bun install` must have been run inside
-the plugin directory** — deps will not be found otherwise (there is no parent
-`node_modules/` to fall back to when loading a local-path plugin).
-
-## Known limitation: `bun add --global <local-path>` installs symlinks
-
-When you run `bun add --global ./my-plugin`, Bun installs symlinks into global
-`node_modules/`, not copies. `require.resolve()` follows the symlink and returns
-the real path, so dep resolution falls back to the plugin's source directory — same
-behavior as the local-path case above. Run `bun install` inside the plugin directory.
-
-This only affects local development. Published plugins installed from the npm registry
-are always copied, not symlinked.
+For a plugin installed from a `file:` source, `cpSync` copies the plugin
+directory into the install tree. The plugin's own `node_modules/` must be
+installed (the installer is responsible for this step when fetching from npm
+or tarball sources; file sources rely on the marketplace checkout already
+having deps present).
 
 ## Spike
 
-`src/spike/loader-probe.ts` validates all of the above from an actual compiled binary.
-Run it with:
-
-```bash
-bun add --global is-odd   # probe dependency
-bun run spike
-```
-
-Expected output: 4 passed, 0 failed.
+`src/spike/loader-probe.ts` validates the compiled-binary resolution pipeline.
+Run with `bun run spike`.
