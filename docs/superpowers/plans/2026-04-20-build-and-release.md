@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add three GitHub Actions workflows (PR, master, release) and align `scripts/install.sh` with the release asset conventions defined in the spec.
+**Goal:** Add three GitHub Actions workflows (PR, master, release), align `scripts/install.sh` with the release asset conventions, and add first-run marketplace + harness bootstrap to the installer.
 
-**Architecture:** Workflows gate on a shared path filter so docs-only changes skip CI. PR runs a fast single-target check; master runs the same check plus a five-target matrix compile; `v*` tags trigger a matrix build + `gh release create` with binaries, `SHA256SUMS`, and `install.sh`. The installer learns to verify against the new checksum manifest and uses the new asset naming.
+**Architecture:** Workflows gate on a shared path filter so docs-only changes skip CI. PR runs a fast single-target check; master runs the same check plus a four-target matrix compile (Unix only — macOS + Linux, x64 + arm64); `v*` tags trigger a matrix build + `gh release create` with binaries, `SHA256SUMS`, and `install.sh`. The installer learns to verify against the new checksum manifest and uses the new asset naming.
 
 **Tech Stack:** GitHub Actions, Bun (`bun build --compile`), Bash, `gh` CLI.
 
@@ -15,10 +15,10 @@
 ## File Structure
 
 - Create: `.github/workflows/ci-pr.yml` — PR checks (typecheck, unit, core, single-target compile).
-- Create: `.github/workflows/ci-master.yml` — master integration: PR suite + 5-target matrix compile.
-- Create: `.github/workflows/release.yml` — tag-triggered 5-target matrix + GitHub Release.
-- Modify: `scripts/install.sh` — update asset naming (`kaizen-<os>-<arch>`), download `SHA256SUMS`, verify checksum before install.
-- Create: `tests/install-sh-test.sh` — shell test covering platform detection, asset naming, checksum verification.
+- Create: `.github/workflows/ci-master.yml` — master integration: PR suite + 4-target matrix compile.
+- Create: `.github/workflows/release.yml` — tag-triggered 4-target matrix + GitHub Release.
+- Modify: `scripts/install.sh` — update asset naming (`kaizen-<os>-<arch>`), download `SHA256SUMS`, verify checksum before install, add first-run bootstrap (marketplace add + harness install).
+- Create: `tests/install-sh-test.sh` — shell test covering platform detection, asset naming, checksum verification, and bootstrap command dispatch against a fake `kaizen` binary.
 
 Workflows are independent files by concern (PR vs master vs release). The installer change is a localized patch, kept small and testable via the new shell test.
 
@@ -111,7 +111,7 @@ git commit -m "ci: add PR workflow (typecheck + test + single-target compile)"
 ```yaml
 # .github/workflows/ci-master.yml
 # Runs on every master push touching build-affecting files. Proves master
-# compiles on all five supported targets. No publish.
+# compiles on all four supported targets. No publish.
 name: ci-master
 
 on:
@@ -174,11 +174,6 @@ jobs:
             runner: ubuntu-24.04-arm
             target: bun-linux-arm64
             outfile: kaizen-linux-arm64
-          - os: windows
-            arch: x64
-            runner: windows-latest
-            target: bun-windows-x64
-            outfile: kaizen-windows-x64.exe
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -198,16 +193,16 @@ jobs:
 - [ ] **Step 2: Re-read and verify**
 
 Confirm:
-- Matrix has all 5 entries with the exact runner/target/outfile from the spec's build-matrix table.
+- Matrix has all 4 entries with the exact runner/target/outfile from the spec's build-matrix table.
 - `fail-fast: false` (visibility over speed on master).
 - `needs: test` — build runs only if test passed.
-- Windows outfile has `.exe` suffix.
+- No Windows entry (Unix-only by scope).
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add .github/workflows/ci-master.yml
-git commit -m "ci: add master workflow (test + 5-target matrix compile)"
+git commit -m "ci: add master workflow (test + 4-target matrix compile)"
 ```
 
 ---
@@ -274,11 +269,6 @@ jobs:
             runner: ubuntu-24.04-arm
             target: bun-linux-arm64
             outfile: kaizen-linux-arm64
-          - os: windows
-            arch: x64
-            runner: windows-latest
-            target: bun-windows-x64
-            outfile: kaizen-windows-x64.exe
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -339,7 +329,7 @@ Confirm:
 
 ```bash
 git add .github/workflows/release.yml
-git commit -m "ci: add release workflow (tag-triggered, 5-target, SHA256SUMS)"
+git commit -m "ci: add release workflow (tag-triggered, 4-target, SHA256SUMS)"
 ```
 
 ---
@@ -408,6 +398,43 @@ if bash -c '
   fail "verify_checksum accepted mismatched hash"
 fi
 pass "verify_checksum rejects mismatched hash"
+
+# --- Test 4: bootstrap invokes expected kaizen commands ----------------------
+btmp="$(mktemp -d)"
+trap 'rm -rf "$tmp" "$btmp"' EXIT
+
+# Fake kaizen: records each invocation's argv to a log file, always exits 0.
+mkdir -p "$btmp/bin"
+cat > "$btmp/bin/kaizen" <<'FAKE'
+#!/usr/bin/env bash
+echo "kaizen $*" >> "$KAIZEN_FAKE_LOG"
+FAKE
+chmod +x "$btmp/bin/kaizen"
+
+KAIZEN_FAKE_LOG="$btmp/log" PATH="$btmp/bin:$PATH" bash -c '
+  set -euo pipefail
+  # shellcheck source=/dev/null
+  source "$1"
+  bootstrap
+' _ "$INSTALLER" || fail "bootstrap errored"
+
+expected_market="kaizen marketplace add https://github.com/CraightonH/kaizen-official-plugins.git --id official"
+expected_install="kaizen install official/core-shell@1.0.0"
+
+grep -Fxq "$expected_market" "$btmp/log" || fail "bootstrap did not run: $expected_market"
+grep -Fxq "$expected_install" "$btmp/log" || fail "bootstrap did not run: $expected_install"
+pass "bootstrap invokes marketplace add + harness install"
+
+# --- Test 5: KAIZEN_NO_BOOTSTRAP=1 skips bootstrap ---------------------------
+: > "$btmp/log"
+KAIZEN_NO_BOOTSTRAP=1 KAIZEN_FAKE_LOG="$btmp/log" PATH="$btmp/bin:$PATH" bash -c '
+  set -euo pipefail
+  # shellcheck source=/dev/null
+  source "$1"
+  bootstrap
+' _ "$INSTALLER" || fail "bootstrap with KAIZEN_NO_BOOTSTRAP errored"
+[ ! -s "$btmp/log" ] || fail "bootstrap ran commands when KAIZEN_NO_BOOTSTRAP=1"
+pass "KAIZEN_NO_BOOTSTRAP=1 skips bootstrap"
 
 echo "OK"
 ```
@@ -489,12 +516,63 @@ verify_checksum() {
 }
 ```
 
-- [ ] **Step 3: Rewrite `main` to use new naming and verify checksum**
+- [ ] **Step 3: Add the `bootstrap` function**
+
+Insert this function in `scripts/install.sh` immediately below
+`verify_checksum`:
+
+```bash
+# Register the official marketplace and install the default harness. Plugin
+# resolution is deferred to the binary — kaizen auto-installs a harness's
+# plugins on first run via src/core/bootstrap.ts. Each step is best-effort:
+# failures warn and continue, never abort the installer.
+#
+# Opt out by setting KAIZEN_NO_BOOTSTRAP=1 or passing --no-bootstrap.
+bootstrap() {
+  if [ "${KAIZEN_NO_BOOTSTRAP:-0}" = "1" ]; then
+    info "Skipping bootstrap (KAIZEN_NO_BOOTSTRAP=1)."
+    return 0
+  fi
+
+  if ! command -v git >/dev/null 2>&1; then
+    red "  ! git not found on PATH; skipping marketplace bootstrap."
+    info "    Install git and run: kaizen marketplace add https://github.com/CraightonH/kaizen-official-plugins.git --id official"
+    return 0
+  fi
+
+  local market_url="https://github.com/CraightonH/kaizen-official-plugins.git"
+  info "Registering marketplace 'official'..."
+  if kaizen marketplace add "$market_url" --id official; then
+    green "  ✓ marketplace 'official' registered"
+  else
+    red "  ! marketplace add failed; run manually: kaizen marketplace add $market_url --id official"
+    return 0
+  fi
+
+  local default_harness="official/core-shell@1.0.0"
+  info "Installing default harness ${default_harness}..."
+  if kaizen install "$default_harness"; then
+    green "  ✓ ${default_harness} installed"
+  else
+    red "  ! harness install failed; run manually: kaizen install $default_harness"
+    return 0
+  fi
+}
+```
+
+- [ ] **Step 4: Rewrite `main` to use new naming, verify checksum, call bootstrap**
 
 Replace the `main()` function in `scripts/install.sh` with:
 
 ```bash
 main() {
+  # Parse --no-bootstrap flag; everything else is ignored.
+  for arg in "$@"; do
+    case "$arg" in
+      --no-bootstrap) KAIZEN_NO_BOOTSTRAP=1 ;;
+    esac
+  done
+
   bold "kaizen installer"
   echo ""
 
@@ -547,19 +625,21 @@ main() {
   fi
 
   echo ""
+  bootstrap
+
+  echo ""
   bold "Done!"
   echo ""
   info "Quick start:"
-  info "  kaizen --harness core-anthropic          # use built-in Anthropic harness"
-  info "  kaizen init                              # create .kaizen/kaizen.json in current project"
-  info "  kaizen install <harness-url-or-name>     # extend a harness"
-  info "  kaizen plugin install <npm-package>      # add a plugin"
+  info "  kaizen --harness official/core-shell@1.0.0   # default shell harness (installed)"
+  info "  kaizen marketplace list                      # see registered marketplaces"
+  info "  kaizen install <ref>                         # install another plugin or harness"
   echo ""
-  info "ANTHROPIC_API_KEY must be set for core-anthropic harness."
+  info "On first --harness run, kaizen prompts for consent on each plugin."
 }
 ```
 
-- [ ] **Step 4: Guard `main` so sourcing doesn't execute the installer**
+- [ ] **Step 5: Guard `main` so sourcing doesn't execute the installer**
 
 Replace the final line of `scripts/install.sh` (currently `main "$@"`) with:
 
@@ -571,7 +651,7 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
 fi
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [ ] **Step 6: Run test to verify it passes**
 
 Run: `bash tests/install-sh-test.sh`
 
@@ -580,14 +660,16 @@ Expected output:
 PASS: detect_platform returned 'kaizen-linux-x64'  (or darwin/arm64 variant)
 PASS: verify_checksum accepts matching hash
 PASS: verify_checksum rejects mismatched hash
+PASS: bootstrap invokes marketplace add + harness install
+PASS: KAIZEN_NO_BOOTSTRAP=1 skips bootstrap
 OK
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add scripts/install.sh
-git commit -m "feat(installer): match release asset naming, verify SHA256SUMS"
+git commit -m "feat(installer): asset naming, checksum verify, marketplace bootstrap"
 ```
 
 ---
@@ -620,7 +702,7 @@ Close the PR without merging. Delete the branch.
 
 Once the real PR (workflows + installer) lands on master, verify:
 - `ci-master` triggers automatically.
-- All 5 matrix jobs complete successfully.
+- All 4 matrix jobs complete successfully.
 - Artifacts are present in the workflow run.
 
 If any target fails, debug before attempting a tag.
@@ -636,29 +718,51 @@ git push origin v0.0.0-pipeline-test
 
 Expected:
 - `release.yml` runs.
-- All 5 binaries compile.
-- GitHub Release is created at `v0.0.0-pipeline-test` containing 5 binaries,
+- All 4 binaries compile.
+- GitHub Release is created at `v0.0.0-pipeline-test` containing 4 binaries,
   `SHA256SUMS`, and `install.sh`.
 
-- [ ] **Step 5: Verify installer end-to-end**
+- [ ] **Step 5: Verify installer end-to-end (with bootstrap)**
 
-On a fresh linux or darwin machine (or Docker container):
+On a fresh linux or darwin machine (or Docker container with `git`
+installed):
 
 ```bash
 curl -fsSL https://github.com/CraightonH/kaizen/releases/download/v0.0.0-pipeline-test/install.sh | VERSION=v0.0.0-pipeline-test bash
-kaizen --version
 ```
 
-Expected: downloads, verifies checksum, installs to `/usr/local/bin/kaizen`,
-and prints version output.
+Expected output includes:
+- `✓ Installed kaizen → /usr/local/bin/kaizen`
+- `✓ Created /root/.kaizen/kaizen.json` (or `$HOME/.kaizen/kaizen.json`)
+- `✓ marketplace 'official' registered`
+- `✓ official/core-shell@1.0.0 installed`
 
-- [ ] **Step 6: Clean up the test release**
+Then verify:
+
+```bash
+kaizen --version
+kaizen marketplace list           # should show 'official'
+```
+
+- [ ] **Step 6: Verify bootstrap opt-out**
+
+On another fresh environment:
+
+```bash
+curl -fsSL .../install.sh | VERSION=v0.0.0-pipeline-test KAIZEN_NO_BOOTSTRAP=1 bash
+kaizen marketplace list           # should show no marketplaces
+```
+
+Expected: binary installed, `Skipping bootstrap (KAIZEN_NO_BOOTSTRAP=1)`
+printed, no marketplaces registered.
+
+- [ ] **Step 7: Clean up the test release**
 
 ```bash
 gh release delete v0.0.0-pipeline-test --yes --cleanup-tag
 ```
 
-- [ ] **Step 7: Mark the build-and-release rollout complete**
+- [ ] **Step 8: Mark the build-and-release rollout complete**
 
 No additional commits. The presence of working workflows on master + a clean
 test release is the done signal.
