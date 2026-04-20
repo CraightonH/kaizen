@@ -330,7 +330,7 @@ export interface KaizenPlugin {
 // ---------------------------------------------------------------------------
 
 export interface KaizenConfig {
-  /** npm package names, load order = array order */
+  /** Canonical refs (`<marketplace>/<name>@<version>`) or legacy bare npm names. */
   plugins: string[];
   /**
    * Name of a built-in or installed harness to extend.
@@ -338,7 +338,8 @@ export interface KaizenConfig {
    * Built-ins: 'core-debug', 'core-anthropic'. Third-party: 'kaizen-harness-<name>'.
    */
   extends?: string;
-  /** Plugin config namespaces — key must match plugin.name */
+  /** Informational marketplaces a harness expects; consumed by --harness bootstrap. */
+  marketplaces?: MarketplaceRef[];
   [pluginName: string]: unknown;
 }
 
@@ -365,4 +366,68 @@ export interface PluginManagerPublicApi {
 
 export interface PluginManagerLifecycleApi {
   drainPendingReloads(): Promise<void>;
+}
+
+// ---------------------------------------------------------------------------
+// Marketplace types (Spec 1)
+// ---------------------------------------------------------------------------
+
+export type PluginSource =
+  | { type: "npm";     name: string;  version: string }
+  | { type: "tarball"; url: string;   sha256?: string }
+  | { type: "file";    path: string };  // relative to marketplace repo root
+
+export interface PluginVersionEntry {
+  version: string;
+  source: PluginSource;
+  changelog?: string;
+  minKaizenVersion?: string;
+}
+
+export interface HarnessVersionEntry {
+  version: string;
+  /** Path to harness JSON, relative to marketplace repo root. */
+  path: string;
+  changelog?: string;
+}
+
+export interface MarketplacePluginEntry {
+  kind: "plugin";
+  name: string;
+  description: string;
+  categories?: string[];
+  versions: PluginVersionEntry[];
+}
+
+export interface MarketplaceHarnessEntry {
+  kind: "harness";
+  name: string;
+  description: string;
+  categories?: string[];
+  versions: HarnessVersionEntry[];
+}
+
+export type MarketplaceEntry = MarketplacePluginEntry | MarketplaceHarnessEntry;
+
+export interface MarketplaceCatalog {
+  version: "1.0.0";
+  name: string;
+  description?: string;
+  url: string;
+  signature?: string;              // reserved; unused in v1
+  entries: MarketplaceEntry[];
+}
+
+export interface MarketplaceRef {
+  id: string;
+  url: string;                     // git URL or absolute local dir
+  updatedAt?: string;              // ISO-8601
+}
+
+export interface KaizenGlobalConfig {
+  marketplaces?: MarketplaceRef[];
+  defaultHarness?: string;
+  defaults?: Record<string, unknown>;   // Spec 2 uses this
+  /** Seconds between background marketplace refreshes; 0 disables. Default 900. */
+  marketplaceUpdateTTL?: number;
 }
