@@ -192,6 +192,60 @@ describe("PluginManager.initialize", () => {
     const { lifecycleProvider } = await manager.initialize();
     expect(lifecycleProvider.name).toBe("fixture-lifecycle");
   });
+
+  test("fatals when no plugin declares lifecycle:true", async () => {
+    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    const plain = makePlugin("tool-only", async () => {});
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: ["tool-only"] }, { "tool-only": plain },
+      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+    await expect(manager.initialize()).rejects.toThrow(/No lifecycle plugin found.*lifecycle: true/);
+  });
+
+  test("fatals with names listed when two plugins declare lifecycle:true", async () => {
+    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    executorRegistry.register(stubExecutor, "test-exec");
+    uiRegistry.register(stubUi, "test-ui");
+    const a: KaizenPlugin = { name: "a-life", apiVersion: "2", lifecycle: true, async setup() {}, async start() {} };
+    const b: KaizenPlugin = { name: "b-life", apiVersion: "2", lifecycle: true, async setup() {}, async start() {} };
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: ["a-life", "b-life"] }, { "a-life": a, "b-life": b },
+      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+    await expect(manager.initialize()).rejects.toThrow(
+      /Multiple lifecycle plugins loaded: 'a-life', 'b-life'.*exactly one/,
+    );
+  });
+
+  test("fatals when lifecycle plugin has no start() function", async () => {
+    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    executorRegistry.register(stubExecutor, "test-exec");
+    uiRegistry.register(stubUi, "test-ui");
+    // Deliberately omit start().
+    const broken: KaizenPlugin = {
+      name: "broken-life",
+      apiVersion: "2",
+      lifecycle: true,
+      async setup() {},
+    };
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: ["broken-life"] }, { "broken-life": broken },
+      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+    await expect(manager.initialize()).rejects.toThrow(
+      /'broken-life' declares 'lifecycle: true' but does not export a start\(\) function/,
+    );
+  });
 });
 
 describe("PluginManager.load + unload + reload", () => {
