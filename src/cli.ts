@@ -16,7 +16,6 @@ import {
   cmdPluginRemove,
   cmdPluginList,
 } from "./commands/manage.js";
-import { runInstall } from "./commands/install.js";
 import { runPluginConsent } from "./commands/plugin-consent.js";
 import { runPluginReview } from "./commands/plugin-review.js";
 import { runPluginAudit } from "./commands/plugin-audit.js";
@@ -176,20 +175,102 @@ if (subcommand === "apply") {
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: kaizen install <plugin> [--allow-unscoped] [--non-interactive]
+// Subcommand: kaizen marketplace <sub> [args]
+// ---------------------------------------------------------------------------
+
+if (subcommand === "marketplace") {
+  const {
+    cmdMarketplaceAdd, cmdMarketplaceList, cmdMarketplaceRemove,
+    cmdMarketplaceUpdate, cmdMarketplaceBrowse,
+  } = await import("./commands/marketplace.js");
+  const sub = rawArgs[1];
+  const rest = rawArgs.slice(2);
+  const idIdx = rest.indexOf("--id");
+  const id = idIdx >= 0 ? rest[idIdx + 1] : undefined;
+
+  let code = 0;
+  switch (sub) {
+    case "add": {
+      const url = rest.find((a) => !a.startsWith("--") && a !== id);
+      if (!url) { console.error("usage: kaizen marketplace add <url> [--id <id>]"); process.exit(2); }
+      code = await cmdMarketplaceAdd({ url, ...(id ? { id } : {}) });
+      break;
+    }
+    case "list":
+      code = await cmdMarketplaceList();
+      break;
+    case "remove": {
+      const target = rest.find((a) => !a.startsWith("--"));
+      if (!target) { console.error("usage: kaizen marketplace remove <id>"); process.exit(2); }
+      code = await cmdMarketplaceRemove({ id: target });
+      break;
+    }
+    case "update": {
+      const target = rest.find((a) => !a.startsWith("--"));
+      code = await cmdMarketplaceUpdate(target ? { id: target } : {});
+      break;
+    }
+    case "browse": {
+      const target = rest.find((a) => !a.startsWith("--"));
+      code = await cmdMarketplaceBrowse(target ? { id: target } : {});
+      break;
+    }
+    default:
+      console.error("Usage: kaizen marketplace {add|list|remove|update|browse} [args]");
+      code = 2;
+  }
+  process.exit(code);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: kaizen install <ref> [--allow-unscoped] [--non-interactive]
 // ---------------------------------------------------------------------------
 
 if (subcommand === "install") {
   const rest = rawArgs.slice(1);
-  const pluginName = rest.find((a) => !a.startsWith("--"));
-  if (!pluginName) {
-    console.error("usage: kaizen install <plugin> [--allow-unscoped] [--non-interactive]");
-    process.exit(2);
-  }
-  const allowUnscoped = rest.includes("--allow-unscoped");
-  const nonInteractive = rest.includes("--non-interactive");
-  const lockfilePath = join(process.cwd(), "kaizen.permissions.lock");
-  const code = await runInstall({ pluginName, lockfilePath, allowUnscoped, nonInteractive });
+  const ref = rest.find((a) => !a.startsWith("--"));
+  if (!ref) { console.error("usage: kaizen install <ref> [--allow-unscoped] [--non-interactive]"); process.exit(2); }
+  const { runUnifiedInstall } = await import("./commands/install.js");
+  const code = await runUnifiedInstall({
+    ref,
+    lockfilePath: join(process.cwd(), "kaizen.permissions.lock"),
+    allowUnscoped: rest.includes("--allow-unscoped"),
+    nonInteractive: rest.includes("--non-interactive"),
+  });
+  process.exit(code);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: kaizen uninstall <ref> [--purge]
+// ---------------------------------------------------------------------------
+
+if (subcommand === "uninstall") {
+  const rest = rawArgs.slice(1);
+  const ref = rest.find((a) => !a.startsWith("--"));
+  if (!ref) { console.error("usage: kaizen uninstall <ref> [--purge]"); process.exit(2); }
+  const { runUninstall } = await import("./commands/uninstall.js");
+  const code = await runUninstall({
+    ref,
+    lockfilePath: join(process.cwd(), "kaizen.permissions.lock"),
+    purge: rest.includes("--purge"),
+  });
+  process.exit(code);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: kaizen update [<ref>] [--allow-unscoped] [--non-interactive]
+// ---------------------------------------------------------------------------
+
+if (subcommand === "update") {
+  const rest = rawArgs.slice(1);
+  const ref = rest.find((a) => !a.startsWith("--"));
+  const { runUpdate } = await import("./commands/update.js");
+  const code = await runUpdate({
+    ...(ref ? { ref } : {}),
+    lockfilePath: join(process.cwd(), "kaizen.permissions.lock"),
+    allowUnscoped: rest.includes("--allow-unscoped"),
+    nonInteractive: rest.includes("--non-interactive"),
+  });
   process.exit(code);
 }
 
@@ -335,10 +416,47 @@ function parseRunArgs(args: string[]): {
 
 const parsed = parseRunArgs(rawArgs);
 
+if (parsed.harness !== undefined && /^https?:\/\//i.test(parsed.harness)) {
+  fatal("raw URL harnesses are not supported — publish the harness in a marketplace and use --harness <id>/<name>@<version>");
+}
+
+const trustLockfile = rawArgs.includes("--trust-lockfile");
+const nonInteractive = rawArgs.includes("--non-interactive");
+const allowUnscopedFlag = rawArgs.includes("--allow-unscoped");
+
+// Materialize marketplace-ref harnesses to a concrete path.
+let harnessArg = parsed.harness;
+if (harnessArg !== undefined && harnessArg.includes("/") &&
+    !harnessArg.startsWith("./") && !harnessArg.startsWith("/") && !harnessArg.startsWith("../")) {
+  const { parseRef, resolveRef } = await import("./core/ref-resolver.js");
+  const { loadKaizenGlobalConfig: loadGlobal, harnessInstallDir } = await import("./core/kaizen-config.js");
+  const { readCatalog } = await import("./core/marketplace.js");
+  const { installHarness } = await import("./core/plugin-installer.js");
+  const cfg = await loadGlobal();
+  const catalogs: Record<string, import("./types/plugin.js").MarketplaceCatalog> = {};
+  for (const m of cfg.marketplaces ?? []) {
+    try { catalogs[m.id] = await readCatalog(m.id); } catch {}
+  }
+  const r = resolveRef(parseRef(harnessArg), catalogs);
+  if (r.entry.kind !== "harness") fatal(`--harness ref '${harnessArg}' does not resolve to a harness entry`);
+  const hv = r.entry.versions.find((v) => v.version === r.version)!;
+  await installHarness(r.marketplaceId, r.entry.name, hv.path);
+  harnessArg = join(harnessInstallDir(r.marketplaceId, r.entry.name), "kaizen.json");
+}
+
 const kaizenConfig = resolveConfig({
-  ...(parsed.harness !== undefined ? { harness: parsed.harness } : {}),
+  ...(harnessArg !== undefined ? { harness: harnessArg } : {}),
   ...(parsed.configPath !== undefined ? { configPath: parsed.configPath } : {}),
 });
+
+// Bootstrap any missing marketplaces + plugins referenced by the harness.
+if ((kaizenConfig.marketplaces as unknown[])?.length || ((kaizenConfig.plugins as string[] | undefined) ?? []).some((p: string) => p.includes("/"))) {
+  const { bootstrapMissingPlugins } = await import("./core/bootstrap.js");
+  await bootstrapMissingPlugins(kaizenConfig, {
+    lockfilePath: join(process.cwd(), "kaizen.permissions.lock"),
+    trustLockfile, nonInteractive, allowUnscoped: allowUnscopedFlag,
+  });
+}
 
 if (parsed.allowDestructive) {
   const cliConfig = (kaizenConfig["core-cli"] as Record<string, unknown> | undefined) ?? {};
@@ -351,6 +469,17 @@ if (parsed.prompt) {
   uiConfig["initial_prompt"] = parsed.prompt;
   uiConfig["one_shot"] = true;
   kaizenConfig["core-ui-terminal"] = uiConfig;
+}
+
+// Background marketplace refresh (non-blocking).
+{
+  const { loadKaizenGlobalConfig: loadGlobal2 } = await import("./core/kaizen-config.js");
+  const { shouldRefresh, refreshInBackground } = await import("./core/marketplace.js");
+  const globalCfg = await loadGlobal2();
+  const ttl = globalCfg.marketplaceUpdateTTL ?? 900;
+  for (const m of globalCfg.marketplaces ?? []) {
+    if (shouldRefresh(m, ttl)) refreshInBackground(m.id);
+  }
 }
 
 await bootstrap(kaizenConfig, builtins);
