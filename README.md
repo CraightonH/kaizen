@@ -19,12 +19,11 @@ stack. From source, run `scripts/dev-setup.sh` against a sibling checkout — se
 
 ### Harnesses
 
-A **harness** is a declarative set of plugins plus config. Publish one, share
-it by URL or marketplace ref, and anyone can run your exact LLM workflow in a
-single command:
+A **harness** is a declarative set of plugins plus config. Publish one to a
+marketplace and anyone can run your exact LLM workflow in a single command:
 
 ```bash
-kaizen --harness official/anthropic-default@1.0.0
+kaizen --harness example-marketplace/example-workflow@1.0.0
 ```
 
 Kaizen handles resolution, installation, consent, and lockfile management for
@@ -96,8 +95,7 @@ plugin-scope tracking, a proxy over `process.env`, and a wrapped `globalThis.fet
   honest-but-buggy and casual-malicious plugins, not nation-state adversaries.
 - Supply-chain integrity (plugin signing, npm provenance) is **not yet
   verified**. Hash-pinning in the lockfile catches post-consent tampering, but
-  the initial npm resolution is not authenticated. See Findings 5 and 9 in
-  `docs/adversarial-review.md`.
+  the initial npm resolution is not authenticated.
 
 ### Lockfile
 
