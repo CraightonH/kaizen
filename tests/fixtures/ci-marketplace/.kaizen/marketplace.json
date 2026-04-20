@@ -1,0 +1,39 @@
+{
+  "version": "1.0.0",
+  "name": "ci-marketplace",
+  "url": "local://tests/fixtures/ci-marketplace",
+  "entries": [
+    {
+      "kind": "plugin",
+      "name": "fixture-events",
+      "description": "Pre-defines canonical session events for core orchestration tests.",
+      "versions": [
+        { "version": "1.0.0", "source": { "type": "file", "path": "plugins/fixture-events" } }
+      ]
+    },
+    {
+      "kind": "plugin",
+      "name": "fixture-executor",
+      "description": "Canned-response executor for core orchestration tests.",
+      "versions": [
+        { "version": "1.0.0", "source": { "type": "file", "path": "plugins/fixture-executor" } }
+      ]
+    },
+    {
+      "kind": "plugin",
+      "name": "fixture-ui",
+      "description": "Scripted single-turn UI for core orchestration tests.",
+      "versions": [
+        { "version": "1.0.0", "source": { "type": "file", "path": "plugins/fixture-ui" } }
+      ]
+    },
+    {
+      "kind": "plugin",
+      "name": "fixture-lifecycle",
+      "description": "Minimal lifecycle provider for core orchestration tests.",
+      "versions": [
+        { "version": "1.0.0", "source": { "type": "file", "path": "plugins/fixture-lifecycle" } }
+      ]
+    }
+  ]
+}
