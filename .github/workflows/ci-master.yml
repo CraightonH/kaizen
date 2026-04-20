@@ -1,0 +1,79 @@
+# .github/workflows/ci-master.yml
+# Runs on every master push touching build-affecting files. Proves master
+# compiles on all four supported targets. No publish.
+name: ci-master
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/build-*.sh'
+      - 'scripts/build-*.ts'
+      - 'scripts/install.sh'
+      - 'scripts/smoke-install.sh'
+      - 'package.json'
+      - 'bun.lock'
+      - 'tsconfig*.json'
+      - '.github/workflows/ci-pr.yml'
+      - '.github/workflows/ci-master.yml'
+      - '.github/workflows/release.yml'
+
+concurrency:
+  group: ci-master-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run test:core
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: darwin
+            arch: x64
+            runner: macos-13
+            target: bun-darwin-x64
+            outfile: kaizen-darwin-x64
+          - os: darwin
+            arch: arm64
+            runner: macos-14
+            target: bun-darwin-arm64
+            outfile: kaizen-darwin-arm64
+          - os: linux
+            arch: x64
+            runner: ubuntu-latest
+            target: bun-linux-x64
+            outfile: kaizen-linux-x64
+          - os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            target: bun-linux-arm64
+            outfile: kaizen-linux-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Compile ${{ matrix.target }}
+        run: bun build --compile --target=${{ matrix.target }} ./src/cli.ts --outfile ${{ matrix.outfile }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.outfile }}
+          path: ${{ matrix.outfile }}
+          if-no-files-found: error
