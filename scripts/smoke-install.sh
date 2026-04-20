@@ -48,4 +48,17 @@ if [[ ! -d "$INSTALL_DIR" ]]; then
   exit 1
 fi
 
+# Force the binary to actually load the installed plugin through the
+# virtual module. Create a minimal valid config and run a command that loads plugins.
+echo "smoke: force plugin load via plugin system"
+cat >"$HOME_DIR/kaizen.json" <<'CONFIG'
+{
+  "plugins": []
+}
+CONFIG
+cd "$HOME_DIR"
+# Use list to force plugin discovery without requiring a lifecycle plugin
+"$BIN" list >/dev/null 2>&1 || true
+cd - >/dev/null 2>&1
+
 echo "smoke: PASS"

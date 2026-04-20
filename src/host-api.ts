@@ -68,7 +68,7 @@ export type {
 } from "./types/plugin.js";
 
 export type {
-  CtxFs, CtxNet, CtxExec, CtxLog, CtxIo, ExecOpts, ExecResult,
+  CtxFs, CtxNet, CtxSecrets, CtxExec, CtxLog, CtxIo, ExecOpts, ExecResult,
 } from "./core/plugin-ctx-io.js";
 
 export type { SecretProvider } from "./core/secret-providers/types.js";
