@@ -3,7 +3,7 @@
 export default {
   name: "fixture-executor",
   apiVersion: "2",
-  capabilities: { provides: ["core-lifecycle:executor.send"] },
+  capabilities: { provides: ["fixture-lifecycle:executor.send"] },
   async setup(ctx) {
     ctx.registerExecutor({
       async send(messages, tools) {
