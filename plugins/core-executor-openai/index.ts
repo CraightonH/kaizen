@@ -10,6 +10,18 @@ const plugin: KaizenPlugin = {
   },
   capabilities: { provides: ["core-lifecycle:executor.send"] },
 
+  config: {
+    schema: {
+      properties: {
+        model: { type: "string" },
+        baseURL: { type: "string" },
+      },
+      required: ["model"],
+    },
+    defaults: { model: "gpt-4o" },
+    secrets: ["api_key"],
+  },
+
   async setup(_ctx) {
     throw new Error("core-executor-openai: not implemented");
   },

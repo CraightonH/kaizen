@@ -9,6 +9,7 @@ import { ServiceRegistry } from "./service-registry.js";
 import { CapabilityRegistry } from "./capability-registry.js";
 import { PluginManager, type Builtins } from "./plugin-manager.js";
 import { createPluginContext } from "./context.js";
+import { SecretsRegistry, createSecretsContext } from "./secrets.js";
 import { PermissionEnforcer } from "./permission-enforcer.js";
 import type { EnforcerMode } from "./permission-enforcer.js";
 import { AuditLog } from "./audit-log.js";
@@ -97,9 +98,11 @@ export async function runHarness(opts: RunHarnessOpts): Promise<void> {
 
   const lifecycleConfig =
     (kaizenConfig[lifecycleProvider.name] as Record<string, unknown> | undefined) ?? {};
+  const secretsCtx = createSecretsContext(new SecretsRegistry(), lifecycleProvider.name, {});
   const ctx = createPluginContext(
     lifecycleProvider.name,
     lifecycleConfig,
+    secretsCtx,
     eventBus,
     toolRegistry,
     executorRegistry,

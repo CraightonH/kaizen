@@ -2,8 +2,11 @@ import { createRequire } from "module";
 import { execSync } from "child_process";
 import { existsSync, readFileSync, statSync } from "fs";
 import { dirname, join } from "path";
-import type { KaizenPlugin, KaizenConfig, PluginEntry, PluginManagerPublicApi, PluginManagerLifecycleApi } from "../types/plugin.js";
+import type { KaizenPlugin, KaizenConfig, KaizenGlobalConfig, PluginEntry, PluginManagerPublicApi, PluginManagerLifecycleApi } from "../types/plugin.js";
 import { PLUGIN_API_VERSION } from "../types/plugin.js";
+import { mergePluginConfig, separateSecrets, applyEnvOverrides } from "./config-merge.js";
+import { validateConfig, validateSchemaItself } from "./config-validator.js";
+import { SecretsRegistry, createSecretsContext, SecretsProviderToken } from "./secrets.js";
 import { fatal, warn, debug } from "./errors.js";
 import { RESERVED_KEYS, KAIZEN_HOME, KAIZEN_HOME_PLUGINS, PROJECT_PLUGINS } from "./config.js";
 import { pluginInstallDir } from "./kaizen-config.js";
@@ -238,6 +241,7 @@ export class PluginManager {
   private readonly pendingLoads = new Set<string>();
   private readonly pendingUnloads = new Set<string>();
   private readonly pendingReloads = new Set<string>();
+  private readonly secretsRegistry = new SecretsRegistry();
 
   constructor(
     private readonly config: KaizenConfig,
@@ -252,6 +256,7 @@ export class PluginManager {
     private readonly auditLog: AuditLog,
     private readonly lockfilePath: string,
     private readonly options: { trustLockfile: boolean; allowUnscoped: boolean; nonInteractive: boolean },
+    private readonly globalConfig?: KaizenGlobalConfig,
   ) {
     // Wire denial listener → audit log.
     this.enforcer.onDenial((r) => this.auditLog.record(r));
@@ -554,11 +559,51 @@ export class PluginManager {
     // Scan imports after registration so check() has the manifest.
     if (resolvedPath !== null) this.scanAndCheckImports(plugin.name, resolvedPath);
 
+    // Merge config layers
+    const harnessConfig = (this.config[plugin.name] as Record<string, unknown> | undefined) ?? {};
+    const globalDefaults = (this.globalConfig?.defaults?.[plugin.name] as Record<string, unknown> | undefined) ?? {};
+    const merged = mergePluginConfig(plugin.config, globalDefaults, harnessConfig);
+
+    // Separate secrets from non-secret config
+    const { config: pluginConfig, secretRefs } = separateSecrets(merged, plugin.config?.secrets ?? []);
+
+    // Apply env overrides to non-secret config
+    applyEnvOverrides(plugin.name, pluginConfig, plugin.config?.schema);
+
+    // Validate non-secret config against schema
+    if (plugin.config?.schema) {
+      if (!validateSchemaItself(plugin.config.schema)) {
+        fatal(`${plugin.name}: config.schema is not valid JSON Schema`);
+      }
+      const errors = validateConfig(plugin.config.schema, pluginConfig);
+      if (errors.length > 0) {
+        fatal(`${plugin.name} config invalid:\n${errors.map((e) => `  - ${e.path}: ${e.message}`).join("\n")}`);
+      }
+    }
+
+    // Check every declared secret's provider is registered
+    for (const [key, ref] of Object.entries(secretRefs)) {
+      const providerName = typeof ref === "string" ? "kaizen" : ref.provider;
+      if (!this.secretsRegistry.getProvider(providerName)) {
+        fatal(
+          `${plugin.name}: secret '${key}' targets provider '${providerName}' but no plugin provides it.\n` +
+          `  Install a provider: kaizen install <provider-plugin>\n` +
+          `  Or change the ref: kaizen config set ${plugin.name} ${key} '{"provider":"kaizen","ref":"..."}'`,
+        );
+      }
+    }
+
+    // Prefetch declared secrets in background (errors are logged, not fatal)
+    await this.secretsRegistry.prefetchForPlugin(plugin.name, secretRefs);
+
+    // Build secrets context for this plugin
+    const secretsCtx = createSecretsContext(this.secretsRegistry, plugin.name, secretRefs);
+
     let pluginState: CoreState = "INITIALIZING";
-    const pluginConfig = (this.config[plugin.name] as Record<string, unknown> | undefined) ?? {};
     const ctx = createPluginContext(
       plugin.name,
       pluginConfig,
+      secretsCtx,
       this.eventBus,
       this.toolRegistry,
       this.executorRegistry,
@@ -572,6 +617,15 @@ export class PluginManager {
     );
     await runInPluginScope(plugin.name, async () => { await plugin.setup(ctx); });
     pluginState = "READY";
+
+    // After setup, check if this plugin provided a secret provider
+    // (core-secrets calls ctx.registerService(SecretsProviderToken, provider))
+    try {
+      const provider = this.serviceRegistry.get(SecretsProviderToken);
+      this.secretsRegistry.register(provider);
+    } catch {
+      // Plugin didn't register a secret provider — that's fine
+    }
   }
 
   private scanAndCheckImports(pluginName: string, resolvedPath: string): void {

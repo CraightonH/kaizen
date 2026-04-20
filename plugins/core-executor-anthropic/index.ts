@@ -12,28 +12,30 @@ const plugin: KaizenPlugin = {
     env: ["ANTHROPIC_API_KEY"],
   },
 
+  config: {
+    schema: {
+      properties: {
+        model: { type: "string" },
+        baseURL: { type: "string" },
+      },
+      required: ["model"],
+    },
+    defaults: { model: "claude-opus-4-6" },
+    secrets: ["api_key"],
+  },
+
   async setup(ctx) {
-    const cfg = ctx.config as {
-      model?: string;
-      api_key_env?: string;
-      api_key?: string;
-      baseURL?: string;
-    };
-
-    if (!cfg.model) throw new Error("core-executor-anthropic: config.model is required");
-
-    // Resolve API key via ctx.secrets (permission-gated env access).
-    // cfg.api_key takes precedence; fall back to api_key_env (default: ANTHROPIC_API_KEY).
-    const envVarName = cfg.api_key_env ?? "ANTHROPIC_API_KEY";
-    const resolvedApiKey = cfg.api_key ?? ctx.secrets.get(envVarName) ?? undefined;
+    const model = ctx.config["model"] as string;
+    if (!model) throw new Error("core-executor-anthropic: config.model is required");
+    const apiKey = await ctx.secrets.get("api_key");
+    const baseURL = ctx.config["baseURL"] as string | undefined;
 
     const executor = createLLMRuntime({
       adapter: "anthropic",
-      model: cfg.model,
-      ...(resolvedApiKey !== undefined ? { api_key: resolvedApiKey } : {}),
-      ...(cfg.baseURL !== undefined ? { baseURL: cfg.baseURL } : {}),
+      model,
+      ...(apiKey !== undefined ? { api_key: apiKey } : {}),
+      ...(baseURL !== undefined ? { baseURL } : {}),
     });
-
     ctx.registerExecutor(executor);
   },
 };

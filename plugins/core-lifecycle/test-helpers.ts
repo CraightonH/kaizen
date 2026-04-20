@@ -220,10 +220,13 @@ export async function makeTestHarness(opts: {
 
   // Build a context for start() — use the same createPluginContext path plugin-manager uses.
   const { createPluginContext } = await import("../../src/core/context.js");
+  const { SecretsRegistry, createSecretsContext } = await import("../../src/core/secrets.js");
   const pluginConfig = (config[lifecycleProvider.name] as Record<string, unknown> | undefined) ?? {};
+  const secretsCtx = createSecretsContext(new SecretsRegistry(), lifecycleProvider.name, {});
   const ctx = createPluginContext(
     lifecycleProvider.name,
     pluginConfig,
+    secretsCtx,
     eventBus,
     toolRegistry,
     executorRegistry,

@@ -160,6 +160,21 @@ const plugin: KaizenPlugin = {
     exec: { binaries: ["*"] },
   },
 
+  config: {
+    schema: {
+      properties: {
+        clis: { type: "array", items: { type: "string" } },
+        allow_destructive: { type: "boolean" },
+        subprocess_timeout_ms: { type: "number" },
+      },
+    },
+    defaults: {
+      clis: [],
+      allow_destructive: false,
+      subprocess_timeout_ms: 30000,
+    },
+  },
+
   async setup(ctx) {
     const clis = (ctx.config["clis"] as string[] | undefined) ?? [];
     const allowDestructive = Boolean(ctx.config["allow_destructive"] ?? false);

@@ -29,6 +29,7 @@ import coreExecutorShell from "core-executor-shell";
 import kaizenPluginTimestamps from "kaizen-plugin-timestamps";
 import coreCli from "core-cli";
 import corePluginManager from "core-plugin-manager";
+import coreSecrets from "core-secrets";
 
 const builtins = {
   [coreEvents.name]: coreEvents,
@@ -40,6 +41,7 @@ const builtins = {
   [kaizenPluginTimestamps.name]: kaizenPluginTimestamps,
   [coreCli.name]: coreCli,
   [corePluginManager.name]: corePluginManager,
+  [coreSecrets.name]: coreSecrets,
 };
 
 // ---------------------------------------------------------------------------
@@ -71,7 +73,6 @@ const DEFAULT_PLUGINS = {
   ],
   "core-executor-anthropic": {
     model: "claude-opus-4-6",
-    api_key_env: "ANTHROPIC_API_KEY",
   },
   "core-cli": {
     clis: [] as string[],
@@ -172,6 +173,37 @@ if (subcommand === "list") {
 if (subcommand === "apply") {
   cmdApply(builtins);
   process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: kaizen config show|get|set|set-secret
+// ---------------------------------------------------------------------------
+
+if (subcommand === "config") {
+  const { cmdConfigShow, cmdConfigGet, cmdConfigSet, cmdConfigSetSecret } = await import("./commands/config.js");
+  const sub = rawArgs[1];
+  const rest = rawArgs.slice(2);
+  const isGlobal = rest.includes("--global");
+  const providerIdx = rest.indexOf("--provider");
+  const provider = providerIdx >= 0 ? rest[providerIdx + 1] : undefined;
+
+  let code = 0;
+  if (sub === "show") {
+    code = cmdConfigShow(rest.find((a) => !a.startsWith("--")));
+  } else if (sub === "get") {
+    const [plugin, path] = rest.filter((a) => !a.startsWith("--"));
+    code = cmdConfigGet(plugin, path);
+  } else if (sub === "set") {
+    const nonFlags = rest.filter((a) => !a.startsWith("--"));
+    code = cmdConfigSet(nonFlags[0], nonFlags[1], nonFlags[2], { global: isGlobal });
+  } else if (sub === "set-secret") {
+    const [plugin, key] = rest.filter((a) => !a.startsWith("--"));
+    code = await cmdConfigSetSecret(plugin, key, { global: isGlobal, ...(provider !== undefined ? { provider } : {}) });
+  } else {
+    console.error("Usage: kaizen config {show|get|set|set-secret} [args]");
+    code = 2;
+  }
+  process.exit(code);
 }
 
 // ---------------------------------------------------------------------------

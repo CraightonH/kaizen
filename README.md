@@ -69,11 +69,18 @@ Review and paste into your plugin's default export.
 
 ### Commands reference
 
+**Plugin management:**
 - `kaizen install <plugin>` — resolve, read manifest, run consent flow, write lockfile.
 - `kaizen plugin consent <plugin>` — re-run consent (after version bump or drift).
 - `kaizen plugin review <plugin>` — diff declared manifest vs. lockfile entry.
 - `kaizen plugin audit` — list lockfile entries; flag UNSCOPED.
 - `kaizen plugin dev --observe <dir>` — record operations, generate proposed manifest.
+
+**Config & secrets:**
+- `kaizen config show [<plugin>]` — show merged config for all plugins or one.
+- `kaizen config get <plugin> <path>` — get a config value.
+- `kaizen config set <plugin> <path> <value>` — set a config value.
+- `kaizen config set-secret <plugin> <key>` — store a secret in OS keychain.
 
 ### Marketplace & plugin management
 
@@ -100,6 +107,10 @@ kaizen update [<ref>]                       # Update plugins (silent when permis
 # Run with a marketplace harness
 kaizen --harness official/anthropic-default@1.0.0
 ```
+
+**Secrets storage:** Kaizen stores secrets in OS-native vaults (macOS Keychain,
+Windows Credential Manager, Linux libsecret) with a file-based fallback for
+headless environments.
 
 ### CLI flags
 

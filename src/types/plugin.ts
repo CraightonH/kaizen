@@ -31,6 +31,29 @@ export type JsonSchema = {
 };
 
 // ---------------------------------------------------------------------------
+// Plugin configuration
+// ---------------------------------------------------------------------------
+
+export interface PluginConfigDeclaration {
+  schema?: Record<string, unknown>;
+  defaults?: Record<string, unknown>;
+  secrets?: string[];
+}
+
+export interface StructuredSecretRef {
+  provider: string;
+  ref: string;
+  envOverride?: string;
+}
+
+export type SecretRef = string | StructuredSecretRef;
+
+export interface SecretsContext {
+  get(key: string): Promise<string | undefined>;
+  refresh(key: string): Promise<string | undefined>;
+}
+
+// ---------------------------------------------------------------------------
 // LLM primitives
 // ---------------------------------------------------------------------------
 
@@ -219,7 +242,7 @@ export interface PluginContext {
   // --- Permission-gated I/O surface ----------------------------------------
   fs: import("../core/plugin-ctx-io.js").CtxFs;
   net: import("../core/plugin-ctx-io.js").CtxNet;
-  secrets: import("../core/plugin-ctx-io.js").CtxSecrets;
+  secrets: SecretsContext;
   exec: import("../core/plugin-ctx-io.js").CtxExec;
 
   // --- Runtime primitives --------------------------------------------------
@@ -320,6 +343,8 @@ export interface KaizenPlugin {
 
   /** Permission manifest. Defaults to { tier: "trusted" }. */
   permissions?: PluginPermissions;
+
+  config?: PluginConfigDeclaration;
 
   setup(ctx: PluginContext): Promise<void>;
   start?(ctx: PluginContext): Promise<void>;

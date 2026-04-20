@@ -1,4 +1,4 @@
-import type { PluginContext, ToolDefinition, PluginManagerPublicApi, PluginManagerLifecycleApi } from "../types/plugin.js";
+import type { PluginContext, ToolDefinition, PluginManagerPublicApi, PluginManagerLifecycleApi, SecretsContext } from "../types/plugin.js";
 import type { ServiceToken } from "../types/plugin.js";
 import type { EventBus } from "./event-bus.js";
 import type { ToolRegistry } from "./tool-registry.js";
@@ -20,6 +20,7 @@ function assertInitializing(state: CoreState, operation: string): void {
 export function createPluginContext(
   pluginName: string,
   pluginConfig: Record<string, unknown>,
+  secretsContext: SecretsContext,
   eventBus: EventBus,
   toolRegistry: ToolRegistry,
   executorRegistry: ExecutorRegistry,
@@ -43,7 +44,7 @@ export function createPluginContext(
 
     fs: io.fs,
     net: io.net,
-    secrets: io.secrets,
+    secrets: secretsContext,
     exec: io.exec,
 
     registerService<T>(token: ServiceToken<T>, impl: T): void {
