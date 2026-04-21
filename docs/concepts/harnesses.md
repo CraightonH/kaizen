@@ -47,11 +47,9 @@ in order:
 kaizen --harness my-local-harness       # looks in .kaizen/harnesses/, then ~/.kaizen/harnesses/
 ```
 
-Note: marketplace-installed harnesses live under
-`~/.kaizen/marketplaces/<id>/harnesses/<name>/`, which is **not** searched by
-bare-name lookup. Bare names only find harnesses in `.kaizen/harnesses/` or
-`~/.kaizen/harnesses/`. To reuse a marketplace harness by bare name, either
-symlink it into one of those dirs or keep using the full marketplace ref.
+Bare-name lookup does **not** scan `~/.kaizen/marketplaces/<id>/harnesses/`.
+To use a marketplace harness, reference it by its full ref
+(`<marketplace-id>/<name>@<version>`), either via `--harness` or via `extends`.
 
 ### URL harnesses are not supported
 
@@ -66,24 +64,22 @@ reference it by ref instead.
 
 ```json
 {
-  "extends": "./base-harness/",
+  "extends": "official/core-anthropic@0.1.0",
   "core-lifecycle": {
     "systemPrompt": "You are a coding assistant."
   }
 }
 ```
 
-`extends` is resolved through the same loader as `--harness` but without the
-marketplace-ref rewriting step that `--harness` does. In practice `extends`
-works with:
+`extends` accepts the same forms as `--harness`:
 
+- A marketplace ref (`<marketplace-id>/<name>@<version>`) — materialized into
+  `~/.kaizen/marketplaces/<id>/harnesses/<name>/` on first run.
 - A bare name present in `.kaizen/harnesses/<name>/` or
-  `~/.kaizen/harnesses/<name>/`
-- A local path (`./path/to/kaizen.json` or `./path/to/harness-dir/`)
+  `~/.kaizen/harnesses/<name>/`.
+- A local path (`./path/to/kaizen.json` or `./path/to/harness-dir/`).
 
-Marketplace refs (`<marketplace>/<name>@<version>`) and URLs are **not**
-supported in `extends`. Use `--harness` for those, or symlink a
-marketplace-installed harness into `~/.kaizen/harnesses/`.
+Raw URLs are rejected.
 
 The harness provides the base plugin list and config; your local `kaizen.json`
 overlays it.

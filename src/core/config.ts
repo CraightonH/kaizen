@@ -173,8 +173,17 @@ export function mergeConfigs(base: KaizenConfig, overlay: KaizenConfig): KaizenC
 //   ~/.kaizen/kaizen.json    (global default)
 // ---------------------------------------------------------------------------
 
-export function resolveConfig(opts: { harness?: string; configPath?: string }): KaizenConfig {
-  const { harness, configPath } = opts;
+export function resolveConfig(opts: {
+  harness?: string;
+  configPath?: string;
+  /**
+   * Pre-materialized extends path (set by the CLI pre-pass when the local
+   * config's `extends` is a marketplace ref). Overrides the raw `extends`
+   * string read from the local config.
+   */
+  extendsOverride?: string;
+}): KaizenConfig {
+  const { harness, configPath, extendsOverride } = opts;
 
   // Explicit --config path
   const explicitPath = configPath ?? null;
@@ -194,8 +203,9 @@ export function resolveConfig(opts: { harness?: string; configPath?: string }): 
 
   if (projectConfigPath) {
     const localConfig = loadKaizenConfig(projectConfigPath);
-    if (localConfig.extends) {
-      return mergeConfigs(loadHarnessConfig(localConfig.extends), localConfig);
+    const ext = extendsOverride ?? localConfig.extends;
+    if (ext) {
+      return mergeConfigs(loadHarnessConfig(ext), localConfig);
     }
     return localConfig;
   }
@@ -203,8 +213,9 @@ export function resolveConfig(opts: { harness?: string; configPath?: string }): 
   // Global default
   if (existsSync(KAIZEN_HOME_CONFIG)) {
     const globalConfig = loadKaizenConfig(KAIZEN_HOME_CONFIG);
-    if (globalConfig.extends) {
-      return mergeConfigs(loadHarnessConfig(globalConfig.extends), globalConfig);
+    const ext = extendsOverride ?? globalConfig.extends;
+    if (ext) {
+      return mergeConfigs(loadHarnessConfig(ext), globalConfig);
     }
     return globalConfig;
   }

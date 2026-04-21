@@ -7,7 +7,8 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { bootstrap } from "./core/index.js";
-import { resolveConfig, PROJECT_DIR, PROJECT_CONFIG, KAIZEN_HOME, KAIZEN_HOME_CONFIG } from "./core/config.js";
+import { resolveConfig, findProjectConfig, PROJECT_DIR, PROJECT_CONFIG, KAIZEN_HOME, KAIZEN_HOME_CONFIG } from "./core/config.js";
+import { readFileSync } from "fs";
 import { fatal } from "./core/errors.js";
 import {
   readLocalConfig,
@@ -461,29 +462,35 @@ const trustLockfile = rawArgs.includes("--trust-lockfile");
 const nonInteractive = rawArgs.includes("--non-interactive");
 const allowUnscopedFlag = rawArgs.includes("--allow-unscoped");
 
-// Materialize marketplace-ref harnesses to a concrete path.
+const { looksLikeHarnessRef, materializeHarnessRef } = await import("./core/kaizen-config.js");
+
+// Materialize a marketplace-ref --harness to a concrete path.
 let harnessArg = parsed.harness;
-if (harnessArg !== undefined && harnessArg.includes("/") &&
-    !harnessArg.startsWith("./") && !harnessArg.startsWith("/") && !harnessArg.startsWith("../")) {
-  const { parseRef, resolveRef } = await import("./core/ref-resolver.js");
-  const { loadKaizenGlobalConfig: loadGlobal, harnessInstallDir } = await import("./core/kaizen-config.js");
-  const { readCatalog } = await import("./core/marketplace.js");
-  const { installHarness } = await import("./core/plugin-installer.js");
-  const cfg = await loadGlobal();
-  const catalogs: Record<string, import("./types/plugin.js").MarketplaceCatalog> = {};
-  for (const m of cfg.marketplaces ?? []) {
-    try { catalogs[m.id] = await readCatalog(m.id); } catch {}
+if (harnessArg !== undefined && looksLikeHarnessRef(harnessArg)) {
+  harnessArg = await materializeHarnessRef(harnessArg);
+}
+
+// Materialize a marketplace-ref `extends` in the local (or home) config,
+// so resolveConfig can stay sync.
+let extendsOverride: string | undefined;
+if (harnessArg === undefined) {
+  const activePath = parsed.configPath ?? findProjectConfig() ??
+    (existsSync(KAIZEN_HOME_CONFIG) ? KAIZEN_HOME_CONFIG : null);
+  if (activePath) {
+    try {
+      const raw = JSON.parse(readFileSync(activePath, "utf8")) as { extends?: unknown };
+      const ext = typeof raw.extends === "string" ? raw.extends : null;
+      if (ext && looksLikeHarnessRef(ext)) {
+        extendsOverride = await materializeHarnessRef(ext);
+      }
+    } catch { /* ignore; resolveConfig will surface parse errors */ }
   }
-  const r = resolveRef(parseRef(harnessArg), catalogs);
-  if (r.entry.kind !== "harness") fatal(`--harness ref '${harnessArg}' does not resolve to a harness entry`);
-  const hv = r.entry.versions.find((v) => v.version === r.version)!;
-  await installHarness(r.marketplaceId, r.entry.name, hv.path);
-  harnessArg = join(harnessInstallDir(r.marketplaceId, r.entry.name), "kaizen.json");
 }
 
 const kaizenConfig = resolveConfig({
   ...(harnessArg !== undefined ? { harness: harnessArg } : {}),
   ...(parsed.configPath !== undefined ? { configPath: parsed.configPath } : {}),
+  ...(extendsOverride !== undefined ? { extendsOverride } : {}),
 });
 
 // Bootstrap any missing marketplaces + plugins referenced by the harness.
