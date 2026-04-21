@@ -118,11 +118,14 @@ plugin's `apiVersion` major differs. Defined in
 
 ## Context APIs (PluginContext)
 
-`ctx.fs`, `ctx.net`, `ctx.secrets`, and `ctx.exec` go through the permission
-enforcer — every call is checked against the plugin's declared
-[permissions](./plugin-api.md#pluginpermissions). `ctx.log` is unguarded.
-Types live in
-[`src/core/plugin-ctx-io.ts`](../../src/core/plugin-ctx-io.ts).
+`ctx.fs`, `ctx.net`, and `ctx.exec` go through the permission enforcer —
+every call is checked against the plugin's declared
+[permissions](./plugin-api.md#pluginpermissions). `ctx.secrets` is
+access-scoped by the plugin's `config.secrets` declaration. `ctx.log` is
+unguarded. I/O types live in
+[`src/core/plugin-ctx-io.ts`](../../src/core/plugin-ctx-io.ts);
+`SecretsContext` is defined in
+[`src/types/plugin.ts`](../../src/types/plugin.ts).
 
 ### `ctx.fs` (CtxFs)
 
