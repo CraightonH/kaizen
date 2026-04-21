@@ -2,9 +2,6 @@ import { join } from "path";
 import { randomUUID } from "crypto";
 import type { KaizenConfig } from "../types/plugin.js";
 import { EventBus } from "./event-bus.js";
-import { ToolRegistry } from "./tool-registry.js";
-import { ExecutorRegistry } from "./executor-registry.js";
-import { UiRegistry } from "./ui-registry.js";
 import { ServiceRegistry } from "./service-registry.js";
 import { CapabilityRegistry } from "./capability-registry.js";
 import { PluginManager, type Builtins } from "./plugin-manager.js";
@@ -28,9 +25,6 @@ interface InitializedSystem {
   capabilityRegistry: CapabilityRegistry;
   manager: PluginManager;
   eventBus: EventBus;
-  toolRegistry: ToolRegistry;
-  executorRegistry: ExecutorRegistry;
-  uiRegistry: UiRegistry;
   serviceRegistry: ServiceRegistry;
   enforcer: PermissionEnforcer;
   auditLog: AuditLog;
@@ -43,16 +37,12 @@ export async function initializePluginSystem(
   injectedEnforcer?: PermissionEnforcer,
 ): Promise<InitializedSystem> {
   const eventBus = new EventBus();
-  const toolRegistry = new ToolRegistry();
-  const executorRegistry = new ExecutorRegistry();
-  const uiRegistry = new UiRegistry();
   const capabilityRegistry = new CapabilityRegistry();
   const serviceRegistry = new ServiceRegistry();
 
   let enforcer: PermissionEnforcer;
   if (injectedEnforcer) {
     enforcer = injectedEnforcer;
-    // caller already called initializeSandbox
   } else {
     const mode = (process.env["KAIZEN_SANDBOX_MODE"] as EnforcerMode | undefined) ?? "enforce";
     enforcer = new PermissionEnforcer({ mode });
@@ -71,14 +61,13 @@ export async function initializePluginSystem(
 
   const manager = new PluginManager(
     kaizenConfig, builtins,
-    eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+    eventBus, capabilityRegistry, serviceRegistry,
     enforcer, auditLog,
     lockfilePath, { trustLockfile, allowUnscoped, nonInteractive },
   );
   const { lifecycleProvider } = await manager.initialize();
   return {
-    capabilityRegistry, manager, eventBus, toolRegistry,
-    executorRegistry, uiRegistry, serviceRegistry,
+    capabilityRegistry, manager, eventBus, serviceRegistry,
     enforcer, auditLog, lifecycleProvider,
   };
 }
@@ -92,8 +81,7 @@ export interface RunHarnessOpts {
 export async function runHarness(opts: RunHarnessOpts): Promise<void> {
   const { kaizenConfig, builtins = {}, enforcer: injectedEnforcer } = opts;
   const {
-    manager, eventBus, toolRegistry, executorRegistry, uiRegistry,
-    capabilityRegistry, serviceRegistry, enforcer, auditLog, lifecycleProvider,
+    manager, eventBus, capabilityRegistry, serviceRegistry, enforcer, auditLog, lifecycleProvider,
   } = await initializePluginSystem(kaizenConfig, builtins, injectedEnforcer);
 
   const lifecycleConfig =
@@ -104,9 +92,6 @@ export async function runHarness(opts: RunHarnessOpts): Promise<void> {
     lifecycleConfig,
     secretsCtx,
     eventBus,
-    toolRegistry,
-    executorRegistry,
-    uiRegistry,
     capabilityRegistry,
     serviceRegistry,
     enforcer,
