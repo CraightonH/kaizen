@@ -1,6 +1,6 @@
 # Plugin Security Model
 
-*Read when: writing a plugin or reviewing someone else's.*
+*Read when: writing a plugin, reviewing someone else's, or auditing kaizen core permissions.*
 
 Kaizen runs plugins in-process, so they can reach everything Node can — unless
 they declare what they need. Every plugin must pick a tier and, if SCOPED, list
