@@ -39,7 +39,7 @@ export interface KaizenPlugin {
 | `aliases` | `Record<string, string>` | no | Map short or alternative capability names to canonical owner-qualified names. e.g. `{ "ui.input": "core-lifecycle:ui.input" }`. |
 | `permissions` | `PluginPermissions` | no | Permission manifest. Defaults to `{ tier: "trusted" }`. See Permissions below. |
 | `config` | `PluginConfigDeclaration` | no | Declares config schema, defaults, and which keys are secrets. |
-| `setup` | `(ctx: PluginContext) => Promise<void>` | yes | Called once during `INITIALIZING`. Register tools, services, executors, UIs, and event subscriptions here. |
+| `setup` | `(ctx: PluginContext) => Promise<void>` | yes | Called once during `INITIALIZING`. Register services, declare capabilities, and subscribe to events here. |
 | `start` | `(ctx: PluginContext) => Promise<void>` | no | Only implement if `lifecycle=true`. Core calls this after all plugins initialize. |
 
 ### PluginCapabilities
@@ -120,10 +120,7 @@ export interface PluginContext {
   registerService<T>(token: ServiceToken<T>, impl: T): void;  // INITIALIZING only
   getService<T>(token: ServiceToken<T>): T;                    // any state
 
-  // --- Registration (INITIALIZING only) ---
-  registerTool(tool: ToolDefinition): void;
-  registerExecutor(impl: Executor): void;
-  registerUi(impl: UiProvider): void;
+  // --- Capability registry (INITIALIZING only) ---
   defineCapability(name: string, spec: CapabilitySpec): void;  // name must be plugin-prefixed
 
   // --- Event bus ---
@@ -144,13 +141,6 @@ export interface PluginContext {
 
   // --- Runtime primitives ---
   runtime: {
-    executors: { list(): Executor[]; getFirst(): Executor };
-    executor: Executor;                                         // first registered; deprecated
-    ui: { list(): UiProvider[]; getFirst(): UiProvider };
-    tools: {
-      list(): ToolDefinition[];
-      execute(name: string, args: Record<string, unknown>): Promise<ToolResult>;
-    };
     pluginManager: PluginManagerLifecycleApi;                   // drainPendingReloads()
   };
 }
@@ -158,18 +148,13 @@ export interface PluginContext {
 
 Method semantics:
 
-- `registerService` / `registerTool` / `registerExecutor` / `registerUi` /
-  `defineCapability` are valid only during `INITIALIZING` (inside `setup()`).
-  Calling them from a tool handler or event handler throws.
+- `registerService` and `defineCapability` are valid only during `INITIALIZING`
+  (inside `setup()`). Calling them from an event handler throws.
 - `getService` is valid at any lifecycle state and throws with a named error
   when the token has no provider.
 - `emit` calls all handlers serially in initialization order, returns every
   handler's return value (including `undefined`), and logs-and-continues on
   handler throw. Emitting an undefined event warns but never blocks.
-- `runtime.tools.execute` validates args against the tool's `parameters` JSON
-  Schema before calling `execute()`. Invalid args → `{ ok: false, error: ... }`
-  without calling the handler. Thrown errors are wrapped as
-  `{ ok: false, error: err.message }`.
 
 ### PluginManagerPublicApi / PluginManagerLifecycleApi
 
@@ -199,6 +184,12 @@ export interface PluginManagerLifecycleApi {
 ---
 
 ## Tool definition
+
+`ToolDefinition`, `ToolResult`, and `ToolCall` are part of the API surface used
+by the `Executor` interface (LLM tool-calling round-trip). A tool-broker plugin
+(`core-tools`) is planned for a future release and will define how plugins
+register callable tools. Until then, core has no `registerTool` method and
+does not manage a tool registry.
 
 ```ts
 export interface ToolDefinition {
@@ -240,17 +231,18 @@ export type JsonSchema = {
 };
 ```
 
-Core validates `args` against `parameters` (via ajv) before calling `execute()`.
-Invalid args return `{ ok: false, error: "Invalid arguments: ..." }` and
-`execute()` is not called. Thrown errors inside `execute()` are wrapped as
-`{ ok: false, error: err.message }`.
-
-When `destructive: true`, `core-cli` prints the call and prompts the user
-before running the tool (unless started with `--allow-destructive`).
-
 ---
 
-## Executor and UI
+## Executor and UI types
+
+These types are part of the plugin API surface. Executor and UI plugins use
+`ctx.registerService(Token, impl)` plus `ctx.defineCapability(...)` to expose
+their implementations. The driver plugin (e.g. `core-lifecycle`) defines the
+capability names and `ServiceToken` values it expects and documents them in its
+own README. Core does not enshrine `kaizen.executor`, `kaizen.ui`, or any other
+well-known name.
+
+<!-- TODO: expand once core-lifecycle publishes its tokens and capability names -->
 
 ### Executor
 

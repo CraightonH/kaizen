@@ -22,10 +22,10 @@ itself:
   hosts, env vars, event subscriptions). See [Permission tiers](#permission-tiers).
 - **`capabilities`** — what this plugin provides and consumes in the
   capability registry. See [Capabilities and dependencies](#capabilities).
-- **`setup(ctx)`** — the one method core calls. Plugins register tools,
-  subscribe to events, register an executor / UI, and register services —
-  all during `setup()`. Anything registered after `setup()` returns will
-  throw.
+- **`setup(ctx)`** — the one method core calls. Plugins register services
+  (`ctx.registerService`), declare capabilities (`ctx.defineCapability`),
+  and subscribe to events — all during `setup()`. Anything registered after
+  `setup()` returns will throw.
 
 A plugin may additionally declare `lifecycle: true` to become the session
 driver (see below), and may provide a `config` section describing the config
@@ -103,9 +103,8 @@ moment the order changes.
 Three moments matter for a plugin author:
 
 - **`setup(ctx)`** — runs once during `INITIALIZING`. The only time you can
-  call `registerTool`, `defineEvent`, `on`, `registerExecutor`, `registerUi`,
-  or `registerService`. Do all wiring here; subscribe to events for
-  everything that needs to react later.
+  call `registerService`, `defineCapability`, `defineEvent`, or `on`. Do all
+  wiring here; subscribe to events for everything that needs to react later.
 - **Event handlers** — registered via `ctx.on(name, handler)` during
   `setup()`. Core invokes them serially during `RUNNING`. Handler order
   follows initialization order (so a consumer's handler runs after its

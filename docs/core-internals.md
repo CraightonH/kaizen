@@ -10,9 +10,8 @@ src/core/
   index.ts            bootstrap() — public entry point
   loader.ts           Plugin resolution, topo-sort, setup() orchestration
   event-bus.ts        EventBus implementation
-  tool-registry.ts    ToolRegistry (ajv validation, execute wrapper)
-  executor-registry.ts ExecutorRegistry (singleton executor slot)
-  ui-registry.ts      UiRegistry (singleton UI provider slot)
+  capability-registry.ts  CapabilityRegistry — named providers, cardinality rules
+  service-registry.ts     ServiceRegistry — typed DI (registerService / getService)
   context.ts          createPluginContext() — state-checked facade
   config.ts           kaizen.json loading, harness resolution, merging
   errors.ts           fatal / warn / debug
@@ -28,7 +27,7 @@ src/core/
 await bootstrap(kaizenConfig, builtins);
 ```
 
-1. Creates `EventBus`, `ToolRegistry`, `ExecutorRegistry`, `UiRegistry`.
+1. Creates `EventBus`, `CapabilityRegistry`, `ServiceRegistry`.
 2. Calls `loadPlugins()` → returns `{ lifecycleProvider, state }`.
 3. Creates a `PluginContext` for the lifecycle provider.
 4. Sets state to `RUNNING`.
@@ -98,31 +97,34 @@ short-circuit logic (e.g. skip `execute()` if any handler returns a `ToolResult`
 Calling `on()` or `defineEvent()` outside the `INITIALIZING` state throws because
 `createPluginContext()` wraps both calls with `assertInitializing()`.
 
-## ToolRegistry (`tool-registry.ts`)
+## CapabilityRegistry (`capability-registry.ts`)
 
-- `register(tool, pluginName)` — first registration wins; duplicates warn.
-- `list()` — returns all registered tools as `ToolDefinition[]`.
-- `execute(name, args)` — validates args via ajv, calls `tool.execute(args)`,
-  wraps uncaught exceptions as `{ ok: false, error }`.
+- `define(name, ownerPlugin, spec)` — declares a capability. `name` must be
+  prefixed with the owning plugin's name (e.g. `core-lifecycle:executor`).
+  Duplicate definitions by the same plugin warn; a different plugin claiming an
+  already-owned name is a fatal error.
+- `register(name, providerPlugin)` — records that a plugin provides a named
+  capability. Called implicitly when a plugin lists a name in
+  `capabilities.provides`.
+- `validate()` — run after all `setup()` calls. Checks cardinality (`one`
+  capabilities must have exactly one provider when consumed) and
+  `consumes`/`provides` consistency.
 
-ajv is compiled with `{ coerceTypes: false, strict: false }`. Tool schemas can
-use any valid JSON Schema.
+## ServiceRegistry (`service-registry.ts`)
 
-## ExecutorRegistry + UiRegistry
-
-Both are singleton slots: exactly one plugin may register, after which further
-registrations throw. `get()` throws if called before registration (which cannot
-happen at runtime since role validation ensures a provider exists before `start()`
-is called).
+- `register(token, impl, pluginName)` — only valid during `INITIALIZING`.
+  First registration wins; duplicates throw.
+- `get(token)` — valid at any lifecycle state. Throws a named error if the
+  token has no provider.
 
 ## PluginContext (`context.ts`)
 
 `createPluginContext()` returns an object that:
-- Wraps `EventBus`, `ToolRegistry`, `ExecutorRegistry`, `UiRegistry`.
-- Guards `registerTool`, `defineEvent`, `on`, `registerExecutor`, `registerUi`
+- Wraps `EventBus`, `CapabilityRegistry`, `ServiceRegistry`.
+- Guards `registerService`, `defineCapability`, `defineEvent`, and `on`
   with `assertInitializing()` — all throw after `setup()` returns.
-- Exposes `runtime.executor`, `runtime.ui`, `runtime.tools` via lazy getters
-  that call `registry.get()` (throws if nothing registered yet).
+- Exposes `runtime.pluginManager` for hot-reload support
+  (`drainPendingReloads()`).
 - Prefixes all `log()` output with the plugin name.
 
 Each plugin gets its own context instance with its own config slice.

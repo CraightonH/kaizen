@@ -5,15 +5,15 @@
 ## Overview
 
 kaizen is a **kernel-model platform** for LLM harnesses. Core does three things:
-load plugins, run an event bus, and expose tool/executor primitives. Everything
+load plugins, run an event bus, and wire a service/capability registry. Everything
 else — the session loop, terminal UI, CLI tools, and the LLM itself — is a plugin.
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │  kaizen core                                        │
 │  ┌──────────────┐  ┌───────────┐  ┌──────────────┐ │
-│  │ plugin loader│  │ event bus │  │  tool/exec   │ │
-│  │  topo-sort   │  │ on/emit   │  │  registries  │ │
+│  │ plugin loader│  │ event bus │  │  capability/ │ │
+│  │  topo-sort   │  │ on/emit   │  │  service reg │ │
 │  └──────────────┘  └───────────┘  └──────────────┘ │
 └─────────────────────────────────────────────────────┘
         │ loads
@@ -35,10 +35,10 @@ else — the session loop, terminal UI, CLI tools, and the LLM itself — is a p
    dependencies, call `setup(ctx)` on each plugin.
 2. **Event bus.** `defineEvent`, `on`, `emit`. Core defines no events —
    plugins do.
-3. **Primitives.** A tool registry (`registerTool` / `execute`), an executor
-   registry (`registerExecutor`), a UI registry (`registerUi`). Core has no
-   session loop of its own; after initialization it hands control to the
-   single plugin that declared `lifecycle: true`.
+3. **Service and capability registries.** `registerService` / `getService` for
+   typed DI; `defineCapability` for named provider declarations with cardinality
+   rules. Core has no session loop of its own; after initialization it hands
+   control to the single plugin that declared `lifecycle: true`.
 
 ## Startup sequence
 
@@ -49,7 +49,7 @@ kaizen run
   │   ├─ parse kaizen.json
   │   ├─ resolve + topo-sort plugins by depends[]
   │   ├─ for each plugin: setup(ctx)
-  │   │   └─ registerTool / defineEvent / on / registerExecutor / registerUi
+  │   │   └─ registerService / defineCapability / defineEvent / on
   │   └─ capability validation (cardinality, exactly-one-driver check)
   │
   ├─ READY → core calls lifecycle.start(ctx)
@@ -73,8 +73,9 @@ kaizen run
 Exactly one loaded plugin must declare `lifecycle: true` on its default
 export. After `bootstrap()` returns, core calls `start()` on that plugin.
 Zero or more than one driver is a fatal startup error. This is the sole
-plugin-to-core contract; everything else (executor, UI, tools) is
-plugin-to-plugin and modeled as capabilities.
+plugin-to-core contract; everything else (executor implementations, UI
+providers, tool dispatch) is plugin-to-plugin and modeled via the capability
+and service registries.
 
 ## State machine
 
@@ -82,8 +83,9 @@ plugin-to-plugin and modeled as capabilities.
 INITIALIZING → READY → RUNNING → CLOSED
 ```
 
-`registerTool`, `defineEvent`, `on`, `registerExecutor`, `registerUi` are only
-valid during `INITIALIZING` (inside `setup()`). Calling them after returns throws.
+`registerService`, `defineCapability`, `defineEvent`, and `on` are only valid
+during `INITIALIZING` (inside `setup()`). Calling them after `setup()` returns
+throws.
 
 ## Plugin initialization order
 
@@ -116,9 +118,8 @@ src/
     index.ts           bootstrap() — wires everything and calls lifecycle.start()
     loader.ts          Plugin resolution, topo-sort, capability validation, setup()
     event-bus.ts       EventBus: defineEvent / on / emit
-    tool-registry.ts   ToolRegistry: register / list / execute (with ajv validation)
-    executor-registry.ts  ExecutorRegistry: register / get
-    ui-registry.ts     UiRegistry: register / get
+    capability-registry.ts  CapabilityRegistry: define / validate cardinality
+    service-registry.ts     ServiceRegistry: register / get typed implementations
     context.ts         createPluginContext() — the PluginContext handed to each plugin
     config.ts          Config loading, harness resolution, config merging
     errors.ts          fatal / warn / debug helpers
