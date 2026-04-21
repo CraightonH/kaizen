@@ -54,7 +54,7 @@ function makeSandboxStubs() {
     sessionId: "test",
     enabled: false,
   });
-  const lockfilePath = join(mkdtempSync(join(tmpdir(), "kaizen-test-lock-")), "kaizen.permissions.lock");
+  const lockfilePath = join(mkdtempSync(join(tmpdir(), "kaizen-test-lock-")), "permissions.lock");
   const options = { trustLockfile: false, allowUnscoped: false, nonInteractive: true };
   return { enforcer, auditLog, lockfilePath, options };
 }
@@ -284,7 +284,7 @@ describe("PluginManager runtime accept-and-record (item 2)", () => {
     // must not write the lockfile even when decideConsent returns that decision.
     const pluginDir = mkdtempSync(join(tmpdir(), "kaizen-test-ext-plugin-"));
     const lockDir = mkdtempSync(join(tmpdir(), "kaizen-test-lock-"));
-    const lockfilePath = join(lockDir, "kaizen.permissions.lock");
+    const lockfilePath = join(lockDir, "permissions.lock");
 
     writeFileSync(join(pluginDir, "package.json"), JSON.stringify({ name: "ext-trusted", version: "1.0.0", main: "index.js" }));
     // Plugin file exports a minimal trusted plugin + lifecycle role

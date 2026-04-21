@@ -30,6 +30,16 @@ export async function installPlugin(
   }
 }
 
+/**
+ * Materialize a marketplace harness's kaizen.json into
+ * `~/.kaizen/marketplaces/<id>/harnesses/<name>/`.
+ *
+ * Preservation contract: this function MUST NOT remove other files in the
+ * target directory. The per-harness `permissions.lock` lives here and must
+ * survive re-materialization. Plugin grant changes still trigger re-consent
+ * via the tier-grant hash comparison in consent-flow. Do not add
+ * rmSync(target) here.
+ */
 export async function installHarness(
   marketplaceId: string, name: string, pathInRepo: string,
 ): Promise<void> {

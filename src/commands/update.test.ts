@@ -55,7 +55,7 @@ describe("runUpdate", () => {
     const samePerms = { tier: "trusted" };
     await makeUpstreamWithVersions(samePerms, samePerms);
 
-    const lockfilePath = join(home, "kaizen.permissions.lock");
+    const lockfilePath = join(home, "permissions.lock");
     const hash = canonicalTierGrantHash({ tier: "trusted" });
     const lf = {
       schemaVersion: LOCKFILE_SCHEMA_VERSION,

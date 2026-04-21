@@ -49,7 +49,7 @@ The high-level sequence when you run `kaizen --harness <something>`:
 3. **Consent.** Before a new plugin runs, kaizen reads its declared
    permissions and either accepts silently (TRUSTED), prompts with a grant
    list (SCOPED), or requires typed confirmation (UNSCOPED). Decisions
-   persist in `kaizen.permissions.lock`.
+   persist in the harness's `permissions.lock` (see `docs/concepts/harnesses.md`).
 4. **Setup.** Plugins are topologically sorted by their declared dependencies
    and each `setup(ctx)` runs in order. After all `setup()` calls complete,
    core validates capability cardinality and then calls `start(ctx)` on the

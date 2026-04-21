@@ -11,7 +11,7 @@ describe("lockfile", () => {
 
   test("read missing file returns empty lockfile", () => {
     dir = mkdtempSync(join(tmpdir(), "kaizen-lock-"));
-    const lf = readLockfile(join(dir, "kaizen.permissions.lock"));
+    const lf = readLockfile(join(dir, "permissions.lock"));
     expect(lf.schemaVersion).toBe(1);
     expect(lf.plugins).toEqual({});
   });

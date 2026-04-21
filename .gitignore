@@ -5,8 +5,11 @@ kaizen
 /tmp/
 *.js.map
 
-# Sandbox runtime artifacts (commit kaizen.permissions.lock — it's the security record)
+# Sandbox runtime artifacts (commit .kaizen/harnesses/*/permissions.lock — each is a security record)
 .kaizen/
+!.kaizen/harnesses/
+!.kaizen/harnesses/*/
+!.kaizen/harnesses/*/permissions.lock
 plugins/*/.kaizen/
 
 # Bun build scratch files

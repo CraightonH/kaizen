@@ -57,7 +57,7 @@ describe("driver capability resolution (post-registry-refactor)", () => {
   beforeEach(() => {
     home = mkdtempSync(join(tmpdir(), "kz-driver-cap-home-"));
     process.env.KAIZEN_HOME_OVERRIDE = home;
-    lockfilePath = join(mkdtempSync(join(tmpdir(), "kz-driver-cap-lock-")), "kaizen.permissions.lock");
+    lockfilePath = join(mkdtempSync(join(tmpdir(), "kz-driver-cap-lock-")), "permissions.lock");
   });
 
   afterEach(() => {

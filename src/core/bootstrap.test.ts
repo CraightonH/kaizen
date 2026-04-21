@@ -38,7 +38,7 @@ afterEach(() => {
 
 describe("bootstrapMissingPlugins", () => {
   it("adds missing marketplace from harness and installs missing plugin", async () => {
-    const lockfilePath = join(home, "kaizen.permissions.lock");
+    const lockfilePath = join(home, "permissions.lock");
     const report = await bootstrapMissingPlugins(
       { plugins: ["m/demo@1.0.0"], marketplaces: [{ id: "m", url: upstream }] },
       { lockfilePath, trustLockfile: false, nonInteractive: true, allowUnscoped: true },
@@ -51,7 +51,7 @@ describe("bootstrapMissingPlugins", () => {
   });
 
   it("rejects shorthand refs in harness files", async () => {
-    const lockfilePath = join(home, "kaizen.permissions.lock");
+    const lockfilePath = join(home, "permissions.lock");
     await expect(bootstrapMissingPlugins(
       { plugins: ["demo"], marketplaces: [] },
       { lockfilePath, trustLockfile: false, nonInteractive: true, allowUnscoped: false },
@@ -60,7 +60,7 @@ describe("bootstrapMissingPlugins", () => {
 
   it("--trust-lockfile + --non-interactive fails fast if lockfile missing a plugin", async () => {
     await addMarketplace(upstream, { id: "m", local: true });
-    const lockfilePath = join(home, "kaizen.permissions.lock");
+    const lockfilePath = join(home, "permissions.lock");
     await expect(bootstrapMissingPlugins(
       { plugins: ["m/demo@1.0.0"], marketplaces: [] },
       { lockfilePath, trustLockfile: true, nonInteractive: true, allowUnscoped: false },

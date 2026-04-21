@@ -7,9 +7,10 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { bootstrap } from "./core/index.js";
-import { resolveConfig, findProjectConfig, PROJECT_DIR, PROJECT_CONFIG, KAIZEN_HOME, KAIZEN_HOME_CONFIG } from "./core/config.js";
+import { resolveConfig, findProjectConfig, resolveHarness, PROJECT_DIR, PROJECT_CONFIG, KAIZEN_HOME, KAIZEN_HOME_CONFIG } from "./core/config.js";
 import { readFileSync } from "fs";
 import { fatal } from "./core/errors.js";
+import { deriveLockfilePath } from "./core/lockfile-path.js";
 import {
   readLocalConfig,
   writeLocalConfig,
@@ -42,6 +43,21 @@ function setCliList(config: Record<string, unknown>, clis: string[]): void {
     config["core-cli"] = {};
   }
   (config["core-cli"] as Record<string, unknown>)["clis"] = clis;
+}
+
+function resolveHarnessJsonPath(opts: { harness?: string; extendsOverride?: string; configPath?: string }): string {
+  if (opts.harness) return resolveHarness(opts.harness).kaizenJsonPath;
+  if (opts.extendsOverride) return resolveHarness(opts.extendsOverride).kaizenJsonPath;
+  // Fallback: read extends out of the local (or global) config and resolve it.
+  const activePath = opts.configPath ?? findProjectConfig() ??
+    (existsSync(KAIZEN_HOME_CONFIG) ? KAIZEN_HOME_CONFIG : null);
+  if (activePath) {
+    try {
+      const raw = JSON.parse(readFileSync(activePath, "utf8")) as { extends?: unknown };
+      if (typeof raw.extends === "string") return resolveHarness(raw.extends).kaizenJsonPath;
+    } catch { /* resolveConfig will raise the right error */ }
+  }
+  return fatal("kaizen requires a named harness; see docs/concepts/harnesses.md");
 }
 
 const DEFAULT_PLUGINS = {
@@ -248,10 +264,12 @@ if (subcommand === "install") {
   const rest = rawArgs.slice(1);
   const ref = rest.find((a) => !a.startsWith("--"));
   if (!ref) { console.error("usage: kaizen install <ref> [--allow-unscoped] [--non-interactive]"); process.exit(2); }
+  const harnessJsonPath = resolveHarnessJsonPath({});
+  const lockfilePath = deriveLockfilePath(harnessJsonPath);
   const { runUnifiedInstall } = await import("./commands/install.js");
   const code = await runUnifiedInstall({
     ref,
-    lockfilePath: join(process.cwd(), "kaizen.permissions.lock"),
+    lockfilePath,
     allowUnscoped: rest.includes("--allow-unscoped"),
     nonInteractive: rest.includes("--non-interactive"),
   });
@@ -266,10 +284,12 @@ if (subcommand === "uninstall") {
   const rest = rawArgs.slice(1);
   const ref = rest.find((a) => !a.startsWith("--"));
   if (!ref) { console.error("usage: kaizen uninstall <ref> [--purge]"); process.exit(2); }
+  const harnessJsonPath = resolveHarnessJsonPath({});
+  const lockfilePath = deriveLockfilePath(harnessJsonPath);
   const { runUninstall } = await import("./commands/uninstall.js");
   const code = await runUninstall({
     ref,
-    lockfilePath: join(process.cwd(), "kaizen.permissions.lock"),
+    lockfilePath,
     purge: rest.includes("--purge"),
   });
   process.exit(code);
@@ -282,10 +302,12 @@ if (subcommand === "uninstall") {
 if (subcommand === "update") {
   const rest = rawArgs.slice(1);
   const ref = rest.find((a) => !a.startsWith("--"));
+  const harnessJsonPath = resolveHarnessJsonPath({});
+  const lockfilePath = deriveLockfilePath(harnessJsonPath);
   const { runUpdate } = await import("./commands/update.js");
   const code = await runUpdate({
     ...(ref ? { ref } : {}),
-    lockfilePath: join(process.cwd(), "kaizen.permissions.lock"),
+    lockfilePath,
     allowUnscoped: rest.includes("--allow-unscoped"),
     nonInteractive: rest.includes("--non-interactive"),
   });
@@ -300,7 +322,6 @@ if (subcommand === "plugin") {
   const pluginSub = rawArgs[1];
   const rest = rawArgs.slice(2);
   const name = rest.find((a) => !a.startsWith("--"));
-  const lockfilePath = join(process.cwd(), "kaizen.permissions.lock");
 
   if (pluginSub === "dev" && rest.includes("--observe")) {
     const { runPluginDevObserve } = await import("./commands/plugin-dev.js");
@@ -318,11 +339,15 @@ if (subcommand === "plugin") {
     const outDir = join(pluginDir, ".kaizen");
     // Honor --harness flag if provided
     const harnessIdx = rest.indexOf("--harness");
-    const harnessArg = harnessIdx !== -1 ? rest[harnessIdx + 1] : undefined;
-    const devConfig = resolveConfigInner(harnessArg !== undefined ? { harness: harnessArg } : {});
-    const code = await runPluginDevObserve({ pluginName, pluginDir, outDir, kaizenConfig: devConfig });
+    const devHarnessArg = harnessIdx !== -1 ? rest[harnessIdx + 1] : undefined;
+    const devConfig = resolveConfigInner(devHarnessArg !== undefined ? { harness: devHarnessArg } : {});
+    const devHarnessJsonPath = resolveHarnessJsonPath(devHarnessArg !== undefined ? { harness: devHarnessArg } : {});
+    const devLockfilePath = deriveLockfilePath(devHarnessJsonPath);
+    const code = await runPluginDevObserve({ pluginName, pluginDir, outDir, kaizenConfig: devConfig, lockfilePath: devLockfilePath });
     process.exit(code);
   }
+
+  const lockfilePath = deriveLockfilePath(resolveHarnessJsonPath({}));
 
   if (pluginSub === "consent" && name) {
     const code = await runPluginConsent({
@@ -384,8 +409,10 @@ if (subcommand === "capability") {
   const sub = rawArgs[1];
   const { capabilityList, capabilityShow } = await import("./commands/capability.js");
   const { initializePluginSystem } = await import("./core/index.js");
+  const harnessJsonPath = resolveHarnessJsonPath({});
+  const lockfilePath = deriveLockfilePath(harnessJsonPath);
   const cfg = resolveConfig({});
-  const { capabilityRegistry } = await initializePluginSystem(cfg);
+  const { capabilityRegistry } = await initializePluginSystem(cfg, { lockfilePath });
   if (sub === "list") {
     capabilityList(capabilityRegistry);
   } else if (sub === "show") {
@@ -484,6 +511,13 @@ if (harnessArg === undefined) {
   }
 }
 
+const harnessJsonPath = resolveHarnessJsonPath({
+  ...(harnessArg !== undefined ? { harness: harnessArg } : {}),
+  ...(extendsOverride !== undefined ? { extendsOverride } : {}),
+  ...(parsed.configPath !== undefined ? { configPath: parsed.configPath } : {}),
+});
+const lockfilePath = deriveLockfilePath(harnessJsonPath);
+
 const kaizenConfig = resolveConfig({
   ...(harnessArg !== undefined ? { harness: harnessArg } : {}),
   ...(parsed.configPath !== undefined ? { configPath: parsed.configPath } : {}),
@@ -494,7 +528,7 @@ const kaizenConfig = resolveConfig({
 if ((kaizenConfig.marketplaces as unknown[])?.length || ((kaizenConfig.plugins as string[] | undefined) ?? []).some((p: string) => p.includes("/"))) {
   const { bootstrapMissingPlugins } = await import("./core/bootstrap.js");
   await bootstrapMissingPlugins(kaizenConfig, {
-    lockfilePath: join(process.cwd(), "kaizen.permissions.lock"),
+    lockfilePath,
     trustLockfile, nonInteractive, allowUnscoped: allowUnscopedFlag,
   });
 }
@@ -523,4 +557,4 @@ if (parsed.prompt) {
   }
 }
 
-await bootstrap(kaizenConfig);
+await bootstrap(kaizenConfig, lockfilePath);

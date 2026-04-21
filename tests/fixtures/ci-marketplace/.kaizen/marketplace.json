@@ -82,6 +82,14 @@
       "versions": [
         { "version": "1.0.0", "source": { "type": "file", "path": "plugins/cap-driver-conflict" } }
       ]
+    },
+    {
+      "kind": "harness",
+      "name": "ci-default",
+      "description": "Default CI harness bundling the four core fixture plugins.",
+      "versions": [
+        { "version": "1.0.0", "path": "harnesses/ci-default/kaizen.json" }
+      ]
     }
   ]
 }

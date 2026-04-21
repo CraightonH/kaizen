@@ -31,20 +31,33 @@ export const RESERVED_KEYS = new Set(["plugins", "extends"]);
 // project/home fallback directories.
 // ---------------------------------------------------------------------------
 
-export function loadHarnessConfig(nameOrPath: string): KaizenConfig {
+export interface ResolvedHarness {
+  kaizenJsonPath: string;
+  config: KaizenConfig;
+}
+
+/**
+ * Resolve a harness name-or-path to both its kaizen.json location and parsed config.
+ * Callers derive the lockfile path from `dirname(kaizenJsonPath) + "/permissions.lock"`.
+ */
+export function resolveHarness(nameOrPath: string): ResolvedHarness {
   // 1. Project-scoped harness
   const projectHarness = join(PROJECT_HARNESSES, nameOrPath, "kaizen.json");
-  if (existsSync(projectHarness)) return parseAndValidateHarness(projectHarness, nameOrPath);
+  if (existsSync(projectHarness)) {
+    return { kaizenJsonPath: projectHarness, config: parseAndValidateHarness(projectHarness, nameOrPath) };
+  }
 
   // 2. Global kaizen home harness
   const homeHarness = join(KAIZEN_HOME_HARNESSES, nameOrPath, "kaizen.json");
-  if (existsSync(homeHarness)) return parseAndValidateHarness(homeHarness, nameOrPath);
+  if (existsSync(homeHarness)) {
+    return { kaizenJsonPath: homeHarness, config: parseAndValidateHarness(homeHarness, nameOrPath) };
+  }
 
   // 3. Explicit path (./relative or /absolute)
   if (nameOrPath.startsWith("./") || nameOrPath.startsWith("/") || nameOrPath.startsWith("../")) {
     const filePath = nameOrPath.endsWith(".json") ? nameOrPath : join(nameOrPath, "kaizen.json");
     if (!existsSync(filePath)) fatal(`Harness not found at path: ${filePath}`);
-    return parseAndValidateHarness(filePath, nameOrPath);
+    return { kaizenJsonPath: filePath, config: parseAndValidateHarness(filePath, nameOrPath) };
   }
 
   // 4. URL — not supported; use marketplace
@@ -62,6 +75,10 @@ export function loadHarnessConfig(nameOrPath: string): KaizenConfig {
     `  Global:         ~/.kaizen/harnesses/${nameOrPath}/kaizen.json\n` +
     `  Path:           ./path/to/kaizen.json`,
   );
+}
+
+export function loadHarnessConfig(nameOrPath: string): KaizenConfig {
+  return resolveHarness(nameOrPath).config;
 }
 
 // ---------------------------------------------------------------------------
@@ -126,8 +143,10 @@ export function loadKaizenConfig(path: string): KaizenConfig {
     fatal(`Config not found at ${path}. Run 'kaizen init' to create one.`);
   }
   const config = parseConfigFile(path);
-  if (!config["plugins"]) fatal(`${path} is missing required field 'plugins'.`);
-  if (!Array.isArray(config["plugins"])) fatal(`${path} 'plugins' must be an array.`);
+  // plugins is optional when config delegates to a harness via 'extends'
+  if (config["plugins"] !== undefined && !Array.isArray(config["plugins"])) {
+    fatal(`${path} 'plugins' must be an array.`);
+  }
   return config as KaizenConfig;
 }
 
@@ -202,26 +221,37 @@ export function resolveConfig(opts: {
   if (projectConfigPath) {
     const localConfig = loadKaizenConfig(projectConfigPath);
     const ext = extendsOverride ?? localConfig.extends;
-    if (ext) {
-      return mergeConfigs(loadHarnessConfig(ext), localConfig);
+    if (!ext) {
+      fatal(
+        `A named harness required.\n` +
+        `Found ${projectConfigPath} but no --harness flag and no 'extends' field.\n` +
+        `See docs/concepts/harnesses.md. Valid forms:\n` +
+        `  kaizen --harness <marketplace>/<name>@<version>\n` +
+        `  kaizen --harness ./path/to/harness/\n` +
+        `  Add "extends": "<harness-ref>" to ${projectConfigPath}`,
+      );
     }
-    return localConfig;
+    return mergeConfigs(loadHarnessConfig(ext), localConfig);
   }
 
   // Global default
   if (existsSync(KAIZEN_HOME_CONFIG)) {
     const globalConfig = loadKaizenConfig(KAIZEN_HOME_CONFIG);
     const ext = extendsOverride ?? globalConfig.extends;
-    if (ext) {
-      return mergeConfigs(loadHarnessConfig(ext), globalConfig);
+    if (!ext) {
+      fatal(
+        `A named harness required.\n` +
+        `Found ${KAIZEN_HOME_CONFIG} but no --harness flag and no 'extends' field.\n` +
+        `See docs/concepts/harnesses.md.`,
+      );
     }
-    return globalConfig;
+    return mergeConfigs(loadHarnessConfig(ext), globalConfig);
   }
 
   fatal(
     `No config found.\n` +
-    `  Project config: kaizen init\n` +
-    `  Global config:  kaizen init --global\n` +
-    `  Harness:        kaizen --harness <marketplace>/<name>@<version>`,
+    `  Harness (required): kaizen --harness <marketplace>/<name>@<version>\n` +
+    `  Project config:     kaizen init\n` +
+    `  Global config:      kaizen init --global`,
   );
 }

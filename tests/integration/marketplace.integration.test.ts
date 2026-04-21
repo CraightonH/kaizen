@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync } from "fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { $ } from "bun";
 import { addMarketplace } from "../../src/core/marketplace.js";
 import { runUnifiedInstall } from "../../src/commands/install.js";
 import { runUninstall } from "../../src/commands/uninstall.js";
-import { pluginInstallDir } from "../../src/core/kaizen-config.js";
+import { pluginInstallDir, harnessInstallDir } from "../../src/core/kaizen-config.js";
+import { installHarness } from "../../src/core/plugin-installer.js";
 
 describe("integration: local git marketplace, file-source plugin", () => {
   let home: string; let upstream: string; let project: string;
@@ -38,9 +39,36 @@ describe("integration: local git marketplace, file-source plugin", () => {
     delete process.env.KAIZEN_HOME_OVERRIDE;
   });
 
+  it("installHarness preserves an existing permissions.lock on re-materialization", async () => {
+    await addMarketplace(upstream, { id: "local" });
+
+    // Create a harness source file in the upstream repo
+    const harnessPath = "harnesses/demo-harness/kaizen.json";
+    mkdirSync(join(upstream, "harnesses", "demo-harness"), { recursive: true });
+    writeFileSync(join(upstream, harnessPath), JSON.stringify({ name: "demo-harness", version: "1.0.0" }));
+    await $`git -c user.email=t@t -c user.name=t add .`.cwd(upstream);
+    await $`git -c user.email=t@t -c user.name=t commit -qm harness`.cwd(upstream);
+
+    // First install
+    await installHarness("local", "demo-harness", harnessPath);
+
+    // Simulate a permissions.lock written after initial consent
+    const lockPath = join(harnessInstallDir("local", "demo-harness"), "permissions.lock");
+    const lockContent = "schemaVersion: 1\nplugins: {}\n";
+    writeFileSync(lockPath, lockContent);
+    const before = readFileSync(lockPath);
+
+    // Re-materialize (second install)
+    await installHarness("local", "demo-harness", harnessPath);
+
+    // Lock must survive byte-for-byte
+    expect(existsSync(lockPath)).toBe(true);
+    expect(readFileSync(lockPath).equals(before)).toBe(true);
+  });
+
   it("add → install → uninstall --purge", async () => {
     await addMarketplace(upstream, { id: "local" });
-    const lock = join(project, "kaizen.permissions.lock");
+    const lock = join(project, "permissions.lock");
 
     const code = await runUnifiedInstall({
       ref: "local/demo@1.0.0", lockfilePath: lock,

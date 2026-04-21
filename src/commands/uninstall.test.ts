@@ -44,7 +44,7 @@ describe("runUninstall", () => {
 
     // We need PROJECT_CONFIG to point to our test file. Since PROJECT_CONFIG is cwd-based,
     // we just test without it (no project config in cwd).
-    const lockfilePath = join(home, "kaizen.permissions.lock");
+    const lockfilePath = join(home, "permissions.lock");
     const code = await runUninstall({ ref: "m/demo@1.0.0", lockfilePath, purge: false });
     expect(code).toBe(0);
     rmSync(projectDir, { recursive: true, force: true });
@@ -56,7 +56,7 @@ describe("runUninstall", () => {
     mkdirSync(installDir, { recursive: true });
     writeFileSync(join(installDir, "package.json"), "{}");
 
-    const lockfilePath = join(home, "kaizen.permissions.lock");
+    const lockfilePath = join(home, "permissions.lock");
     const code = await runUninstall({ ref: "m/demo@1.0.0", lockfilePath, purge: true });
     expect(code).toBe(0);
     expect(existsSync(installDir)).toBe(false);
