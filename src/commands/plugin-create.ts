@@ -203,7 +203,6 @@ export function generateIndexTestTs(cfg: PluginScaffoldConfig): string {
     `  return {`,
     `    log: mock(() => {}),`,
     `    config: ${configObj},`,
-    `    registerTool: mock(() => {}),`,
     `    on: mock(() => {}),`,
     `    defineEvent: mock(() => {}),`,
     `    emit: mock(async () => []),`,
