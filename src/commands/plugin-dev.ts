@@ -8,7 +8,6 @@ import { synthesizeManifest } from "../core/manifest-synthesizer.js";
 import { runHarness } from "../core/index.js";
 import type { CheckRecord } from "../core/permission-enforcer.js";
 import type { KaizenConfig } from "../types/plugin.js";
-import type { Builtins } from "../core/plugin-manager.js";
 import type { PluginPermissions } from "../types/plugin.js";
 
 export async function runPluginDevObserve(args: {
@@ -16,7 +15,6 @@ export async function runPluginDevObserve(args: {
   pluginDir: string;
   outDir: string;
   kaizenConfig: KaizenConfig;
-  builtins: Builtins;
 }): Promise<number> {
   const sessionId = randomUUID();
   const enforcer = new PermissionEnforcer({ mode: "observe" });
@@ -43,7 +41,7 @@ export async function runPluginDevObserve(args: {
   process.on("SIGTERM", onSignal);
 
   try {
-    await runHarness({ kaizenConfig: args.kaizenConfig, builtins: args.builtins, enforcer });
+    await runHarness({ kaizenConfig: args.kaizenConfig, enforcer });
   } finally {
     finalize();
     process.off("SIGINT", onSignal);

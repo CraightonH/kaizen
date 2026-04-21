@@ -18,15 +18,12 @@ import {
 import { runPluginConsent } from "./commands/plugin-consent.js";
 import { runPluginReview } from "./commands/plugin-review.js";
 import { runPluginAudit } from "./commands/plugin-audit.js";
-import type { KaizenPlugin } from "./types/plugin.js";
 import { registerHostApi } from "./core/host-api-register.js";
 
 // Register the `kaizen/types` virtual module for plugin imports.
 // Must run before any dynamic plugin import (bootstrap, plugin dev,
 // capability list, tests, etc.).
 registerHostApi();
-
-const builtins: Record<string, KaizenPlugin> = {};
 
 // ---------------------------------------------------------------------------
 // Arg parsing
@@ -323,7 +320,7 @@ if (subcommand === "plugin") {
     const harnessIdx = rest.indexOf("--harness");
     const harnessArg = harnessIdx !== -1 ? rest[harnessIdx + 1] : undefined;
     const devConfig = resolveConfigInner(harnessArg !== undefined ? { harness: harnessArg } : {});
-    const code = await runPluginDevObserve({ pluginName, pluginDir, outDir, kaizenConfig: devConfig, builtins });
+    const code = await runPluginDevObserve({ pluginName, pluginDir, outDir, kaizenConfig: devConfig });
     process.exit(code);
   }
 
@@ -361,7 +358,7 @@ if (subcommand === "plugin") {
 
   switch (pluginSub) {
     case "list":
-      cmdPluginList(builtins);
+      cmdPluginList();
       break;
     case "install":
     case "remove":
@@ -388,7 +385,7 @@ if (subcommand === "capability") {
   const { capabilityList, capabilityShow } = await import("./commands/capability.js");
   const { initializePluginSystem } = await import("./core/index.js");
   const cfg = resolveConfig({});
-  const { capabilityRegistry } = await initializePluginSystem(cfg, builtins);
+  const { capabilityRegistry } = await initializePluginSystem(cfg);
   if (sub === "list") {
     capabilityList(capabilityRegistry);
   } else if (sub === "show") {
@@ -526,4 +523,4 @@ if (parsed.prompt) {
   }
 }
 
-await bootstrap(kaizenConfig, builtins);
+await bootstrap(kaizenConfig);

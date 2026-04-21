@@ -8,7 +8,6 @@ import { join } from "path";
 import { findProjectConfig, PROJECT_CONFIG } from "../core/config.js";
 import { pluginInstallDir } from "../core/kaizen-config.js";
 import { parseRef } from "../core/ref-resolver.js";
-import type { KaizenPlugin } from "../types/plugin.js";
 
 // ---------------------------------------------------------------------------
 // kaizen.json helpers
@@ -36,18 +35,11 @@ function getPlugins(config: Record<string, unknown>): string[] {
 // ---------------------------------------------------------------------------
 
 interface InstallStatus {
-  status: "built-in" | "installed" | "NOT INSTALLED";
+  status: "installed" | "NOT INSTALLED";
   version: string;
 }
 
-function statusFor(
-  name: string,
-  builtins: Record<string, KaizenPlugin>,
-): InstallStatus {
-  if (Object.prototype.hasOwnProperty.call(builtins, name)) {
-    return { status: "built-in", version: "" };
-  }
-
+function statusFor(name: string): InstallStatus {
   try {
     const parsed = parseRef(name);
     if (parsed.kind === "marketplace" && parsed.version) {
@@ -66,7 +58,7 @@ function statusFor(
 // kaizen plugin list
 // ---------------------------------------------------------------------------
 
-export function cmdPluginList(builtins: Record<string, KaizenPlugin>): void {
+export function cmdPluginList(): void {
   const config = readLocalConfig();
   const plugins = getPlugins(config);
 
@@ -79,10 +71,9 @@ export function cmdPluginList(builtins: Record<string, KaizenPlugin>): void {
   let maxLen = 0;
 
   for (const name of plugins) {
-    const s = statusFor(name, builtins);
+    const s = statusFor(name);
     const label =
-      s.status === "built-in" ? "built-in"
-      : s.status === "NOT INSTALLED" ? (s.version ? `NOT INSTALLED (${s.version})` : "NOT INSTALLED")
+      s.status === "NOT INSTALLED" ? (s.version ? `NOT INSTALLED (${s.version})` : "NOT INSTALLED")
       : s.version;
     rows.push([name, label]);
     if (name.length > maxLen) maxLen = name.length;

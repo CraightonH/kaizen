@@ -9,7 +9,7 @@ import { ServiceRegistry } from "./service-registry.js";
 import { CapabilityRegistry } from "./capability-registry.js";
 import { PermissionEnforcer } from "./permission-enforcer.js";
 import { AuditLog } from "./audit-log.js";
-import type { KaizenPlugin, KaizenConfig } from "../types/plugin.js";
+import type { KaizenConfig } from "../types/plugin.js";
 
 describe("findPackageRoot", () => {
   let tmpDir: string;
@@ -59,62 +59,91 @@ function makeSandboxStubs() {
   return { enforcer, auditLog, lockfilePath, options };
 }
 
-function makePlugin(
-  name: string,
-  setupFn?: (ctx: Parameters<KaizenPlugin["setup"]>[0]) => Promise<void>,
-  capabilities?: KaizenPlugin["capabilities"],
-): KaizenPlugin {
-  return {
-    name,
-    apiVersion: "2",
-    ...(capabilities ? { capabilities } : {}),
-    async setup(ctx) {
-      await setupFn?.(ctx);
-    },
-  };
+// Tracks all temp plugin dirs created in a test so we can clean them up.
+const createdDirs: string[] = [];
+afterEach(() => {
+  for (const d of createdDirs.splice(0)) rmSync(d, { recursive: true, force: true });
+});
+
+/**
+ * Write a plugin to a temp dir as an ESM module and return its absolute path.
+ * Uses a globalThis bridge so behaviors defined in the test (setup callbacks,
+ * errors, capability calls) run when the plugin is imported in its own scope.
+ */
+interface PluginSpec {
+  name: string;
+  apiVersion?: string;
+  lifecycle?: boolean;
+  capabilities?: { provides?: string[]; consumes?: string[] };
+  aliases?: Record<string, string>;
+  permissions?: unknown;
+  /** Inline body for setup(ctx). Has access to `ctx`. */
+  setupBody?: string;
+  /** If true, include a start() that does nothing. */
+  hasStart?: boolean;
+}
+
+function writePlugin(spec: PluginSpec): string {
+  const dir = mkdtempSync(join(tmpdir(), `kz-pm-test-${spec.name}-`));
+  createdDirs.push(dir);
+  writeFileSync(join(dir, "package.json"), JSON.stringify({
+    name: spec.name, version: "1.0.0", type: "module", main: "index.mjs",
+  }));
+  const parts: string[] = [];
+  parts.push(`export default {`);
+  parts.push(`  name: ${JSON.stringify(spec.name)},`);
+  parts.push(`  apiVersion: ${JSON.stringify(spec.apiVersion ?? "2")},`);
+  if (spec.lifecycle) parts.push(`  lifecycle: true,`);
+  if (spec.capabilities) parts.push(`  capabilities: ${JSON.stringify(spec.capabilities)},`);
+  if (spec.aliases) parts.push(`  aliases: ${JSON.stringify(spec.aliases)},`);
+  if (spec.permissions !== undefined) parts.push(`  permissions: ${JSON.stringify(spec.permissions)},`);
+  parts.push(`  async setup(ctx) {`);
+  if (spec.setupBody) parts.push(spec.setupBody);
+  parts.push(`  },`);
+  if (spec.hasStart) parts.push(`  async start() {},`);
+  parts.push(`};`);
+  writeFileSync(join(dir, "index.mjs"), parts.join("\n"));
+  return dir;
 }
 
 describe("PluginManager.initialize", () => {
   test("calls setup on all plugins and returns lifecycle provider", async () => {
-    const setupCalls: string[] = [];
-    const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
-
-    const config: KaizenConfig = { plugins: ["core-lifecycle"] };
-    const lifecyclePlugin: KaizenPlugin = {
+    const bridgeKey = `__kz_test_${Date.now()}_${Math.random()}__`;
+    (globalThis as Record<string, unknown>)[bridgeKey] = { calls: [] as string[] };
+    const lifeDir = writePlugin({
       name: "core-lifecycle",
-      apiVersion: "2",
       lifecycle: true,
-      async setup() {
-        setupCalls.push("core-lifecycle");
-      },
-      async start() {},
-    };
+      hasStart: true,
+      setupBody: `globalThis[${JSON.stringify(bridgeKey)}].calls.push("core-lifecycle");`,
+    });
 
+    const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
+    const config: KaizenConfig = { plugins: [lifeDir] };
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
-      config, { "core-lifecycle": lifecyclePlugin },
+      config,
       eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
     const { lifecycleProvider } = await manager.initialize();
-    expect(setupCalls).toEqual(["core-lifecycle"]);
+    const bridge = (globalThis as unknown as Record<string, { calls: string[] }>)[bridgeKey]!;
+    expect(bridge.calls).toEqual(["core-lifecycle"]);
     expect(lifecycleProvider.name).toBe("core-lifecycle");
+    delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
 
   test("plugin with lifecycle:true is treated as critical — setup throws are fatal", async () => {
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
-
-    const life: KaizenPlugin = {
+    const lifeDir = writePlugin({
       name: "core-lifecycle",
-      apiVersion: "2",
       lifecycle: true,
-      async setup() { throw new Error("boom"); },
-      async start() {},
-    };
+      hasStart: true,
+      setupBody: `throw new Error("boom");`,
+    });
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
-      { plugins: ["core-lifecycle"] }, { "core-lifecycle": life },
+      { plugins: [lifeDir] },
       eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
@@ -124,17 +153,14 @@ describe("PluginManager.initialize", () => {
 
   test("finds session driver via lifecycle:true flag — no capability required", async () => {
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
-
-    const driver: KaizenPlugin = {
+    const driverDir = writePlugin({
       name: "fixture-lifecycle",
-      apiVersion: "2",
       lifecycle: true,
-      async setup() {},
-      async start() {},
-    };
+      hasStart: true,
+    });
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
-      { plugins: ["fixture-lifecycle"] }, { "fixture-lifecycle": driver },
+      { plugins: [driverDir] },
       eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
@@ -145,10 +171,10 @@ describe("PluginManager.initialize", () => {
 
   test("fatals when no plugin declares lifecycle:true", async () => {
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
-    const plain = makePlugin("tool-only", async () => {});
+    const dir = writePlugin({ name: "tool-only" });
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
-      { plugins: ["tool-only"] }, { "tool-only": plain },
+      { plugins: [dir] },
       eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
@@ -158,11 +184,11 @@ describe("PluginManager.initialize", () => {
 
   test("fatals with names listed when two plugins declare lifecycle:true", async () => {
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
-    const a: KaizenPlugin = { name: "a-life", apiVersion: "2", lifecycle: true, async setup() {}, async start() {} };
-    const b: KaizenPlugin = { name: "b-life", apiVersion: "2", lifecycle: true, async setup() {}, async start() {} };
+    const a = writePlugin({ name: "a-life", lifecycle: true, hasStart: true });
+    const b = writePlugin({ name: "b-life", lifecycle: true, hasStart: true });
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
-      { plugins: ["a-life", "b-life"] }, { "a-life": a, "b-life": b },
+      { plugins: [a, b] },
       eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
@@ -175,15 +201,10 @@ describe("PluginManager.initialize", () => {
   test("fatals when lifecycle plugin has no start() function", async () => {
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
     // Deliberately omit start().
-    const broken: KaizenPlugin = {
-      name: "broken-life",
-      apiVersion: "2",
-      lifecycle: true,
-      async setup() {},
-    };
+    const brokenDir = writePlugin({ name: "broken-life", lifecycle: true });
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
-      { plugins: ["broken-life"] }, { "broken-life": broken },
+      { plugins: [brokenDir] },
       eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
@@ -197,17 +218,17 @@ describe("PluginManager.initialize", () => {
 describe("PluginManager.load + unload + reload", () => {
   test("load then unload a plugin (no tools)", async () => {
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
-    const plugin = makePlugin("simple-plugin");
+    const dir = writePlugin({ name: "simple-plugin" });
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
-      { plugins: [] }, { "simple-plugin": plugin },
+      { plugins: [] },
       eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
-    await manager.load("simple-plugin");
+    await manager.load(dir);
     expect(manager.list().map((e) => e.name)).toContain("simple-plugin");
-    await manager.unload("simple-plugin");
+    await manager.unload(dir);
     expect(manager.list().map((e) => e.name)).not.toContain("simple-plugin");
   });
 });
@@ -217,7 +238,7 @@ describe("PluginManager.drainPendingReloads", () => {
     const registries = makeRegistries();
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
-      { plugins: [] }, {},
+      { plugins: [] },
       registries.eventBus, registries.capabilityRegistry, registries.serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
@@ -226,24 +247,33 @@ describe("PluginManager.drainPendingReloads", () => {
   });
 
   test("drains queued reloads in order", async () => {
+    const bridgeKey = `__kz_drain_${Date.now()}_${Math.random()}__`;
+    (globalThis as Record<string, unknown>)[bridgeKey] = { drained: [] as string[] };
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
-    const drained: string[] = [];
-    const pluginA = makePlugin("a", async () => { drained.push("a"); });
-    const pluginB = makePlugin("b", async () => { drained.push("b"); });
+    const aDir = writePlugin({
+      name: "a",
+      setupBody: `globalThis[${JSON.stringify(bridgeKey)}].drained.push("a");`,
+    });
+    const bDir = writePlugin({
+      name: "b",
+      setupBody: `globalThis[${JSON.stringify(bridgeKey)}].drained.push("b");`,
+    });
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
-      { plugins: [] }, { a: pluginA, b: pluginB },
+      { plugins: [] },
       eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
-    await manager.load("a");
-    await manager.load("b");
-    drained.length = 0; // reset after initial loads
-    manager.queueReload("a");
-    manager.queueReload("b");
+    await manager.load(aDir);
+    await manager.load(bDir);
+    const bridge = (globalThis as unknown as Record<string, { drained: string[] }>)[bridgeKey]!;
+    bridge.drained.length = 0; // reset after initial loads
+    manager.queueReload(aDir);
+    manager.queueReload(bDir);
     await manager.drainPendingReloads();
-    expect(drained).toEqual(["a", "b"]);
+    expect(bridge.drained).toEqual(["a", "b"]);
+    delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
 });
 
@@ -268,6 +298,8 @@ describe("PluginManager runtime accept-and-record (item 2)", () => {
       "};",
     ].join("\n"));
 
+    const lifeDir = writePlugin({ name: "core-lifecycle", lifecycle: true, hasStart: true });
+
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
     const enforcer = new PermissionEnforcer({ mode: "log-only" });
     const auditLog = new AuditLog({
@@ -277,18 +309,9 @@ describe("PluginManager runtime accept-and-record (item 2)", () => {
     });
     const options = { trustLockfile: false, allowUnscoped: false, nonInteractive: true };
 
-    // Need a lifecycle provider for initialize() to succeed.
-    const lifePlugin: KaizenPlugin = {
-      name: "core-lifecycle", apiVersion: "2",
-      lifecycle: true,
-      async setup() {},
-      async start() {},
-    };
-
     // Load via absolute path so resolvedPath is non-null → consultLockfile is exercised.
     const manager = new PluginManager(
-      { plugins: [pluginDir, "core-lifecycle"] },
-      { "core-lifecycle": lifePlugin },
+      { plugins: [pluginDir, lifeDir] },
       eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
@@ -307,15 +330,15 @@ describe("PluginManager runtime accept-and-record (item 2)", () => {
 describe("PluginManager.list", () => {
   test("returns loaded plugin entries", async () => {
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
-    const plugin = makePlugin("listed-plugin");
+    const dir = writePlugin({ name: "listed-plugin" });
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
-      { plugins: [] }, { "listed-plugin": plugin },
+      { plugins: [] },
       eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
-    await manager.load("listed-plugin");
+    await manager.load(dir);
     const entries = manager.list();
     expect(entries).toHaveLength(1);
     expect(entries[0]?.name).toBe("listed-plugin");
@@ -339,20 +362,17 @@ describe("PluginManager capability validation", () => {
 
   test("zero providers for a consumed 'one' capability is fatal", async () => {
     const regs = baseRegistries();
-    const owner: KaizenPlugin = {
-      name: "owner", apiVersion: "2",
+    const ownerDir = writePlugin({
+      name: "owner",
       capabilities: { provides: [] },
-      async setup(ctx) {
-        ctx.defineCapability("owner:thing", { cardinality: "one", description: "t" });
-      },
-    };
-    const consumer: KaizenPlugin = {
-      name: "consumer", apiVersion: "2",
+      setupBody: `ctx.defineCapability("owner:thing", { cardinality: "one", description: "t" });`,
+    });
+    const consumerDir = writePlugin({
+      name: "consumer",
       capabilities: { consumes: ["owner:thing"] },
-      async setup() {},
-    };
+    });
     const manager = new PluginManager(
-      { plugins: ["owner", "consumer"] }, { owner, consumer },
+      { plugins: [ownerDir, consumerDir] },
       regs.eventBus, regs.capabilityRegistry, regs.serviceRegistry,
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
@@ -362,27 +382,16 @@ describe("PluginManager capability validation", () => {
 
   test("two providers for a consumed 'one' capability is fatal", async () => {
     const regs = baseRegistries();
-    const owner: KaizenPlugin = {
-      name: "owner", apiVersion: "2",
+    const ownerDir = writePlugin({
+      name: "owner",
       capabilities: { provides: ["owner:thing"] },
-      async setup(ctx) {
-        ctx.defineCapability("owner:thing", { cardinality: "one", description: "" });
-      },
-    };
-    const a: KaizenPlugin = {
-      name: "a", apiVersion: "2", capabilities: { provides: ["owner:thing"] },
-      async setup() {},
-    };
-    const b: KaizenPlugin = {
-      name: "b", apiVersion: "2", capabilities: { provides: ["owner:thing"] },
-      async setup() {},
-    };
-    const consumer: KaizenPlugin = {
-      name: "consumer", apiVersion: "2", capabilities: { consumes: ["owner:thing"] },
-      async setup() {},
-    };
+      setupBody: `ctx.defineCapability("owner:thing", { cardinality: "one", description: "" });`,
+    });
+    const aDir = writePlugin({ name: "a", capabilities: { provides: ["owner:thing"] } });
+    const bDir = writePlugin({ name: "b", capabilities: { provides: ["owner:thing"] } });
+    const consumerDir = writePlugin({ name: "consumer", capabilities: { consumes: ["owner:thing"] } });
     const manager = new PluginManager(
-      { plugins: ["owner", "a", "b", "consumer"] }, { owner, a, b, consumer },
+      { plugins: [ownerDir, aDir, bDir, consumerDir] },
       regs.eventBus, regs.capabilityRegistry, regs.serviceRegistry,
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
@@ -392,27 +401,15 @@ describe("PluginManager capability validation", () => {
 
   test("zero providers for a consumed 'many' capability is ok", async () => {
     const regs = baseRegistries();
-    const owner: KaizenPlugin = {
-      name: "owner", apiVersion: "2",
+    const ownerDir = writePlugin({
+      name: "owner",
       capabilities: { provides: [] },
-      async setup(ctx) {
-        ctx.defineCapability("owner:bag", { cardinality: "many", description: "" });
-      },
-    };
-    const consumer: KaizenPlugin = {
-      name: "consumer", apiVersion: "2",
-      capabilities: { consumes: ["owner:bag"] },
-      async setup() {},
-    };
-    const life: KaizenPlugin = {
-      name: "core-lifecycle", apiVersion: "2",
-      lifecycle: true,
-      async setup() {},
-      async start() {},
-    };
+      setupBody: `ctx.defineCapability("owner:bag", { cardinality: "many", description: "" });`,
+    });
+    const consumerDir = writePlugin({ name: "consumer", capabilities: { consumes: ["owner:bag"] } });
+    const lifeDir = writePlugin({ name: "core-lifecycle", lifecycle: true, hasStart: true });
     const manager = new PluginManager(
-      { plugins: ["owner", "consumer", "core-lifecycle"] },
-      { owner, consumer, "core-lifecycle": life },
+      { plugins: [ownerDir, consumerDir, lifeDir] },
       regs.eventBus, regs.capabilityRegistry, regs.serviceRegistry,
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
@@ -422,18 +419,18 @@ describe("PluginManager capability validation", () => {
 
   test("cycle in consumes graph is fatal", async () => {
     const regs = baseRegistries();
-    const a: KaizenPlugin = {
-      name: "a", apiVersion: "2",
+    const aDir = writePlugin({
+      name: "a",
       capabilities: { provides: ["a:x"], consumes: ["b:y"] },
-      async setup(ctx) { ctx.defineCapability("a:x", { cardinality: "many", description: "" }); },
-    };
-    const b: KaizenPlugin = {
-      name: "b", apiVersion: "2",
+      setupBody: `ctx.defineCapability("a:x", { cardinality: "many", description: "" });`,
+    });
+    const bDir = writePlugin({
+      name: "b",
       capabilities: { provides: ["b:y"], consumes: ["a:x"] },
-      async setup(ctx) { ctx.defineCapability("b:y", { cardinality: "many", description: "" }); },
-    };
+      setupBody: `ctx.defineCapability("b:y", { cardinality: "many", description: "" });`,
+    });
     const manager = new PluginManager(
-      { plugins: ["a", "b"] }, { a, b },
+      { plugins: [aDir, bDir] },
       regs.eventBus, regs.capabilityRegistry, regs.serviceRegistry,
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
@@ -443,51 +440,43 @@ describe("PluginManager capability validation", () => {
 
   test("alias resolution in consumes", async () => {
     const regs = baseRegistries();
-    const life: KaizenPlugin = {
-      name: "core-lifecycle", apiVersion: "2",
+    const bridgeKey = `__kz_alias_${Date.now()}_${Math.random()}__`;
+    (globalThis as Record<string, unknown>)[bridgeKey] = { ran: false };
+    const lifeDir = writePlugin({
+      name: "core-lifecycle",
       lifecycle: true,
+      hasStart: true,
       capabilities: { provides: ["core-lifecycle:executor.send"] },
-      async setup(ctx) {
-        ctx.defineCapability("core-lifecycle:executor.send", { cardinality: "many", description: "" });
-      },
-      async start() {},
-    };
-    let consumerRan = false;
-    const consumer: KaizenPlugin = {
-      name: "consumer", apiVersion: "2",
+      setupBody: `ctx.defineCapability("core-lifecycle:executor.send", { cardinality: "many", description: "" });`,
+    });
+    const consumerDir = writePlugin({
+      name: "consumer",
       aliases: { "executor": "core-lifecycle:executor.send" },
       capabilities: { consumes: ["executor"] },
-      async setup() { consumerRan = true; },
-    };
+      setupBody: `globalThis[${JSON.stringify(bridgeKey)}].ran = true;`,
+    });
     const manager = new PluginManager(
-      { plugins: ["consumer", "core-lifecycle"] },
-      { consumer, "core-lifecycle": life },
+      { plugins: [consumerDir, lifeDir] },
       regs.eventBus, regs.capabilityRegistry, regs.serviceRegistry,
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
     );
     await manager.initialize();
-    expect(consumerRan).toBe(true);
+    const bridge = (globalThis as unknown as Record<string, { ran: boolean }>)[bridgeKey]!;
+    expect(bridge.ran).toBe(true);
+    delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
 
   test("owner-prefix mismatch throws during setup (plugin flagged as failed when not critical)", async () => {
     const regs = baseRegistries();
-    const life: KaizenPlugin = {
-      name: "core-lifecycle", apiVersion: "2",
-      lifecycle: true,
-      async setup() {},
-      async start() {},
-    };
-    const bad: KaizenPlugin = {
-      name: "bad", apiVersion: "2",
+    const lifeDir = writePlugin({ name: "core-lifecycle", lifecycle: true, hasStart: true });
+    const badDir = writePlugin({
+      name: "bad",
       capabilities: { provides: [] },
-      async setup(ctx) {
-        ctx.defineCapability("someoneElse:thing", { cardinality: "one", description: "" });
-      },
-    };
+      setupBody: `ctx.defineCapability("someoneElse:thing", { cardinality: "one", description: "" });`,
+    });
     const manager = new PluginManager(
-      { plugins: ["bad", "core-lifecycle"] },
-      { bad, "core-lifecycle": life },
+      { plugins: [badDir, lifeDir] },
       regs.eventBus, regs.capabilityRegistry, regs.serviceRegistry,
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,

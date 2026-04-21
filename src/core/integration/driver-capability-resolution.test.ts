@@ -42,7 +42,7 @@ function makeHarness(pluginRefs: string[], lockfilePath: string) {
   const config: KaizenConfig = { plugins: pluginRefs };
 
   const manager = new PluginManager(
-    config, {},
+    config,
     eventBus, capabilityRegistry, serviceRegistry,
     enforcer, auditLog,
     lockfilePath, options,
