@@ -143,8 +143,10 @@ export function loadKaizenConfig(path: string): KaizenConfig {
     fatal(`Config not found at ${path}. Run 'kaizen init' to create one.`);
   }
   const config = parseConfigFile(path);
-  if (!config["plugins"]) fatal(`${path} is missing required field 'plugins'.`);
-  if (!Array.isArray(config["plugins"])) fatal(`${path} 'plugins' must be an array.`);
+  // plugins is optional when config delegates to a harness via 'extends'
+  if (config["plugins"] !== undefined && !Array.isArray(config["plugins"])) {
+    fatal(`${path} 'plugins' must be an array.`);
+  }
   return config as KaizenConfig;
 }
 
@@ -219,26 +221,37 @@ export function resolveConfig(opts: {
   if (projectConfigPath) {
     const localConfig = loadKaizenConfig(projectConfigPath);
     const ext = extendsOverride ?? localConfig.extends;
-    if (ext) {
-      return mergeConfigs(loadHarnessConfig(ext), localConfig);
+    if (!ext) {
+      fatal(
+        `A named harness required.\n` +
+        `Found ${projectConfigPath} but no --harness flag and no 'extends' field.\n` +
+        `See docs/concepts/harnesses.md. Valid forms:\n` +
+        `  kaizen --harness <marketplace>/<name>@<version>\n` +
+        `  kaizen --harness ./path/to/harness/\n` +
+        `  Add "extends": "<harness-ref>" to ${projectConfigPath}`,
+      );
     }
-    return localConfig;
+    return mergeConfigs(loadHarnessConfig(ext), localConfig);
   }
 
   // Global default
   if (existsSync(KAIZEN_HOME_CONFIG)) {
     const globalConfig = loadKaizenConfig(KAIZEN_HOME_CONFIG);
     const ext = extendsOverride ?? globalConfig.extends;
-    if (ext) {
-      return mergeConfigs(loadHarnessConfig(ext), globalConfig);
+    if (!ext) {
+      fatal(
+        `A named harness required.\n` +
+        `Found ${KAIZEN_HOME_CONFIG} but no --harness flag and no 'extends' field.\n` +
+        `See docs/concepts/harnesses.md.`,
+      );
     }
-    return globalConfig;
+    return mergeConfigs(loadHarnessConfig(ext), globalConfig);
   }
 
   fatal(
     `No config found.\n` +
-    `  Project config: kaizen init\n` +
-    `  Global config:  kaizen init --global\n` +
-    `  Harness:        kaizen --harness <marketplace>/<name>@<version>`,
+    `  Harness (required): kaizen --harness <marketplace>/<name>@<version>\n` +
+    `  Project config:     kaizen init\n` +
+    `  Global config:      kaizen init --global`,
   );
 }

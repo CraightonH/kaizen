@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { resolveHarness } from "./config.js";
+import { resolveHarness, resolveConfig } from "./config.js";
 
 let tmp: string;
 let cwdOrig: string;
@@ -51,5 +51,31 @@ describe("resolveHarness", () => {
 
   test("reports helpful error when not found", () => {
     expect(() => resolveHarness("nonexistent-harness")).toThrow(/not found/);
+  });
+});
+
+describe("resolveConfig — named harness required", () => {
+  test("errors when no --harness and no extends in config", () => {
+    mkdirSync(join(tmp, ".kaizen"), { recursive: true });
+    writeFileSync(join(tmp, ".kaizen", "kaizen.json"), JSON.stringify({ plugins: [] }));
+    expect(() => resolveConfig({})).toThrow(/named harness required/i);
+  });
+
+  test("succeeds with --harness", () => {
+    const dir = join(tmp, ".kaizen", "harnesses", "dev");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "kaizen.json"), JSON.stringify({ plugins: ["a"] }));
+    const cfg = resolveConfig({ harness: "dev" });
+    expect(cfg.plugins).toEqual(["a"]);
+  });
+
+  test("succeeds when local config has extends", () => {
+    const h = join(tmp, ".kaizen", "harnesses", "base");
+    mkdirSync(h, { recursive: true });
+    writeFileSync(join(h, "kaizen.json"), JSON.stringify({ plugins: ["x"] }));
+    mkdirSync(join(tmp, ".kaizen"), { recursive: true });
+    writeFileSync(join(tmp, ".kaizen", "kaizen.json"), JSON.stringify({ extends: "base" }));
+    const cfg = resolveConfig({});
+    expect(cfg.plugins).toEqual(["x"]);
   });
 });
