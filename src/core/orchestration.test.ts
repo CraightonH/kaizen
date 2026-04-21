@@ -74,8 +74,8 @@ describe("core orchestration against ci-marketplace fixtures", () => {
     ].join("\n"));
 
     // Pre-consent the scoped spy plugin by seeding an isolated lockfile.
-    // KAIZEN_LOCKFILE_OVERRIDE redirects bootstrap() away from cwd's lockfile,
-    // so this test never touches the repo's committed kaizen.permissions.lock.
+    // Pass testLockfile directly to bootstrap() so this test never touches
+    // the repo's committed kaizen.permissions.lock.
     const testLockfile = join(home, "kaizen.permissions.lock");
     const spyPerms = { tier: "scoped" as const, events: { subscribe: ["*"] } };
     const spyHash = canonicalTierGrantHash(spyPerms);
@@ -88,18 +88,20 @@ describe("core orchestration against ci-marketplace fixtures", () => {
       permissions: { events: { subscribe: ["*"] } },
     });
     writeLockfile(testLockfile, seeded);
-    process.env.KAIZEN_LOCKFILE_OVERRIDE = testLockfile;
     try {
-      await bootstrap({
-        plugins: [
-          "ci/fixture-events@1.0.0",
-          spyDir,
-          "ci/fixture-executor@1.0.0",
-          "ci/fixture-ui@1.0.0",
-          "ci/fixture-lifecycle@1.0.0",
-        ],
-        marketplaces: [{ id: "ci", url: FIXTURE_MARKETPLACE }],
-      });
+      await bootstrap(
+        {
+          plugins: [
+            "ci/fixture-events@1.0.0",
+            spyDir,
+            "ci/fixture-executor@1.0.0",
+            "ci/fixture-ui@1.0.0",
+            "ci/fixture-lifecycle@1.0.0",
+          ],
+          marketplaces: [{ id: "ci", url: FIXTURE_MARKETPLACE }],
+        },
+        testLockfile,
+      );
 
       const { observed, payloads } = (globalThis as unknown as Record<string, { observed: string[]; payloads: Record<string, unknown[]> }>)[bridgeKey]!;
 
@@ -116,7 +118,6 @@ describe("core orchestration against ci-marketplace fixtures", () => {
       expect(payloads["test:executor:send"]?.[0]).toMatchObject({ messageCount: 1 });
       expect(payloads["session:response"]?.[0]).toMatchObject({ content: "fixture response" });
     } finally {
-      delete process.env.KAIZEN_LOCKFILE_OVERRIDE;
       delete (globalThis as Record<string, unknown>)[bridgeKey];
       rmSync(spyDir, { recursive: true, force: true });
     }
