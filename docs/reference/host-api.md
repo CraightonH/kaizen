@@ -118,11 +118,14 @@ plugin's `apiVersion` major differs. Defined in
 
 ## Context APIs (PluginContext)
 
-`ctx.fs`, `ctx.net`, `ctx.secrets`, and `ctx.exec` go through the permission
-enforcer — every call is checked against the plugin's declared
-[permissions](./plugin-api.md#pluginpermissions). `ctx.log` is unguarded.
-Types live in
-[`src/core/plugin-ctx-io.ts`](../../src/core/plugin-ctx-io.ts).
+`ctx.fs`, `ctx.net`, and `ctx.exec` go through the permission enforcer —
+every call is checked against the plugin's declared
+[permissions](./plugin-api.md#pluginpermissions). `ctx.secrets` is
+access-scoped by the plugin's `config.secrets` declaration. `ctx.log` is
+unguarded. I/O types live in
+[`src/core/plugin-ctx-io.ts`](../../src/core/plugin-ctx-io.ts);
+`SecretsContext` is defined in
+[`src/types/plugin.ts`](../../src/types/plugin.ts).
 
 ### `ctx.fs` (CtxFs)
 
@@ -153,21 +156,21 @@ interface CtxNet {
 patterns like `"*.example.com:443"` are allowed). Returns the global
 `Response` type.
 
-### `ctx.secrets` (CtxSecrets)
+### `ctx.secrets` (SecretsContext)
 
 ```ts
-interface CtxSecrets {
-  get(name: string): string | undefined;
-  has(name: string): boolean;
+interface SecretsContext {
+  get(key: string): Promise<string | undefined>;
+  refresh(key: string): Promise<string | undefined>;
 }
 ```
 
-The I/O-surface `ctx.secrets` reads environment variables directly and is
-gated by `permissions.env`. For the full-featured secrets resolver
-(harness-authored providers, `KAIZEN_<PLUGIN>_<KEY>` overrides, caching),
-see the `SecretsContext` interface on the plugin side of the contract and
-[`plugin-secrets.md`](./plugin-secrets.md). Returns `undefined` (does not
-throw) if permission is denied.
+The async secrets resolver. `get` reads through the resolution chain
+(`envOverride` → `KAIZEN_<PLUGIN>_<KEY>` → cache → provider). `refresh`
+bypasses the cache and re-resolves from the provider. Configured per
+plugin via the `config.secrets` declaration; see
+[`plugin-secrets.md`](./plugin-secrets.md) for the full provider contract
+and ref shapes.
 
 ### `ctx.exec` (CtxExec)
 
@@ -193,24 +196,15 @@ interface CtxExec {
 allowlist; argv is not pattern-matched in v1). `timeoutMs` triggers
 `SIGKILL` if the child is still running.
 
-### `ctx.log` (CtxLog)
+### `ctx.log`
 
 ```ts
-interface CtxLog {
-  debug(msg: string, meta?: Record<string, unknown>): void;
-  info(msg: string, meta?: Record<string, unknown>): void;
-  warn(msg: string, meta?: Record<string, unknown>): void;
-  error(msg: string, meta?: Record<string, unknown>): void;
-}
+log(msg: string): void;
 ```
 
-Output is prefixed with the plugin name and the level (e.g.
-`[my-plugin] info: ready`). `warn`/`error` route to stderr; `debug`/`info` to
-stdout. Not permission-gated.
-
-Note: `PluginContext` also exposes a top-level `ctx.log(msg: string): void`
-convenience method for single-string logging; the structured `CtxLog`
-interface above is the full surface.
+Single-string logger. Output is prefixed with the plugin name (e.g.
+`[my-plugin] ready`). Not permission-gated. A richer structured logging
+surface may land in a future release; when it does, it will be additive.
 
 ### `ctx.io` (CtxIo)
 
@@ -218,15 +212,16 @@ interface above is the full surface.
 interface CtxIo {
   fs: CtxFs;
   net: CtxNet;
-  secrets: CtxSecrets;
   exec: CtxExec;
-  log: CtxLog;
 }
 ```
 
-Aggregate container that bundles all five I/O surfaces. Constructed per
-plugin by `createCtxIo(plugin, enforcer)`; plugins typically access
-`ctx.fs`/`ctx.net`/etc. directly rather than the composite.
+Aggregate container bundling the permission-gated I/O surfaces.
+Constructed per plugin by `createCtxIo(plugin, enforcer)`; plugins
+typically access `ctx.fs`/`ctx.net`/`ctx.exec` directly rather than the
+composite. Note that `ctx.secrets` and `ctx.log` are **not** part of
+`CtxIo` — they are wired onto `PluginContext` by a separate path
+(`createSecretsContext` and the closure in `context.ts`).
 
 ---
 

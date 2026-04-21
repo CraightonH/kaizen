@@ -15,11 +15,6 @@ export interface CtxNet {
   fetch(url: string, init?: RequestInit): Promise<Response>;
 }
 
-export interface CtxSecrets {
-  get(name: string): string | undefined;
-  has(name: string): boolean;
-}
-
 export interface ExecOpts {
   cwd?: string;
   input?: string;
@@ -36,19 +31,10 @@ export interface CtxExec {
   run(binary: string, args: string[], opts?: ExecOpts): Promise<ExecResult>;
 }
 
-export interface CtxLog {
-  debug(msg: string, meta?: Record<string, unknown>): void;
-  info(msg: string, meta?: Record<string, unknown>): void;
-  warn(msg: string, meta?: Record<string, unknown>): void;
-  error(msg: string, meta?: Record<string, unknown>): void;
-}
-
 export interface CtxIo {
   fs: CtxFs;
   net: CtxNet;
-  secrets: CtxSecrets;
   exec: CtxExec;
-  log: CtxLog;
 }
 
 export function createCtxIo(plugin: string, enforcer: PermissionEnforcer): CtxIo {
@@ -70,11 +56,6 @@ export function createCtxIo(plugin: string, enforcer: PermissionEnforcer): CtxIo
       },
     },
 
-    secrets: {
-      get(name)  { try { enforcer.check(plugin, { kind: "env.get", name }); return process.env[name]; } catch { return undefined; } },
-      has(name)  { try { enforcer.check(plugin, { kind: "env.get", name }); return name in process.env; } catch { return false; } },
-    },
-
     exec: {
       async run(binary, args, opts = {}) {
         enforcer.check(plugin, { kind: "exec.run", binary });
@@ -89,13 +70,6 @@ export function createCtxIo(plugin: string, enforcer: PermissionEnforcer): CtxIo
           if (opts.timeoutMs) setTimeout(() => proc.kill("SIGKILL"), opts.timeoutMs);
         });
       },
-    },
-
-    log: {
-      debug: (msg, meta) => console.log(`[${plugin}] debug: ${msg}`, meta ?? ""),
-      info:  (msg, meta) => console.log(`[${plugin}] info: ${msg}`, meta ?? ""),
-      warn:  (msg, meta) => console.error(`[${plugin}] warn: ${msg}`, meta ?? ""),
-      error: (msg, meta) => console.error(`[${plugin}] error: ${msg}`, meta ?? ""),
     },
   };
 }

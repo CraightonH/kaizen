@@ -36,19 +36,6 @@ describe("createCtxIo", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test("ctx.secrets.get honors env grant", async () => {
-    const enforcer = new PermissionEnforcer({ mode: "enforce" });
-    initializeSandbox(enforcer);
-    enforcer.register("p1", { tier: "scoped", env: ["KAIZEN_CTX_ALLOWED"] });
-    process.env["KAIZEN_CTX_ALLOWED"] = "yes";
-    process.env["KAIZEN_CTX_DENIED"]  = "no";
-    const ctx = createCtxIo("p1", enforcer);
-    await runInPluginScope("p1", async () => {
-      expect(ctx.secrets.get("KAIZEN_CTX_ALLOWED")).toBe("yes");
-      expect(ctx.secrets.get("KAIZEN_CTX_DENIED")).toBeUndefined();
-    });
-  });
-
   test("ctx.exec.run denied without grant", async () => {
     const enforcer = new PermissionEnforcer({ mode: "enforce" });
     initializeSandbox(enforcer);
@@ -71,17 +58,4 @@ describe("createCtxIo", () => {
     });
   });
 
-  test("ctx.log prefixes with plugin name", () => {
-    const enforcer = new PermissionEnforcer({ mode: "enforce" });
-    enforcer.register("p1", { tier: "trusted" });
-    const ctx = createCtxIo("p1", enforcer);
-    const logs: string[] = [];
-    const origLog = console.log;
-    console.log = (...args) => { logs.push(args.join(" ")); };
-    try {
-      ctx.log.info("hello");
-    } finally { console.log = origLog; }
-    expect(logs[0]).toContain("[p1]");
-    expect(logs[0]).toContain("hello");
-  });
 });

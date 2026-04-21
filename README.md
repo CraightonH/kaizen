@@ -94,8 +94,9 @@ plugin-scope tracking, a proxy over `process.env`, and a wrapped `globalThis.fet
 
 - `import` of forbidden Node stdlib modules (`node:fs`, `node:child_process`,
   `node:worker_threads`, `bun:ffi`, etc.) is denied in non-UNSCOPED tiers.
-- `ctx.fs` / `ctx.net` / `ctx.secrets` / `ctx.exec` check declared grants before
-  every call.
+- `ctx.fs` / `ctx.net` / `ctx.exec` check declared grants before every call.
+  (`ctx.secrets` is not permission-enforcer-gated; it is access-scoped by the
+  plugin's `config.secrets` declaration.)
 - `process.env[key]` returns `undefined` for variables not in the plugin's
   `env` grant.
 - Global `fetch` checks declared hosts before dispatching.
