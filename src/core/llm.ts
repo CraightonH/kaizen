@@ -72,7 +72,7 @@ function toAiSdkMessages(messages: Message[]): unknown[] {
 // Tool conversion: ToolDefinition[] → AI SDK ToolSet
 //
 // AI SDK v6 uses dynamicTool({ description, inputSchema }) for schema-driven tools.
-// We handle execution in ToolRegistry — the AI SDK never calls execute().
+// The caller (e.g. an executor plugin) handles tool execution; the AI SDK never calls execute().
 // `execute` is TS-required but optional at runtime; cast through unknown to satisfy
 // the type checker without providing a dummy function.
 // ---------------------------------------------------------------------------
