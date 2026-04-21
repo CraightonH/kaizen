@@ -1,8 +1,8 @@
 export default {
   name: "cap-provider",
   apiVersion: "2",
-  capabilities: { provides: ["cap:thing"] },
+  capabilities: { provides: ["cap-provider:thing"] },
   async setup(ctx) {
-    ctx.defineCapability("cap:thing", { cardinality: "one", description: "test" });
+    ctx.defineCapability("cap-provider:thing", { cardinality: "one", description: "test" });
   },
 };
