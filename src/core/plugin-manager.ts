@@ -20,7 +20,7 @@ import type { AuditLog } from "./audit-log.js";
 import { runInPluginScope } from "./plugin-scope.js";
 import { scanPluginEntryImports } from "./manifest-import-scan.js";
 import { readLockfile, writeLockfile, upsertPluginEntry } from "./lockfile.js";
-import { computePluginHash } from "./plugin-hash.js";
+import { canonicalTierGrantHash } from "./plugin-hash.js";
 import { decideConsent } from "./consent-flow.js";
 
 // ---------------------------------------------------------------------------
@@ -296,8 +296,8 @@ export class PluginManager {
     const version = existsSync(pkgPath)
       ? ((JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: string }).version ?? "unknown")
       : "unknown";
-    const hash = computePluginHash(pluginDir);
     const permissions = plugin.permissions ?? { tier: "trusted" };
+    const hash = canonicalTierGrantHash(permissions);
 
     const decision = decideConsent({
       pluginName: plugin.name,
