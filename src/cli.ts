@@ -12,9 +12,6 @@ import { fatal } from "./core/errors.js";
 import {
   readLocalConfig,
   writeLocalConfig,
-  cmdApply,
-  cmdPluginInstall,
-  cmdPluginRemove,
   cmdPluginList,
 } from "./commands/manage.js";
 import { runPluginConsent } from "./commands/plugin-consent.js";
@@ -149,15 +146,6 @@ if (subcommand === "list") {
     console.log("Registered CLIs:");
     for (const cli of clis) console.log(`  - ${cli}`);
   }
-  process.exit(0);
-}
-
-// ---------------------------------------------------------------------------
-// Subcommand: kaizen apply
-// ---------------------------------------------------------------------------
-
-if (subcommand === "apply") {
-  cmdApply(builtins);
   process.exit(0);
 }
 
@@ -371,17 +359,20 @@ if (subcommand === "plugin") {
   }
 
   switch (pluginSub) {
-    case "install":
-      cmdPluginInstall(rawArgs[2]);
-      break;
-    case "remove":
-      cmdPluginRemove(rawArgs[2], rawArgs.includes("--uninstall"));
-      break;
     case "list":
       cmdPluginList(builtins);
       break;
+    case "install":
+    case "remove":
+      console.error(
+        `'kaizen plugin ${pluginSub}' has been removed.\n` +
+        `  Install a plugin:   kaizen install <marketplace>/<name>@<version>\n` +
+        `  Uninstall a plugin: kaizen uninstall <marketplace>/<name>@<version>`,
+      );
+      process.exit(2);
+      break;
     default:
-      console.error("Usage: kaizen plugin {install|remove|list|consent|review|audit|dev|create|validate} [args]");
+      console.error("Usage: kaizen plugin {list|consent|review|audit|dev|create|validate} [args]");
       process.exit(1);
   }
   process.exit(0);

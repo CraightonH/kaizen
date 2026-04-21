@@ -1,14 +1,13 @@
-import { createRequire } from "module";
-import { execSync } from "child_process";
 import { existsSync, readFileSync, statSync } from "fs";
 import { dirname, join } from "path";
+import { pathToFileURL } from "url";
 import type { KaizenPlugin, KaizenConfig, KaizenGlobalConfig, PluginEntry, PluginManagerPublicApi, PluginManagerLifecycleApi } from "../types/plugin.js";
 import { PLUGIN_API_VERSION } from "../types/plugin.js";
 import { mergePluginConfig, separateSecrets, applyEnvOverrides } from "./config-merge.js";
 import { validateConfig, validateSchemaItself } from "./config-validator.js";
 import { SecretsRegistry, createSecretsContext, SecretsProviderToken } from "./secrets.js";
 import { fatal, warn, debug } from "./errors.js";
-import { RESERVED_KEYS, KAIZEN_HOME, KAIZEN_HOME_PLUGINS, PROJECT_PLUGINS } from "./config.js";
+import { RESERVED_KEYS, KAIZEN_HOME_PLUGINS, PROJECT_PLUGINS } from "./config.js";
 import { pluginInstallDir } from "./kaizen-config.js";
 import { parseRef } from "./ref-resolver.js";
 import type { EventBus } from "./event-bus.js";
@@ -25,47 +24,14 @@ import { computePluginHash } from "./plugin-hash.js";
 import { decideConsent } from "./consent-flow.js";
 
 // ---------------------------------------------------------------------------
-// Resolution paths (cached once per process)
-// ---------------------------------------------------------------------------
-
-function getBunGlobalRoot(): string {
-  try {
-    const line = execSync("bun pm ls --global 2>/dev/null", { timeout: 5000 })
-      .toString().split("\n")[0] ?? "";
-    const match = line.match(/^(\S+)\s+node_modules/);
-    return match ? `${match[1]}/node_modules` : "";
-  } catch { return ""; }
-}
-
-function getNpmGlobalRoot(): string {
-  try {
-    return execSync("npm root -g 2>/dev/null", { timeout: 5000 }).toString().trim();
-  } catch { return ""; }
-}
-
-const BUN_GLOBAL_ROOT = getBunGlobalRoot();
-const NPM_GLOBAL_ROOT = getNpmGlobalRoot();
-
-export const RESOLVE_PATHS = [
-  join(KAIZEN_HOME, "node_modules"),
-  join(process.cwd(), ".kaizen/node_modules"),
-  BUN_GLOBAL_ROOT,
-  NPM_GLOBAL_ROOT,
-  process.cwd() + "/node_modules",
-].filter(Boolean);
-
-// ---------------------------------------------------------------------------
 // Package root resolution
 // ---------------------------------------------------------------------------
 
 /**
  * Walk up from a resolved entry file (or directory) to the nearest ancestor
- * directory that contains a package.json. This is the canonical plugin root
- * for hash computation and package.json reads.
- *
- * For a standard npm plugin whose entry point is at
- * `node_modules/foo/dist/index.js`, dirname() would give `.../dist` which
- * misses the real package root. Walking up finds `.../foo` instead.
+ * directory that contains a package.json. Used for hash computation and
+ * package.json reads when the plugin's entry points into a subdirectory
+ * (e.g. dist/index.js).
  */
 export function findPackageRoot(startPath: string): string {
   let dir =
@@ -97,10 +63,35 @@ interface LoadedPlugin {
   resolvedPath: string | null;
 }
 
-function loadPluginFromPath(path: string, name: string): LoadedPlugin | null {
-  const req = createRequire(process.execPath);
+async function loadPluginFromPath(dirOrFile: string, name: string): Promise<LoadedPlugin | null> {
+  let entryPath: string;
+  let resolvedPath: string;
   try {
-    const mod = req(path) as { default?: unknown };
+    const stat = statSync(dirOrFile);
+    if (stat.isDirectory()) {
+      const pkgPath = join(dirOrFile, "package.json");
+      if (!existsSync(pkgPath)) {
+        warn(`Plugin '${name}': no package.json at ${dirOrFile}. Skipping.`);
+        return null;
+      }
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { main?: string; module?: string };
+      const entry = pkg.module ?? pkg.main ?? "index.js";
+      entryPath = join(dirOrFile, entry);
+      resolvedPath = entryPath;
+    } else {
+      entryPath = dirOrFile;
+      resolvedPath = dirOrFile;
+    }
+  } catch (err) {
+    warn(`Plugin '${name}' path '${dirOrFile}' is not accessible: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+
+  try {
+    // Cache-bust query so reload() re-imports the module (ESM import cache has no
+    // user-facing invalidation API). Cost: extra in-memory module copy per reload.
+    const url = pathToFileURL(entryPath).href + `?t=${Date.now()}`;
+    const mod = (await import(url)) as { default?: unknown };
     const plugin = mod.default;
     if (
       typeof plugin !== "object" || plugin === null ||
@@ -110,9 +101,9 @@ function loadPluginFromPath(path: string, name: string): LoadedPlugin | null {
       warn(`Plugin '${name}' does not export a valid KaizenPlugin. Skipping.`);
       return null;
     }
-    return { plugin: plugin as KaizenPlugin, resolvedPath: path };
+    return { plugin: plugin as KaizenPlugin, resolvedPath };
   } catch (err) {
-    warn(`Failed to load plugin at '${path}': ${err instanceof Error ? err.message : String(err)}`);
+    warn(`Failed to load plugin at '${entryPath}': ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }
@@ -147,8 +138,10 @@ async function loadPluginFromMarketplaceInstall(
 async function resolvePlugin(name: string, builtins: Builtins): Promise<LoadedPlugin | null> {
   if (builtins[name]) return { plugin: builtins[name]!, resolvedPath: null };
 
+  const isPath = name.startsWith("./") || name.startsWith("/") || name.startsWith("../");
+
   // Canonical marketplace ref: "<id>/<name>@<version>" → marketplace install dir.
-  if (!name.startsWith("./") && !name.startsWith("/") && !name.startsWith("../")) {
+  if (!isPath) {
     try {
       const parsed = parseRef(name);
       if (parsed.kind === "marketplace" && parsed.version) {
@@ -157,40 +150,27 @@ async function resolvePlugin(name: string, builtins: Builtins): Promise<LoadedPl
         );
         if (loaded) return loaded;
       }
-    } catch { /* not a canonical ref — fall through to legacy paths */ }
+    } catch { /* not a canonical ref — fall through */ }
   }
 
-  const isPath = name.startsWith("./") || name.startsWith("/") || name.startsWith("../");
+  // Authored-plugin fallbacks for bare names.
   if (!isPath) {
     const projectPlugin = join(process.cwd(), PROJECT_PLUGINS, name);
     if (existsSync(projectPlugin)) return loadPluginFromPath(projectPlugin, name);
     const homePlugin = join(KAIZEN_HOME_PLUGINS, name);
     if (existsSync(homePlugin)) return loadPluginFromPath(homePlugin, name);
+  } else {
+    const abs = name.startsWith("/") ? name : join(process.cwd(), name);
+    if (existsSync(abs)) return loadPluginFromPath(abs, name);
   }
-  const req = createRequire(process.execPath);
-  try {
-    const resolved = isPath ? req.resolve(name) : req.resolve(name, { paths: RESOLVE_PATHS });
-    return loadPluginFromPath(resolved, name);
-  } catch (err) {
-    warn(
-      `Cannot find plugin '${name}'.\n` +
-      `  Project-scoped: .kaizen/plugins/${name}/\n` +
-      `  Global install: kaizen plugin install ${name}\n` +
-      `Error: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    return null;
-  }
-}
 
-function bustRequireCache(name: string): void {
-  const req = createRequire(process.execPath);
-  try {
-    const isPath = name.startsWith("./") || name.startsWith("/") || name.startsWith("../");
-    const resolved = isPath ? req.resolve(name) : req.resolve(name, { paths: RESOLVE_PATHS });
-    delete req.cache[resolved];
-  } catch {
-    // Ignore — load() will surface resolution errors
-  }
+  warn(
+    `Cannot find plugin '${name}'.\n` +
+    `  Marketplace ref:  kaizen install <marketplace>/${name}@<version>\n` +
+    `  Project-scoped:   .kaizen/plugins/${name}/\n` +
+    `  Global authored:  ~/.kaizen/plugins/${name}/`,
+  );
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -555,7 +535,6 @@ export class PluginManager {
 
   async reload(name: string): Promise<void> {
     await this.unload(name);
-    bustRequireCache(name);
     await this.load(name);
   }
 

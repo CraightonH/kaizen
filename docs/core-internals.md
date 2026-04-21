@@ -35,22 +35,27 @@ await bootstrap(kaizenConfig, builtins);
 6. Sets state to `CLOSED` in a `finally` block.
 
 `builtins` is a `Record<string, KaizenPlugin>` populated by the CLI entrypoint
-with statically-imported plugins. The loader checks builtins first before
-attempting npm resolution, which allows the compiled binary to serve built-in
-plugins without filesystem resolution.
+with statically-imported plugins. The loader checks builtins first; if no match,
+it attempts marketplace-install resolution. The compiled binary can ship with
+built-in plugins and never touch the filesystem for them.
 
-## Plugin loader (`loader.ts`)
+## Plugin loader (`plugin-manager.ts`)
 
 ### Resolution order
 
 For each plugin name in `config.plugins`:
 1. Check `builtins[name]` — statically-imported built-in.
-2. `createRequire(process.execPath).resolve(name, { paths: RESOLVE_PATHS })`.
+2. If `name` parses as a canonical marketplace ref
+   (`<marketplace>/<name>@<version>`), load from
+   `~/.kaizen/marketplaces/<id>/plugins/<name>@<version>/` via absolute-path
+   `import()`. Entry point comes from `package.json` (`module` or `main`).
+3. If `name` is a bare name, try `.kaizen/plugins/<name>/` then
+   `~/.kaizen/plugins/<name>/` (authored plugins with a `package.json`).
+4. If `name` starts with `./`, `../`, or `/`, treat as a local path.
 
-`RESOLVE_PATHS` = `[bunGlobalRoot, npmGlobalRoot, cwd/node_modules]`.
-
-Anchoring to `process.execPath` (not `import.meta.url`) is required for compiled
-Bun binaries. See `docs/plugin-loading.md` for the full story.
+There is no `node_modules` involvement and no `npm`/`bun` global lookup.
+Plugins distributed via a marketplace are always loaded by absolute path from
+their install directory.
 
 ### Topological sort
 

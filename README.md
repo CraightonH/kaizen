@@ -111,9 +111,9 @@ plugin-scope tracking, a proxy over `process.env`, and a wrapped `globalThis.fet
   tiers refuse to load modules that import these.
 - V8 JIT escape or a kernel exploit defeats the sandbox. The threat model is
   honest-but-buggy and casual-malicious plugins, not nation-state adversaries.
-- Supply-chain integrity (plugin signing, npm provenance) is **not yet
+- Supply-chain integrity (plugin signing, marketplace provenance) is **not yet
   verified**. Hash-pinning in the lockfile catches post-consent tampering, but
-  the initial npm resolution is not authenticated.
+  the initial marketplace fetch is not authenticated beyond git transport.
 
 ### Lockfile
 
