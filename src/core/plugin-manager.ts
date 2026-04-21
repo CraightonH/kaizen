@@ -12,9 +12,6 @@ import { RESERVED_KEYS, KAIZEN_HOME, KAIZEN_HOME_PLUGINS, PROJECT_PLUGINS } from
 import { pluginInstallDir } from "./kaizen-config.js";
 import { parseRef } from "./ref-resolver.js";
 import type { EventBus } from "./event-bus.js";
-import type { ToolRegistry } from "./tool-registry.js";
-import type { ExecutorRegistry } from "./executor-registry.js";
-import type { UiRegistry } from "./ui-registry.js";
 import type { ServiceRegistry } from "./service-registry.js";
 import type { CapabilityRegistry } from "./capability-registry.js";
 import { createPluginContext } from "./context.js";
@@ -290,9 +287,6 @@ export class PluginManager {
     private readonly config: KaizenConfig,
     private readonly builtins: Builtins,
     private readonly eventBus: EventBus,
-    private readonly toolRegistry: ToolRegistry,
-    private readonly executorRegistry: ExecutorRegistry,
-    private readonly uiRegistry: UiRegistry,
     private readonly capabilityRegistry: CapabilityRegistry,
     private readonly serviceRegistry: ServiceRegistry,
     private readonly enforcer: PermissionEnforcer,
@@ -550,11 +544,8 @@ export class PluginManager {
       warn(`Cannot unload plugin '${name}': not loaded.`);
       return;
     }
-    this.toolRegistry.deregisterByPlugin(name);
     this.eventBus.deregisterByPlugin(name);
     this.serviceRegistry.deregisterByPlugin(name);
-    this.executorRegistry.deregisterByPlugin(name);
-    this.uiRegistry.deregisterByPlugin(name);
     this.enforcer.deregister(name);
     this.capabilityRegistry.deregisterByPlugin(name);
     record.entry.status = "unloaded";
@@ -664,9 +655,6 @@ export class PluginManager {
       pluginConfig,
       secretsCtx,
       this.eventBus,
-      this.toolRegistry,
-      this.executorRegistry,
-      this.uiRegistry,
       this.capabilityRegistry,
       this.serviceRegistry,
       this.enforcer,
