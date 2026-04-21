@@ -5,7 +5,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
-import { findProjectConfig, PROJECT_CONFIG, PROJECT_PLUGINS, KAIZEN_HOME_PLUGINS } from "../core/config.js";
+import { findProjectConfig, PROJECT_CONFIG } from "../core/config.js";
 import { pluginInstallDir } from "../core/kaizen-config.js";
 import { parseRef } from "../core/ref-resolver.js";
 import type { KaizenPlugin } from "../types/plugin.js";
@@ -36,7 +36,7 @@ function getPlugins(config: Record<string, unknown>): string[] {
 // ---------------------------------------------------------------------------
 
 interface InstallStatus {
-  status: "built-in" | "installed" | "authored" | "NOT INSTALLED";
+  status: "built-in" | "installed" | "NOT INSTALLED";
   version: string;
 }
 
@@ -48,7 +48,6 @@ function statusFor(
     return { status: "built-in", version: "" };
   }
 
-  // Canonical marketplace ref
   try {
     const parsed = parseRef(name);
     if (parsed.kind === "marketplace" && parsed.version) {
@@ -59,16 +58,6 @@ function statusFor(
       return { status: "NOT INSTALLED", version: parsed.version };
     }
   } catch { /* not a canonical ref */ }
-
-  // Authored plugin dirs
-  for (const root of [join(process.cwd(), PROJECT_PLUGINS), KAIZEN_HOME_PLUGINS]) {
-    const dir = join(root, name);
-    const pkgPath = join(dir, "package.json");
-    if (existsSync(pkgPath)) {
-      const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: string };
-      return { status: "authored", version: pkg.version ?? "unknown" };
-    }
-  }
 
   return { status: "NOT INSTALLED", version: "" };
 }
@@ -94,7 +83,6 @@ export function cmdPluginList(builtins: Record<string, KaizenPlugin>): void {
     const label =
       s.status === "built-in" ? "built-in"
       : s.status === "NOT INSTALLED" ? (s.version ? `NOT INSTALLED (${s.version})` : "NOT INSTALLED")
-      : s.status === "authored" ? `authored ${s.version}`
       : s.version;
     rows.push([name, label]);
     if (name.length > maxLen) maxLen = name.length;

@@ -44,18 +44,16 @@ built-in plugins and never touch the filesystem for them.
 ### Resolution order
 
 For each plugin name in `config.plugins`:
-1. Check `builtins[name]` — statically-imported built-in.
-2. If `name` parses as a canonical marketplace ref
+1. If `name` parses as a canonical marketplace ref
    (`<marketplace>/<name>@<version>`), load from
    `~/.kaizen/marketplaces/<id>/plugins/<name>@<version>/` via absolute-path
    `import()`. Entry point comes from `package.json` (`module` or `main`).
-3. If `name` is a bare name, try `.kaizen/plugins/<name>/` then
-   `~/.kaizen/plugins/<name>/` (authored plugins with a `package.json`).
-4. If `name` starts with `./`, `../`, or `/`, treat as a local path.
+2. If `name` starts with `./`, `../`, or `/`, treat as a local path.
+3. Otherwise: fail with a helpful error.
 
-There is no `node_modules` involvement and no `npm`/`bun` global lookup.
-Plugins distributed via a marketplace are always loaded by absolute path from
-their install directory.
+There is no `node_modules` involvement, no `npm`/`bun` global lookup, and no
+bare-name authored-plugin fallback. The `builtins` parameter on
+`initializePluginSystem` is a test-only seam — the shipping CLI passes `{}`.
 
 ### Topological sort
 

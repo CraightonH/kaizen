@@ -7,7 +7,7 @@ import { mergePluginConfig, separateSecrets, applyEnvOverrides } from "./config-
 import { validateConfig, validateSchemaItself } from "./config-validator.js";
 import { SecretsRegistry, createSecretsContext, SecretsProviderToken } from "./secrets.js";
 import { fatal, warn, debug } from "./errors.js";
-import { RESERVED_KEYS, KAIZEN_HOME_PLUGINS, PROJECT_PLUGINS } from "./config.js";
+import { RESERVED_KEYS } from "./config.js";
 import { pluginInstallDir } from "./kaizen-config.js";
 import { parseRef } from "./ref-resolver.js";
 import type { EventBus } from "./event-bus.js";
@@ -153,22 +153,16 @@ async function resolvePlugin(name: string, builtins: Builtins): Promise<LoadedPl
     } catch { /* not a canonical ref — fall through */ }
   }
 
-  // Authored-plugin fallbacks for bare names.
-  if (!isPath) {
-    const projectPlugin = join(process.cwd(), PROJECT_PLUGINS, name);
-    if (existsSync(projectPlugin)) return loadPluginFromPath(projectPlugin, name);
-    const homePlugin = join(KAIZEN_HOME_PLUGINS, name);
-    if (existsSync(homePlugin)) return loadPluginFromPath(homePlugin, name);
-  } else {
+  // Local path (./, ../, /) — load directly.
+  if (isPath) {
     const abs = name.startsWith("/") ? name : join(process.cwd(), name);
     if (existsSync(abs)) return loadPluginFromPath(abs, name);
   }
 
   warn(
     `Cannot find plugin '${name}'.\n` +
-    `  Marketplace ref:  kaizen install <marketplace>/${name}@<version>\n` +
-    `  Project-scoped:   .kaizen/plugins/${name}/\n` +
-    `  Global authored:  ~/.kaizen/plugins/${name}/`,
+    `  Install from marketplace: kaizen install <marketplace>/${name}@<version>\n` +
+    `  Or reference a local path: "./path/to/plugin"`,
   );
   return null;
 }

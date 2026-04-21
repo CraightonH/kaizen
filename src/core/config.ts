@@ -10,12 +10,10 @@ import { fatal, warn } from "./errors.js";
 
 export const KAIZEN_HOME = join(homedir(), ".kaizen");
 export const KAIZEN_HOME_CONFIG = join(KAIZEN_HOME, "kaizen.json");
-export const KAIZEN_HOME_PLUGINS = join(KAIZEN_HOME, "plugins");
 export const KAIZEN_HOME_HARNESSES = join(KAIZEN_HOME, "harnesses");
 
 export const PROJECT_DIR = ".kaizen";
 export const PROJECT_CONFIG = join(PROJECT_DIR, "kaizen.json");
-export const PROJECT_PLUGINS = join(PROJECT_DIR, "plugins");
 export const PROJECT_HARNESSES = join(PROJECT_DIR, "harnesses");
 
 /** Legacy root-level kaizen.json — supported during migration. */

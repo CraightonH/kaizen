@@ -142,33 +142,30 @@ First-party plugins and harnesses live in a separate repo:
 ~/.kaizen/                   Global kaizen home (created by install.sh or kaizen init --global)
   kaizen.json                Default config — used when no project config found
   marketplaces/              Per-marketplace install trees (see "Install tree" below)
-  plugins/                   Authored plugins, resolved by bare name
   harnesses/                 Authored harnesses, resolved by bare name
 
 <project>/
   .kaizen/                   Project-local config (like .vscode/)
     kaizen.json              Project config — extends a harness or defines full plugin stack
-    plugins/                 Project-local authored plugins
-    harnesses/               Project-local harnesses
+    harnesses/               Project-local authored harnesses
 ```
 
-Plugins and harnesses installed from marketplaces live under
-`~/.kaizen/marketplaces/<id>/`, not in the top-level `plugins/` or `harnesses/`
-directories. The top-level directories are reserved for *authored* plugins and
-harnesses — ones the user writes or drops in by hand.
+Plugins installed from marketplaces live under
+`~/.kaizen/marketplaces/<id>/plugins/`. Harnesses installed from marketplaces
+live under `~/.kaizen/marketplaces/<id>/harnesses/`. The top-level
+`~/.kaizen/harnesses/` (and `.kaizen/harnesses/`) are reserved for *authored*
+harnesses — ones the user writes by hand.
 
 ### Plugin resolution order
 
-1. **Built-in**: `builtins[name]` — statically-imported into the binary.
-2. **Canonical marketplace ref** (`<marketplace>/<name>@<version>`):
+1. **Canonical marketplace ref** (`<marketplace>/<name>@<version>`):
    `~/.kaizen/marketplaces/<id>/plugins/<name>@<version>/`, loaded by absolute
    path.
-3. **Authored bare name**:
-   - `.kaizen/plugins/<name>/` (project)
-   - `~/.kaizen/plugins/<name>/` (user home)
-4. **Local path** (`./`, `../`, or `/`): loaded directly.
+2. **Local path** (`./`, `../`, or `/`): loaded directly.
 
-There is no `node_modules` fallback and no `npm`/`bun` global resolution.
+There is no `node_modules` fallback, no `npm`/`bun` global resolution, and no
+bare-name authored-plugin fallback — publish plugins to a marketplace or
+reference them by local path.
 
 ## Marketplaces & plugin resolution
 
