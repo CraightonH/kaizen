@@ -170,11 +170,3 @@ readline instances from fighting over stdin. The queue delivers lines FIFO to
 whichever caller is waiting.
 
 `core-cli`'s destructive-guard confirmation prompt also uses `readStdinLine()`.
-
-## Adding a new built-in plugin
-
-1. Create `plugins/<name>/index.ts` and `plugins/<name>/package.json`.
-2. Import it statically in `src/cli.ts` and add it to the `builtins` map.
-3. If it introduces new config keys, add defaults to `kaizen init` in `src/cli.ts`
-   and to the `core-anthropic` harness in `harnesses/core-anthropic/kaizen.json`.
-4. Add it to the `plugins` array of whichever harnesses should include it.
