@@ -24,8 +24,13 @@ src/core/
 `src/core/index.ts` is the single public entry point for the runtime:
 
 ```typescript
-await bootstrap(kaizenConfig);
+await bootstrap(kaizenConfig, lockfilePath);
 ```
+
+`lockfilePath` is required — callers derive it from the resolved harness's
+`kaizen.json` path via `deriveLockfilePath(harnessJsonPath)` in
+`src/core/lockfile-path.ts`. There is no `process.cwd()` fallback and no
+environment-variable override.
 
 1. Creates `EventBus`, `CapabilityRegistry`, `ServiceRegistry`.
 2. Calls `loadPlugins()` → returns `{ lifecycleProvider, state }`.
@@ -131,17 +136,31 @@ Each plugin gets its own context instance with its own config slice.
 
 ## Config system (`config.ts`)
 
-### Loading order (highest → lowest priority)
-1. CLI flags (`--harness`, `--config`, `--allow-destructive`)
-2. Local `kaizen.json` in the current directory
-3. Harness `kaizen.json` (from `extends` or `--harness`)
+### Named harness required
+
+Every invocation must resolve to a named harness, via `--harness` on the CLI
+or an `extends` field in the local / global `kaizen.json`. A bare
+`kaizen.json` with neither is an error:
+
+```
+A named harness is required.
+See docs/concepts/harnesses.md.
+```
 
 ### Harness resolution
 
-`--harness` and `extends` accept:
-1. **Built-in short name** → `<kaizen-repo>/harnesses/<name>/kaizen.json`
-2. **Local path** → `./path/to/kaizen.json` or `./path/to/folder/` (reads `kaizen.json` inside)
-3. **URL** → fetched at startup (TODO: implement in `config.ts`)
+`resolveHarness(nameOrPath)` returns `{ kaizenJsonPath, config }`. It tries,
+in order:
+
+1. Project-scoped bare name → `.kaizen/harnesses/<name>/kaizen.json`
+2. Home-scoped bare name → `~/.kaizen/harnesses/<name>/kaizen.json`
+3. Explicit local path (`./`, `../`, `/`) → the kaizen.json at that path
+4. Raw URL → rejected (use a marketplace ref instead)
+
+Marketplace refs (`<id>/<name>@<version>`) are handled upstream in
+`src/core/kaizen-config.ts` by `materializeHarnessRef`, which installs the
+harness into `~/.kaizen/marketplaces/<id>/harnesses/<name>/` before passing
+the resulting absolute path to `resolveHarness`.
 
 ### Config merge
 
@@ -149,6 +168,14 @@ Local overlays harness:
 - `plugins` array: local wins entirely if present.
 - Plugin config objects: shallow merge, local wins on key conflicts.
 - `extends`: consumed during resolution, not passed to plugins.
+
+### Per-harness lockfile path
+
+Callers (CLI entry points) derive the lockfile path from the resolved
+harness via `deriveLockfilePath(kaizenJsonPath)` — `permissions.lock` sits
+next to the harness's `kaizen.json`. See
+[docs/concepts/harnesses.md](concepts/harnesses.md#state-files) for path
+patterns and the re-materialization preservation rule.
 
 ## LLM adapter (`llm.ts`)
 
