@@ -136,5 +136,8 @@ Agents see this at session start. It becomes a workflow contract.
 
 - A static site generator (VitePress, Docusaurus) — intentionally deferred.
   Adopt when the first external plugin author arrives or at v1.0, whichever comes first.
-- TSDoc comments in source — additive, not part of this effort.
+- TSDoc comments in kaizen source — additive, not part of this effort. Future
+  standard: plugin authors should be quasi-required to document their public API
+  surface with TSDoc. The plugin scaffolder should generate TSDoc boilerplate on
+  `kaizen plugin create` so the pattern is established from the start.
 - `docs/superpowers/` organization — these are session artifacts and are out of scope.
