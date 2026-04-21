@@ -14,7 +14,6 @@ The specialized registries are pre-`CapabilityRegistry` holdovers. `CapabilityRe
 
 - Changing `CapabilityRegistry`'s behavior (validation semantics, lookup, registration payload) beyond the deletions described here.
 - Defining or implementing an LLM tool-calling runtime. Tool-calling moves to a future broker plugin; this spec only removes tools from core.
-- Renaming the `lifecycle` concept to `driver` across the codebase. Tracked in [#22](https://github.com/CraightonH/kaizen/issues/22).
 - Auto-deriving JSON Schemas from TypeScript types.
 
 ## 2. Architecture after the refactor
@@ -39,12 +38,6 @@ The specialized registries are pre-`CapabilityRegistry` holdovers. `CapabilityRe
 - **Executor plugins:** declare a capability with the name the driver expects; register their implementation via `registerService`; when an LLM tool-calling ecosystem exists, consume a broker plugin to enumerate and dispatch tools.
 - **UI plugins:** declare a capability with the name the driver expects; register their implementation via `registerService`.
 - **Tool broker (`core-tools`, future):** owns the tool concept entirely. Exposes a capability whose API lets other plugins register tools and lets executors enumerate/dispatch them. Not part of this spec's scope; lands when tool-calling is reintroduced.
-
-### Why named capabilities without facets
-
-An earlier draft of this design added a `facets` field to capability registration so that tool metadata could ride alongside a capability. It was rejected: facets are a domain concern wearing generic clothing. The only reason to add them is to solve the tool problem, which is a plugin-to-plugin concern and does not belong in core. Once the facet field exists, pressure to extend it (schema validation, inheritance, lifecycle hooks, namespacing) accumulates indefinitely. A kernel that accepts a metadata system has to defend its boundaries forever.
-
-The broker-plugin model provides the same outcome — any plugin can enumerate tools, attach metadata, and hand them to LLMs — without core learning anything new. If a future ecosystem prefers the "tool metadata on capabilities" shape, someone writes a different broker plugin that scans capabilities by naming convention. Both models are plugin-expressible.
 
 ### Why core doesn't enshrine capability names
 
@@ -82,7 +75,6 @@ Unchanged from the current `CapabilityRegistry` spec. Capability declarations co
 - Remove `registerUi`, `registerExecutor`, `registerTool` from `PluginContext` and its type definition.
 - Remove `runtime.ui`, `runtime.executors`, `runtime.tools` from the runtime surface exposed to plugins.
 - Update `bootstrap.ts` / `context.ts` to stop instantiating the deleted registries.
-- Update `DESIGN.md` "Platform Contract" section to document the narrowed core surface and remove any mention of UI/executor/tool registries as core concepts.
 
 ### In `kaizen-official-plugins`
 
@@ -106,5 +98,5 @@ This is a breaking change to the plugin-authoring surface. The kaizen PR and the
 
 1. Land kaizen PR (this spec's implementation) with cross-repo note in the PR description.
 2. Simultaneously land the kaizen-official-plugins PR updating all four executor plugins, the terminal UI plugin, and core-lifecycle.
-3. Update the platform-contract memory and any plugin-authoring docs that reference the removed context methods.
+3. Before finishing the development branch, run `kaizen:update-docs` to refresh any docs affected by the behavior/API change.
 4. Follow-on work: [#22](https://github.com/CraightonH/kaizen/issues/22) (driver rename) and a separate spec for the `core-tools` broker plugin when tool-calling is reintroduced.
