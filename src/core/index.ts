@@ -30,10 +30,16 @@ interface InitializedSystem {
   lifecycleProvider: Awaited<ReturnType<PluginManager["initialize"]>>["lifecycleProvider"];
 }
 
+export interface InitializePluginSystemOpts {
+  lockfilePath: string;
+  injectedEnforcer?: PermissionEnforcer;
+}
+
 export async function initializePluginSystem(
   kaizenConfig: KaizenConfig,
-  injectedEnforcer?: PermissionEnforcer,
+  opts: InitializePluginSystemOpts,
 ): Promise<InitializedSystem> {
+  const { lockfilePath, injectedEnforcer } = opts;
   const eventBus = new EventBus();
   const capabilityRegistry = new CapabilityRegistry();
   const serviceRegistry = new ServiceRegistry();
@@ -55,7 +61,6 @@ export async function initializePluginSystem(
   const trustLockfile = process.argv.includes("--trust-lockfile");
   const allowUnscoped = process.argv.includes("--allow-unscoped");
   const nonInteractive = process.argv.includes("--non-interactive");
-  const lockfilePath = process.env["KAIZEN_LOCKFILE_OVERRIDE"] ?? join(process.cwd(), "kaizen.permissions.lock");
 
   const manager = new PluginManager(
     kaizenConfig,
@@ -72,29 +77,26 @@ export async function initializePluginSystem(
 
 export interface RunHarnessOpts {
   kaizenConfig: KaizenConfig;
+  lockfilePath: string;
   enforcer?: PermissionEnforcer;
 }
 
 export async function runHarness(opts: RunHarnessOpts): Promise<void> {
-  const { kaizenConfig, enforcer: injectedEnforcer } = opts;
+  const { kaizenConfig, lockfilePath, enforcer: injectedEnforcer } = opts;
+  const init: InitializePluginSystemOpts = {
+    lockfilePath,
+    ...(injectedEnforcer !== undefined ? { injectedEnforcer } : {}),
+  };
   const {
     manager, eventBus, capabilityRegistry, serviceRegistry, enforcer, auditLog, lifecycleProvider,
-  } = await initializePluginSystem(kaizenConfig, injectedEnforcer);
+  } = await initializePluginSystem(kaizenConfig, init);
 
   const lifecycleConfig =
     (kaizenConfig[lifecycleProvider.name] as Record<string, unknown> | undefined) ?? {};
   const secretsCtx = createSecretsContext(new SecretsRegistry(), lifecycleProvider.name, {});
   const ctx = createPluginContext(
-    lifecycleProvider.name,
-    lifecycleConfig,
-    secretsCtx,
-    eventBus,
-    capabilityRegistry,
-    serviceRegistry,
-    enforcer,
-    () => "RUNNING",
-    manager.getPublicApi(),
-    manager.getLifecycleApi(),
+    lifecycleProvider.name, lifecycleConfig, secretsCtx, eventBus, capabilityRegistry, serviceRegistry,
+    enforcer, () => "RUNNING", manager.getPublicApi(), manager.getLifecycleApi(),
   );
 
   try {
@@ -104,6 +106,6 @@ export async function runHarness(opts: RunHarnessOpts): Promise<void> {
   }
 }
 
-export async function bootstrap(kaizenConfig: KaizenConfig): Promise<void> {
-  return runHarness({ kaizenConfig });
+export async function bootstrap(kaizenConfig: KaizenConfig, lockfilePath: string): Promise<void> {
+  return runHarness({ kaizenConfig, lockfilePath });
 }

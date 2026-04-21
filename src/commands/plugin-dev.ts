@@ -15,6 +15,7 @@ export async function runPluginDevObserve(args: {
   pluginDir: string;
   outDir: string;
   kaizenConfig: KaizenConfig;
+  lockfilePath: string;
 }): Promise<number> {
   const sessionId = randomUUID();
   const enforcer = new PermissionEnforcer({ mode: "observe" });
@@ -41,7 +42,7 @@ export async function runPluginDevObserve(args: {
   process.on("SIGTERM", onSignal);
 
   try {
-    await runHarness({ kaizenConfig: args.kaizenConfig, enforcer });
+    await runHarness({ kaizenConfig: args.kaizenConfig, lockfilePath: args.lockfilePath, enforcer });
   } finally {
     finalize();
     process.off("SIGINT", onSignal);
