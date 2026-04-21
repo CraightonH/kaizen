@@ -1,4 +1,10 @@
 
+## Documentation
+
+Before invoking `superpowers:finishing-a-development-branch`, run `kaizen:update-docs`.
+This is mandatory for any branch that changes behavior, API surface, or CLI commands.
+Skip only for chore/fix PRs with no externally visible change.
+
 ## Superpowers
 
 You have superpowers. At the start of every conversation, invoke `superpowers:using-superpowers`

@@ -1,5 +1,7 @@
 # kaizen Architecture
 
+*Read when: you want to understand how core is structured before contributing to it.*
+
 ## Overview
 
 kaizen is a **kernel-model platform** for LLM harnesses. Core does three things:
@@ -17,17 +19,28 @@ else — the session loop, terminal UI, CLI tools, and the LLM itself — is a p
         │ loads
         ▼
 ┌───────────────────────────────────────────────────────────┐
-│  Default plugin stack (all ship with kaizen)              │
+│  Default plugin stack (first-party, installed separately) │
 │                                                           │
 │  core-events          defines event vocabulary            │
 │  core-executor-*      wraps LLM / shell / debug           │
 │  core-ui-terminal     stdin/stdout I/O                    │
 │  core-cli             CLI introspection + tool runner     │
-│  core-lifecycle       session loop                        │
+│  core-lifecycle       session loop (lifecycle: true)      │
 └───────────────────────────────────────────────────────────┘
 ```
 
-## Lifecycle
+## The three things core does
+
+1. **Plugin loader.** Resolve plugin refs, topologically sort by declared
+   dependencies, call `setup(ctx)` on each plugin.
+2. **Event bus.** `defineEvent`, `on`, `emit`. Core defines no events —
+   plugins do.
+3. **Primitives.** A tool registry (`registerTool` / `execute`), an executor
+   registry (`registerExecutor`), a UI registry (`registerUi`). Core has no
+   session loop of its own; after initialization it hands control to the
+   single plugin that declared `lifecycle: true`.
+
+## Startup sequence
 
 ```
 kaizen run
@@ -37,11 +50,11 @@ kaizen run
   │   ├─ resolve + topo-sort plugins by depends[]
   │   ├─ for each plugin: setup(ctx)
   │   │   └─ registerTool / defineEvent / on / registerExecutor / registerUi
-  │   └─ role validation (exactly one provider per required role)
+  │   └─ capability validation (cardinality, exactly-one-driver check)
   │
   ├─ READY → core calls lifecycle.start(ctx)
   │
-  └─ RUNNING (driven by core-lifecycle)
+  └─ RUNNING (driven by the session-driver plugin)
       ├─ emit session:start
       └─ loop:
           ├─ UI channel: receive() → user message
@@ -55,29 +68,13 @@ kaizen run
       └─ emit session:end → CLOSED
 ```
 
-## Roles
+## The session driver
 
-Roles decouple plugins from specific implementations. A plugin declares what it
-provides and what it needs:
-
-```typescript
-{
-  provides: ["lifecycle"],  // I fulfill the lifecycle role
-  depends: ["executor"],    // I need exactly one executor plugin to be loaded
-}
-```
-
-Core enforces: for every role appearing in any plugin's `depends[]`, exactly one
-loaded plugin must `provide[]` it. Zero or two+ providers → fatal startup error.
-
-Default roles:
-
-| Role | Provider | Consumer |
-|------|----------|----------|
-| `events` | `core-events` | `core-lifecycle`, `core-cli` |
-| `executor` | `core-executor-*` | `core-lifecycle` |
-| `ui` | `core-ui-terminal` | `core-lifecycle` |
-| `lifecycle` | `core-lifecycle` | *(core itself calls `start()`)* |
+Exactly one loaded plugin must declare `lifecycle: true` on its default
+export. After `bootstrap()` returns, core calls `start()` on that plugin.
+Zero or more than one driver is a fatal startup error. This is the sole
+plugin-to-core contract; everything else (executor, UI, tools) is
+plugin-to-plugin and modeled as capabilities.
 
 ## State machine
 
@@ -90,10 +87,11 @@ valid during `INITIALIZING` (inside `setup()`). Calling them after returns throw
 
 ## Plugin initialization order
 
-Plugins are topologically sorted by `depends[]` before `setup()` is called. A
-plugin that depends on role `lifecycle` is guaranteed to initialize after the
-lifecycle provider. Event handler registration order follows initialization order,
-so a plugin's `tool:before` handler runs after its dependency's handler.
+Plugins are topologically sorted by their declared dependencies before
+`setup()` is called. A plugin that depends on `core-lifecycle` is guaranteed
+to initialize after it. Event handler registration order follows
+initialization order, so a plugin's `tool:before` handler runs after its
+dependency's handler.
 
 ## Event system
 
@@ -116,7 +114,7 @@ src/
     manage.ts          Management commands (apply, install, plugin *)
   core/
     index.ts           bootstrap() — wires everything and calls lifecycle.start()
-    loader.ts          Plugin resolution, topo-sort, role validation, setup()
+    loader.ts          Plugin resolution, topo-sort, capability validation, setup()
     event-bus.ts       EventBus: defineEvent / on / emit
     tool-registry.ts   ToolRegistry: register / list / execute (with ajv validation)
     executor-registry.ts  ExecutorRegistry: register / get

@@ -1,6 +1,6 @@
 # Plugin Security Model
 
-*Read when: writing a plugin or reviewing someone else's.*
+*Read when: writing a plugin, reviewing someone else's, or auditing kaizen core permissions.*
 
 Kaizen runs plugins in-process, so they can reach everything Node can — unless
 they declare what they need. Every plugin must pick a tier and, if SCOPED, list
@@ -20,7 +20,7 @@ Default to TRUSTED. Escalate only when you hit a real need.
 
 Permissions live on the plugin's default export, alongside (but orthogonal to)
 the plugin's `capabilities` declaration — see
-[`plugin-migration-capability-registry.md`](./plugin-migration-capability-registry.md)
+[Plugin Model](../concepts/plugin-model.md#capabilities)
 for the capability model.
 
 ```typescript
@@ -143,7 +143,6 @@ catches post-consent code swaps but does not verify npm resolution itself.
 
 ## Further reading
 
-- [`plugin-api.md`](./plugin-api.md) — full plugin API reference
-- [`plugin-migration-capability-registry.md`](./plugin-migration-capability-registry.md) — v1 → v2 capability model (orthogonal to permissions but required for loading)
-- [`plugin-loading.md`](./plugin-loading.md) — load order, lifecycle, dependency resolution
-- [`adversarial-review.md`](./adversarial-review.md) — known findings; numbered references appear in code comments
+- [Plugin API](../reference/plugin-api.md) — full plugin API reference
+- [Plugin Model](../concepts/plugin-model.md#capabilities) — capability model and dependency declarations
+- [Plugin Model](../concepts/plugin-model.md) — load order, lifecycle, dependency resolution
