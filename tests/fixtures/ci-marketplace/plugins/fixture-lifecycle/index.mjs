@@ -1,6 +1,13 @@
 // Minimal lifecycle provider. Drives exactly one session turn, emits
 // test:lifecycle:start / :end bracketing the work, then returns so
 // bootstrap() resolves.
+//
+// Post-registry-refactor: core no longer exposes runtime.{ui,executors,tools}.
+// Driver plugins resolve providers themselves — typically via a shared
+// ServiceToken. These fixtures coordinate through globalThis keyed by
+// capability name (see fixture-ui/index.mjs for the rationale). Tools are
+// intentionally absent: a future core-tools broker plugin will own that
+// concept; until then the driver passes an empty tool list to executors.
 export default {
   name: "fixture-lifecycle",
   apiVersion: "2",
@@ -16,16 +23,16 @@ export default {
     await ctx.emit("test:lifecycle:start");
     await ctx.emit("session:start");
 
-    const ui = ctx.runtime.ui.getFirst();
-    const executor = ctx.runtime.executors.getFirst();
+    const impls = globalThis.__kaizenFixtureImpls ?? {};
+    const ui = impls["fixture-lifecycle:ui"];
+    const executor = impls["fixture-lifecycle:executor.send"];
 
     for await (const channel of ui.accept()) {
       const userMsg = await channel.receive();
       if (!userMsg) break;
       await ctx.emit("session:user_message", userMsg);
 
-      const tools = ctx.runtime.tools.list();
-      const response = await executor.send([userMsg], tools);
+      const response = await executor.send([userMsg], []);
       await ctx.emit("session:response", response);
       await channel.send({ type: "text", content: response.content });
 
