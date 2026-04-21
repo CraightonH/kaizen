@@ -67,7 +67,7 @@ etc. — the require patch refuses. Use the context surface instead:
 | `fs.readFileSync(path)` | `await ctx.fs.readText(path)` |
 | `fs.writeFileSync(path, data)` | `await ctx.fs.writeText(path, data)` |
 | `fetch(url)` | `await ctx.net.fetch(url)` (global `fetch` also intercepted) |
-| `process.env.X` | `ctx.secrets.get("X")` (env proxy also works, but explicit is clearer) |
+| `process.env.X` | Declare `env: ["X"]` and read `process.env.X` normally (proxy enforces the grant) |
 | `execSync(cmd)` / `spawn(...)` | `await ctx.exec.run(binary, args, opts)` — returns `{exitCode, stdout, stderr}`, never throws on non-zero |
 | `eventBus.on(...)` | `ctx.on(event, handler)` — checks `events.subscribe` grant |
 
@@ -108,7 +108,9 @@ Workflow:
 `events: { subscribe: ["other-plugin:*"] }` or the specific event name.
 
 **"`process.env.X` returns `undefined` unexpectedly."** The env proxy hides
-vars not in your grant. Add `X` to `env: [...]` or use `ctx.secrets.get("X")`.
+vars not in your grant. Add `X` to `env: [...]`. For application secrets like
+API keys, declare them under `config.secrets` and fetch via `ctx.secrets.get(...)`
+instead of relying on environment variables at all.
 
 **"SDK throws `net.connect` denial for a host I don't recognize."** The SDK
 fetched somewhere you didn't declare. Look at the denial record

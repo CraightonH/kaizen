@@ -135,7 +135,8 @@ Default to TRUSTED. Escalate only when a real need appears.
 The enforcer checks every external op at runtime. Non-UNSCOPED plugins
 cannot `require("node:fs")` or `require("node:child_process")` — the require
 patch refuses. Use the context surface (`ctx.fs`, `ctx.net`, `ctx.exec`,
-`ctx.secrets`, `ctx.on`) instead. Global `fetch` is wrapped, so SDK code
+`ctx.on`) instead. (`ctx.secrets` is also available but is access-scoped by the
+plugin's `config.secrets` declaration, not by `permissions`.) Global `fetch` is wrapped, so SDK code
 that calls fetch internally is still checked against your `net.connect`
 grant.
 
