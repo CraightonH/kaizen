@@ -3,50 +3,90 @@
 *Read when: you want to share a pre-configured kaizen setup, or use one someone shared.*
 
 A **harness** is a `kaizen.json` — a plugin list plus default config for each plugin.
-The minimum harness is a single file. The unit of sharing is a URL or local path
-pointing to a `kaizen.json` (or a folder containing one).
+Harnesses are distributed through **marketplaces** alongside plugins. A harness
+entry in a marketplace catalog points at a versioned directory containing a
+`kaizen.json`.
 
 ## Using a harness
 
-### Built-in harness (short name)
+### Marketplace ref (primary)
 
 ```bash
-kaizen --harness core-debug
-kaizen --harness core-anthropic
+kaizen --harness official/core-anthropic@0.1.0
 ```
 
-kaizen ships built-in harnesses in `harnesses/<name>/kaizen.json`.
+The ref format is `<marketplace-id>/<name>@<version>`. kaizen materializes the
+harness into `~/.kaizen/marketplaces/<id>/harnesses/<name>/kaizen.json` on first
+use, then loads it. Any marketplaces and plugins the harness references are
+bootstrapped automatically (with consent prompts unless `--non-interactive` /
+`--trust-lockfile` is set).
+
+Add marketplaces with `kaizen marketplace add <url>` before referencing their
+harnesses.
 
 ### Local path
 
 ```bash
 kaizen --harness ./my-harness/kaizen.json
 kaizen --harness ./my-harness/          # reads kaizen.json inside the folder
+kaizen --harness /abs/path/to/kaizen.json
 ```
 
-### URL
+Paths must start with `./`, `../`, or `/`. Bare names are treated as scoped
+lookups (see below), not relative paths.
+
+### Project- and home-scoped directories
+
+Bare names (no `/`, no path prefix) resolve against two well-known directories,
+in order:
+
+1. `.kaizen/harnesses/<name>/kaizen.json` (project)
+2. `~/.kaizen/harnesses/<name>/kaizen.json` (user home)
 
 ```bash
-kaizen --harness https://example.com/my-harness/kaizen.json
-kaizen --harness https://github.com/user/repo/raw/main/kaizen.json
+kaizen --harness my-local-harness       # looks in .kaizen/harnesses/, then ~/.kaizen/harnesses/
 ```
 
-kaizen fetches the file at startup and uses it as the harness config.
+Note: marketplace-installed harnesses live under
+`~/.kaizen/marketplaces/<id>/harnesses/<name>/`, which is **not** searched by
+bare-name lookup. Bare names only find harnesses in `.kaizen/harnesses/` or
+`~/.kaizen/harnesses/`. To reuse a marketplace harness by bare name, either
+symlink it into one of those dirs or keep using the full marketplace ref.
+
+### URL harnesses are not supported
+
+```bash
+kaizen --harness https://example.com/kaizen.json   # ERROR
+```
+
+Raw URL harnesses are rejected. Publish the harness in a marketplace and
+reference it by ref instead.
 
 ### Extending in kaizen.json
 
 ```json
 {
-  "extends": "core-debug",
+  "extends": "./base-harness/",
   "core-lifecycle": {
     "systemPrompt": "You are a coding assistant."
   }
 }
 ```
 
-`extends` accepts any value that `--harness` accepts: a built-in short name, a
-local path, or a URL. The harness provides the base plugin list and config; your
-local `kaizen.json` overlays it.
+`extends` is resolved through the same loader as `--harness` but without the
+marketplace-ref rewriting step that `--harness` does. In practice `extends`
+works with:
+
+- A bare name present in `.kaizen/harnesses/<name>/` or
+  `~/.kaizen/harnesses/<name>/`
+- A local path (`./path/to/kaizen.json` or `./path/to/harness-dir/`)
+
+Marketplace refs (`<marketplace>/<name>@<version>`) and URLs are **not**
+supported in `extends`. Use `--harness` for those, or symlink a
+marketplace-installed harness into `~/.kaizen/harnesses/`.
+
+The harness provides the base plugin list and config; your local `kaizen.json`
+overlays it.
 
 ## Config merge rules
 
@@ -59,53 +99,27 @@ local `kaizen.json` overlays it.
 If local `kaizen.json` omits `plugins`, it inherits the harness plugin stack.
 Add `plugins` to replace the stack entirely.
 
-## Built-in harnesses
-
-### `core-anthropic`
-Full default stack: Anthropic LLM + terminal UI + CLI tools.
-
-```bash
-kaizen --harness core-anthropic
-```
-
-```json
-{
-  "plugins": ["core-events", "core-executor-anthropic", "core-ui-terminal",
-              "core-cli", "core-lifecycle"],
-  "core-executor-anthropic": {
-    "model": "claude-opus-4-6",
-    "api_key_env": "ANTHROPIC_API_KEY"
-  },
-  "core-cli": { "clis": [], "allow_destructive": false, "subprocess_timeout_ms": 30000 }
-}
-```
-
-### `core-debug`
-Debug executor: echoes messages and prints all lifecycle events. No API key needed.
-
-```bash
-kaizen --harness core-debug
-```
-
-### `core-shell`
-Bash passthrough executor.
-
-```bash
-kaizen --harness core-shell
-```
-
 ## Authoring a harness
 
-The minimum harness is a single `kaizen.json`:
+A harness is a directory with a `kaizen.json` inside it:
+
+```
+my-devops-harness/
+  kaizen.json          ← kaizen reads this
+  system-prompt.txt    ← optional companion, referenced by plugin config
+  README.md            ← optional
+```
+
+The `kaizen.json` lists plugins (by marketplace ref) and their config:
 
 ```json
 {
   "plugins": [
-    "core-events",
-    "core-executor-anthropic",
-    "core-ui-terminal",
-    "core-cli",
-    "core-lifecycle"
+    "official/core-events@0.1.0",
+    "official/core-executor-anthropic@0.1.0",
+    "official/core-ui-terminal@0.1.0",
+    "official/core-cli@0.1.0",
+    "official/core-lifecycle@0.1.0"
   ],
   "core-executor-anthropic": {
     "model": "claude-opus-4-6",
@@ -120,40 +134,39 @@ The minimum harness is a single `kaizen.json`:
 }
 ```
 
-A folder harness can include companion files alongside `kaizen.json` (prompt
-templates, tool scripts, README) — kaizen reads only `kaizen.json`:
-
-```
-my-devops-harness/
-  kaizen.json          ← kaizen reads this
-  system-prompt.txt    ← referenced by your plugin config
-  README.md
-```
+Plugin entries must be full marketplace refs (`<marketplace>/<name>@<version>`)
+for the harness to be portable. Bare short names only resolve against locally
+installed plugins and won't work for others.
 
 ## Sharing a harness
 
-Share the `kaizen.json` directly — paste a URL, commit it to a repo, or put it
-on a file host. The recipient uses it with:
+Publish the harness in a marketplace. See the marketplace docs for catalog
+schema; the relevant part is a `harnesses` entry pointing at your harness
+directory.
+
+Consumers then use:
 
 ```bash
-kaizen --harness https://raw.githubusercontent.com/you/repo/main/kaizen.json
+kaizen marketplace add <your-marketplace-url>
+kaizen --harness <your-marketplace-id>/<harness-name>@<version>
 ```
 
-Or they save it locally and use a path:
-
-```bash
-kaizen --harness ./devops-harness/kaizen.json
-```
+For private or ad-hoc sharing, consumers can also drop the harness directory
+into `.kaizen/harnesses/<name>/` (committed to the project) or
+`~/.kaizen/harnesses/<name>/` (per-user). Both locations are resolved by bare
+name.
 
 ## Discovery
 
-There is no harness registry. Share harness URLs directly:
-- GitHub/GitLab gists or repo raw URLs
-- Any publicly accessible file host
-- A README in your project or tool's docs
+Harnesses live in the same marketplaces as plugins. Use:
 
-Plugins are still distributed via npm (`npm search kaizen-plugin`) since they
-contain code. Harnesses are configuration only — a URL is sufficient.
+```bash
+kaizen marketplace list
+kaizen marketplace browse <id>
+```
+
+to see what's available. There is no central registry beyond the marketplaces
+you've added.
 
 ## Example configs
 
@@ -161,8 +174,13 @@ contain code. Harnesses are configuration only — a URL is sufficient.
 
 ```json
 {
-  "plugins": ["core-events", "core-executor-openai", "core-ui-terminal",
-              "core-cli", "core-lifecycle"],
+  "plugins": [
+    "official/core-events@0.1.0",
+    "official/core-executor-openai@0.1.0",
+    "official/core-ui-terminal@0.1.0",
+    "official/core-cli@0.1.0",
+    "official/core-lifecycle@0.1.0"
+  ],
   "core-executor-openai": {
     "model": "llama3.2",
     "base_url": "http://localhost:11434/v1",
@@ -175,8 +193,12 @@ contain code. Harnesses are configuration only — a URL is sufficient.
 
 ```json
 {
-  "plugins": ["core-events", "core-executor-anthropic", "core-cli",
-              "kaizen-plugin-autonomous"],
+  "plugins": [
+    "official/core-events@0.1.0",
+    "official/core-executor-anthropic@0.1.0",
+    "official/core-cli@0.1.0",
+    "community/kaizen-plugin-autonomous@0.1.0"
+  ],
   "kaizen-plugin-autonomous": {
     "max_steps": 50,
     "goal": "fix all failing tests"
@@ -189,14 +211,14 @@ contain code. Harnesses are configuration only — a URL is sufficient.
 }
 ```
 
-`kaizen-plugin-autonomous` provides `["lifecycle"]` and runs headless — no
-`core-ui-terminal` needed.
+`kaizen-plugin-autonomous` provides the `lifecycle` capability and runs
+headless — no `core-ui-terminal` needed.
 
-### Extending a shared harness with local overrides
+### Extending an installed harness with local overrides
 
 ```json
 {
-  "extends": "https://raw.githubusercontent.com/team/harnesses/main/backend.json",
+  "extends": "./base-harness/kaizen.json",
   "core-lifecycle": {
     "systemPrompt": "Focus on the payments service."
   },
@@ -205,3 +227,7 @@ contain code. Harnesses are configuration only — a URL is sufficient.
   }
 }
 ```
+
+`extends` takes a local path or a bare name under `.kaizen/harnesses/` or
+`~/.kaizen/harnesses/`. For a marketplace harness, use `--harness
+<marketplace>/<name>@<version>` at the CLI.
