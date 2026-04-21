@@ -152,6 +152,30 @@ into `.kaizen/harnesses/<name>/` (committed to the project) or
 `~/.kaizen/harnesses/<name>/` (per-user). Both locations are resolved by bare
 name.
 
+## State files
+
+Each harness carries its own `permissions.lock` sitting next to its `kaizen.json`:
+
+- `.kaizen/harnesses/<name>/permissions.lock` (project)
+- `~/.kaizen/harnesses/<name>/permissions.lock` (home)
+- `~/.kaizen/marketplaces/<id>/harnesses/<name>/permissions.lock` (marketplace)
+
+The lockfile records the consented tier and grants for each plugin in the harness.
+Commit project-scoped lockfiles — they are the security record reviewed like code.
+
+**Re-materialization preserves consent.** When a marketplace harness is re-fetched
+(`kaizen marketplace update`), `permissions.lock` is preserved. If the re-fetched
+`kaizen.json` changes a plugin's permissions, runtime re-prompts for consent on
+next run because the tier-grant hash no longer matches.
+
+**Multiple harnesses, one project.** Two harnesses in the same repo keep
+independent consent records — consenting in one does not grant consent in the
+other.
+
+**A named harness is required.** `kaizen` without `--harness` and without an
+`extends` entry in `.kaizen/kaizen.json` is an error. Use one of the three
+entry-point forms above.
+
 ## Discovery
 
 Harnesses live in the same marketplaces as plugins. Use:

@@ -117,9 +117,10 @@ plugin-scope tracking, a proxy over `process.env`, and a wrapped `globalThis.fet
 
 ### Lockfile
 
-Consent is persisted in `kaizen.permissions.lock` at the repo root. **Commit
-this file** — reviewers see every plugin your harness runs, its tier, and its
-declared grants.
+Consent is persisted in `permissions.lock` next to each harness's `kaizen.json`
+(`.kaizen/harnesses/<name>/permissions.lock`, `~/.kaizen/harnesses/<name>/permissions.lock`,
+or `~/.kaizen/marketplaces/<id>/harnesses/<name>/permissions.lock`). **Commit project-scoped
+lockfiles** — they are the security record. See `docs/concepts/harnesses.md`.
 
 ### Authoring SCOPED plugins
 
