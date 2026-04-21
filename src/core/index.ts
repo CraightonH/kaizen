@@ -55,7 +55,7 @@ export async function initializePluginSystem(
   const trustLockfile = process.argv.includes("--trust-lockfile");
   const allowUnscoped = process.argv.includes("--allow-unscoped");
   const nonInteractive = process.argv.includes("--non-interactive");
-  const lockfilePath = join(process.cwd(), "kaizen.permissions.lock");
+  const lockfilePath = process.env["KAIZEN_LOCKFILE_OVERRIDE"] ?? join(process.cwd(), "kaizen.permissions.lock");
 
   const manager = new PluginManager(
     kaizenConfig,

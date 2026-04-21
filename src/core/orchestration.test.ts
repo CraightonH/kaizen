@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, writeFileSync, rmSync, existsSync } from "fs";
+import { mkdtempSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
 import { bootstrap } from "./index.js";
 import { bootstrapMissingPlugins } from "./bootstrap.js";
-import { writeLockfile, upsertPluginEntry, readLockfile } from "./lockfile.js";
+import { writeLockfile, upsertPluginEntry } from "./lockfile.js";
 import { canonicalTierGrantHash } from "./plugin-hash.js";
 
 const FIXTURE_MARKETPLACE = resolve(process.cwd(), "tests", "fixtures", "ci-marketplace");
@@ -73,14 +73,13 @@ describe("core orchestration against ci-marketplace fixtures", () => {
       `};`,
     ].join("\n"));
 
-    // Pre-consent the scoped spy plugin by seeding the lockfile.
-    // bootstrap() reads cwd()/kaizen.permissions.lock; we write a matching entry.
-    const cwdLockfile = join(process.cwd(), "kaizen.permissions.lock");
-    const hadLockfile = existsSync(cwdLockfile);
-    const lockBackup = hadLockfile ? readLockfile(cwdLockfile) : null;
+    // Pre-consent the scoped spy plugin by seeding an isolated lockfile.
+    // KAIZEN_LOCKFILE_OVERRIDE redirects bootstrap() away from cwd's lockfile,
+    // so this test never touches the repo's committed kaizen.permissions.lock.
+    const testLockfile = join(home, "kaizen.permissions.lock");
     const spyPerms = { tier: "scoped" as const, events: { subscribe: ["*"] } };
     const spyHash = canonicalTierGrantHash(spyPerms);
-    const seeded = upsertPluginEntry(lockBackup ?? { version: 1, plugins: {} }, "spy", {
+    const seeded = upsertPluginEntry({ schemaVersion: 1, plugins: {} }, "spy", {
       version: "1.0.0",
       hash: spyHash,
       tier: "scoped",
@@ -88,7 +87,8 @@ describe("core orchestration against ci-marketplace fixtures", () => {
       consentedBy: "test",
       permissions: { events: { subscribe: ["*"] } },
     });
-    writeLockfile(cwdLockfile, seeded);
+    writeLockfile(testLockfile, seeded);
+    process.env.KAIZEN_LOCKFILE_OVERRIDE = testLockfile;
     try {
       await bootstrap({
         plugins: [
@@ -116,8 +116,7 @@ describe("core orchestration against ci-marketplace fixtures", () => {
       expect(payloads["test:executor:send"]?.[0]).toMatchObject({ messageCount: 1 });
       expect(payloads["session:response"]?.[0]).toMatchObject({ content: "fixture response" });
     } finally {
-      if (hadLockfile && lockBackup) writeLockfile(cwdLockfile, lockBackup);
-      else if (existsSync(cwdLockfile)) rmSync(cwdLockfile, { force: true });
+      delete process.env.KAIZEN_LOCKFILE_OVERRIDE;
       delete (globalThis as Record<string, unknown>)[bridgeKey];
       rmSync(spyDir, { recursive: true, force: true });
     }
