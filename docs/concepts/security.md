@@ -140,8 +140,10 @@ that depends on this — fix the manifest.
 
 See the "What's not enforced" section in [`../README.md`](../README.md) — in
 short, this sandbox defeats honest-but-buggy and casually-malicious plugins,
-not V8 JIT escapes, FFI, or supply-chain attacks. Lockfile hash verification
-catches post-consent code swaps but does not verify npm resolution itself.
+not V8 JIT escapes, FFI, or supply-chain attacks. The lockfile hash is a
+canonical hash of the plugin's tier and permissions — changes to the declared
+permission manifest force re-consent, but plugin file contents are not hashed,
+so post-consent code swaps that keep the same manifest are not detected.
 
 ## Further reading
 
