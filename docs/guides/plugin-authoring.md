@@ -75,7 +75,8 @@ const plugin: KaizenPlugin = {
   capabilities: { provides: [], consumes: [] },
 
   async setup(ctx) {
-    // Register tools, services, executors, UI, event handlers here.
+    // Register services (ctx.registerService), declare capabilities
+    // (ctx.defineCapability), and subscribe to events (ctx.on) here.
     // setup() runs once during INITIALIZING. Registration calls are only
     // valid from inside setup().
   },
@@ -91,72 +92,22 @@ Required fields: `name`, `apiVersion`, `setup`. Optional: `lifecycle`,
 
 ## Registering tools {#tools}
 
-Tools are callable by the LLM. Register them in `setup()` via
-`ctx.registerTool(tool)`. A tool is a `ToolDefinition`:
+LLM tool-calling is not yet wired into core. A future `core-tools` broker
+plugin will own tool registration and dispatch; when it lands it will define
+the capability name and `ServiceToken` that tool-providing plugins use.
 
-```ts
-interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: JsonSchema;              // validated via ajv before execute()
-  destructive?: boolean;               // core-cli prompts unless --allow-destructive
-  execute(args: Record<string, unknown>): Promise<ToolResult>;
-}
-```
+For now, `ToolDefinition` and `ToolResult` types exist in the API (they are
+used by the `Executor` interface for the LLM round-trip), but there is no
+`ctx.registerTool()` method and no core-managed tool registry.
 
-A complete plugin that registers one tool:
-
-```ts
-import type { KaizenPlugin } from "kaizen/types";
-
-const plugin: KaizenPlugin = {
-  name: "echo",
-  apiVersion: "2.0.0",
-  permissions: { tier: "trusted" },
-  capabilities: {},
-
-  async setup(ctx) {
-    ctx.registerTool({
-      name: "echo",
-      description: "Echo text back to the caller.",
-      parameters: {
-        type: "object",
-        properties: {
-          text: { type: "string", description: "Text to echo." },
-        },
-        required: ["text"],
-      },
-      async execute(args) {
-        const text = args.text as string;
-        return { ok: true, output: text };
-      },
-    });
-
-    ctx.log("echo plugin ready");
-  },
-};
-
-export default plugin;
-```
-
-Core validates `args` against `parameters` before calling `execute()`.
-Invalid args return `{ ok: false, error: "Invalid arguments: ..." }` and the
-handler is never invoked. Thrown errors are wrapped as
-`{ ok: false, error: err.message }`.
-
-`ToolResult` fields: `ok` (required), `output` (human-readable string),
-`data` (structured JSON — preferred over `output` when present),
-`error` (set when `ok: false`), `exit_code` (informational, for subprocess
-tools). See
-[`reference/plugin-api.md`](../reference/plugin-api.md#tool-definition).
+<!-- TODO: expand this section once core-tools publishes its tokens and capability names -->
 
 ## Using the host API
 
-The `ctx` object is your entire surface onto kaizen. Beyond `registerTool` it
-exposes: `registerService` / `getService`, `registerExecutor`, `registerUi`,
-`defineCapability`, `defineEvent` / `on` / `emit`, `config`, `log`, permission-gated
-`fs` / `net` / `secrets` / `exec`, and a `runtime` namespace for executors,
-UI, and tool dispatch.
+The `ctx` object is your entire surface onto kaizen. It exposes:
+`registerService` / `getService`, `defineCapability`, `defineEvent` / `on` /
+`emit`, `config`, `log`, permission-gated `fs` / `net` / `secrets` / `exec`,
+and `runtime.pluginManager` for hot-reload support.
 
 Example — read a secret during `setup()`:
 
@@ -190,7 +141,9 @@ function makeCtx() {
   return {
     log: mock(() => {}),
     config: {},
-    registerTool: mock(() => {}),
+    registerService: mock(() => {}),
+    getService: mock(() => { throw new Error("not registered"); }),
+    defineCapability: mock(() => {}),
     on: mock(() => {}),
     defineEvent: mock(() => {}),
     emit: mock(async () => []),
@@ -198,28 +151,18 @@ function makeCtx() {
       get: mock(async (_key: string): Promise<string | undefined> => undefined),
       refresh: mock(async (_key: string): Promise<string | undefined> => undefined),
     },
-    capabilities: { register: mock(() => {}) },
   } as any;
 }
 
-describe("echo", () => {
+describe("my-plugin", () => {
   it("has correct metadata", () => {
-    expect(plugin.name).toBe("echo");
+    expect(plugin.name).toBe("my-plugin");
     expect(plugin.apiVersion).toBe("2.0.0");
   });
 
-  it("setup registers the echo tool", async () => {
+  it("setup completes without error", async () => {
     const ctx = makeCtx();
-    await plugin.setup(ctx);
-    expect(ctx.registerTool).toHaveBeenCalled();
-  });
-
-  it("echo returns its input", async () => {
-    const ctx = makeCtx();
-    await plugin.setup(ctx);
-    const tool = (ctx.registerTool as any).mock.calls[0][0];
-    const result = await tool.execute({ text: "hi" });
-    expect(result).toEqual({ ok: true, output: "hi" });
+    await expect(plugin.setup(ctx)).resolves.toBeUndefined();
   });
 });
 ```

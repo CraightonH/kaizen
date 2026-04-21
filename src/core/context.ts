@@ -1,9 +1,6 @@
-import type { PluginContext, ToolDefinition, PluginManagerPublicApi, PluginManagerLifecycleApi, SecretsContext } from "../types/plugin.js";
+import type { PluginContext, PluginManagerPublicApi, PluginManagerLifecycleApi, SecretsContext } from "../types/plugin.js";
 import type { ServiceToken } from "../types/plugin.js";
 import type { EventBus } from "./event-bus.js";
-import type { ToolRegistry } from "./tool-registry.js";
-import type { ExecutorRegistry } from "./executor-registry.js";
-import type { UiRegistry } from "./ui-registry.js";
 import type { ServiceRegistry } from "./service-registry.js";
 import type { PermissionEnforcer } from "./permission-enforcer.js";
 import { createCtxIo } from "./plugin-ctx-io.js";
@@ -22,9 +19,6 @@ export function createPluginContext(
   pluginConfig: Record<string, unknown>,
   secretsContext: SecretsContext,
   eventBus: EventBus,
-  toolRegistry: ToolRegistry,
-  executorRegistry: ExecutorRegistry,
-  uiRegistry: UiRegistry,
   capabilityRegistry: CapabilityRegistry,
   serviceRegistry: ServiceRegistry,
   enforcer: PermissionEnforcer,
@@ -56,21 +50,6 @@ export function createPluginContext(
       return serviceRegistry.get(token);
     },
 
-    registerTool(tool: ToolDefinition): void {
-      assertInitializing(getState(), "register tools");
-      toolRegistry.register(tool, pluginName);
-    },
-
-    registerExecutor(impl) {
-      assertInitializing(getState(), "register executor");
-      executorRegistry.register(impl, pluginName);
-    },
-
-    registerUi(impl) {
-      assertInitializing(getState(), "register UI provider");
-      uiRegistry.register(impl, pluginName);
-    },
-
     defineCapability(name, spec) {
       assertInitializing(getState(), "define capabilities");
       capabilityRegistry.define(name, pluginName, spec);
@@ -92,25 +71,6 @@ export function createPluginContext(
     },
 
     runtime: {
-      get executor() {
-        return executorRegistry.getFirst();
-      },
-      executors: {
-        list: () => executorRegistry.list(),
-        getFirst: () => executorRegistry.getFirst(),
-      },
-      ui: {
-        list: () => uiRegistry.list(),
-        getFirst: () => uiRegistry.getFirst(),
-      },
-      tools: {
-        list() {
-          return toolRegistry.list();
-        },
-        execute(name: string, args: Record<string, unknown>) {
-          return toolRegistry.execute(name, args);
-        },
-      },
       pluginManager: pluginManagerLifecycleApi,
     },
   };

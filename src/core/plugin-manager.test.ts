@@ -5,14 +5,11 @@ import { join } from "path";
 import { PluginManager, findPackageRoot, isInstalled } from "./plugin-manager.js";
 import { pluginInstallDir } from "./kaizen-config.js";
 import { EventBus } from "./event-bus.js";
-import { ToolRegistry } from "./tool-registry.js";
-import { ExecutorRegistry } from "./executor-registry.js";
-import { UiRegistry } from "./ui-registry.js";
 import { ServiceRegistry } from "./service-registry.js";
 import { CapabilityRegistry } from "./capability-registry.js";
 import { PermissionEnforcer } from "./permission-enforcer.js";
 import { AuditLog } from "./audit-log.js";
-import type { KaizenPlugin, KaizenConfig, Executor, UiProvider } from "../types/plugin.js";
+import type { KaizenPlugin, KaizenConfig } from "../types/plugin.js";
 
 describe("findPackageRoot", () => {
   let tmpDir: string;
@@ -42,18 +39,9 @@ describe("findPackageRoot", () => {
   });
 });
 
-const stubExecutor: Executor = {
-  send: async () => ({ content: "", tool_calls: [], stop_reason: "end_turn" }),
-  stream: async function* () { yield { type: "done" }; },
-};
-const stubUi: UiProvider = { accept: async function* () {} };
-
 function makeRegistries() {
   return {
     eventBus: new EventBus(),
-    toolRegistry: new ToolRegistry(),
-    executorRegistry: new ExecutorRegistry(),
-    uiRegistry: new UiRegistry(),
     capabilityRegistry: new CapabilityRegistry(),
     serviceRegistry: new ServiceRegistry(),
   };
@@ -89,9 +77,7 @@ function makePlugin(
 describe("PluginManager.initialize", () => {
   test("calls setup on all plugins and returns lifecycle provider", async () => {
     const setupCalls: string[] = [];
-    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
-    executorRegistry.register(stubExecutor, "test-exec");
-    uiRegistry.register(stubUi, "test-ui");
+    const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
 
     const config: KaizenConfig = { plugins: ["core-lifecycle"] };
     const lifecyclePlugin: KaizenPlugin = {
@@ -107,7 +93,7 @@ describe("PluginManager.initialize", () => {
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       config, { "core-lifecycle": lifecyclePlugin },
-      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
@@ -116,42 +102,8 @@ describe("PluginManager.initialize", () => {
     expect(lifecycleProvider.name).toBe("core-lifecycle");
   });
 
-  test("plugins can register tools during setup", async () => {
-    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
-    executorRegistry.register(stubExecutor, "test-exec");
-    uiRegistry.register(stubUi, "test-ui");
-
-    const toolPlugin = makePlugin("tool-plugin", async (ctx) => {
-      ctx.registerTool({
-        name: "my-tool",
-        description: "test",
-        parameters: {},
-        execute: async () => ({ ok: true }),
-      });
-    });
-    const lifecyclePlugin: KaizenPlugin = {
-      name: "core-lifecycle", apiVersion: "2",
-      lifecycle: true,
-      async setup() {},
-      async start() {},
-    };
-
-    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
-    const manager = new PluginManager(
-      { plugins: ["tool-plugin", "core-lifecycle"] },
-      { "tool-plugin": toolPlugin, "core-lifecycle": lifecyclePlugin },
-      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
-      enforcer, auditLog,
-      lockfilePath, options,
-    );
-    await manager.initialize();
-    expect(toolRegistry.list().map((t) => t.name)).toContain("my-tool");
-  });
-
   test("plugin with lifecycle:true is treated as critical — setup throws are fatal", async () => {
-    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
-    executorRegistry.register(stubExecutor, "test-exec");
-    uiRegistry.register(stubUi, "test-ui");
+    const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
 
     const life: KaizenPlugin = {
       name: "core-lifecycle",
@@ -163,7 +115,7 @@ describe("PluginManager.initialize", () => {
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: ["core-lifecycle"] }, { "core-lifecycle": life },
-      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
@@ -171,9 +123,7 @@ describe("PluginManager.initialize", () => {
   });
 
   test("finds session driver via lifecycle:true flag — no capability required", async () => {
-    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
-    executorRegistry.register(stubExecutor, "test-exec");
-    uiRegistry.register(stubUi, "test-ui");
+    const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
 
     const driver: KaizenPlugin = {
       name: "fixture-lifecycle",
@@ -185,7 +135,7 @@ describe("PluginManager.initialize", () => {
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: ["fixture-lifecycle"] }, { "fixture-lifecycle": driver },
-      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
@@ -194,12 +144,12 @@ describe("PluginManager.initialize", () => {
   });
 
   test("fatals when no plugin declares lifecycle:true", async () => {
-    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
     const plain = makePlugin("tool-only", async () => {});
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: ["tool-only"] }, { "tool-only": plain },
-      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
@@ -207,15 +157,13 @@ describe("PluginManager.initialize", () => {
   });
 
   test("fatals with names listed when two plugins declare lifecycle:true", async () => {
-    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
-    executorRegistry.register(stubExecutor, "test-exec");
-    uiRegistry.register(stubUi, "test-ui");
+    const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
     const a: KaizenPlugin = { name: "a-life", apiVersion: "2", lifecycle: true, async setup() {}, async start() {} };
     const b: KaizenPlugin = { name: "b-life", apiVersion: "2", lifecycle: true, async setup() {}, async start() {} };
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: ["a-life", "b-life"] }, { "a-life": a, "b-life": b },
-      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
@@ -225,9 +173,7 @@ describe("PluginManager.initialize", () => {
   });
 
   test("fatals when lifecycle plugin has no start() function", async () => {
-    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
-    executorRegistry.register(stubExecutor, "test-exec");
-    uiRegistry.register(stubUi, "test-ui");
+    const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
     // Deliberately omit start().
     const broken: KaizenPlugin = {
       name: "broken-life",
@@ -238,7 +184,7 @@ describe("PluginManager.initialize", () => {
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: ["broken-life"] }, { "broken-life": broken },
-      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
@@ -249,64 +195,20 @@ describe("PluginManager.initialize", () => {
 });
 
 describe("PluginManager.load + unload + reload", () => {
-  test("load registers a plugin's tools", async () => {
-    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
-    const config: KaizenConfig = { plugins: [] };
-    const newPlugin = makePlugin("dyn-plugin", async (ctx) => {
-      ctx.registerTool({ name: "dyn-tool", description: "", parameters: {}, execute: async () => ({ ok: true }) });
-    });
+  test("load then unload a plugin (no tools)", async () => {
+    const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
+    const plugin = makePlugin("simple-plugin");
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
-      config, { "dyn-plugin": newPlugin },
-      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      { plugins: [] }, { "simple-plugin": plugin },
+      eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
-    await manager.load("dyn-plugin");
-    expect(toolRegistry.list().map((t) => t.name)).toContain("dyn-tool");
-  });
-
-  test("unload deregisters a plugin's tools", async () => {
-    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
-    const config: KaizenConfig = { plugins: [] };
-    const plugin = makePlugin("rm-plugin", async (ctx) => {
-      ctx.registerTool({ name: "rm-tool", description: "", parameters: {}, execute: async () => ({ ok: true }) });
-    });
-    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
-    const manager = new PluginManager(
-      config, { "rm-plugin": plugin },
-      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
-      enforcer, auditLog,
-      lockfilePath, options,
-    );
-    await manager.load("rm-plugin");
-    await manager.unload("rm-plugin");
-    expect(toolRegistry.list().map((t) => t.name)).not.toContain("rm-tool");
-  });
-
-  test("reload replaces plugin tools", async () => {
-    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
-    let callCount = 0;
-    const plugin = makePlugin("swap-plugin", async (ctx) => {
-      callCount++;
-      ctx.registerTool({
-        name: "swap-tool",
-        description: `version-${callCount}`,
-        parameters: {},
-        execute: async () => ({ ok: true }),
-      });
-    });
-    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
-    const manager = new PluginManager(
-      { plugins: [] }, { "swap-plugin": plugin },
-      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
-      enforcer, auditLog,
-      lockfilePath, options,
-    );
-    await manager.load("swap-plugin");
-    await manager.reload("swap-plugin");
-    const tool = toolRegistry.list().find((t) => t.name === "swap-tool");
-    expect(tool?.description).toBe("version-2");
+    await manager.load("simple-plugin");
+    expect(manager.list().map((e) => e.name)).toContain("simple-plugin");
+    await manager.unload("simple-plugin");
+    expect(manager.list().map((e) => e.name)).not.toContain("simple-plugin");
   });
 });
 
@@ -316,8 +218,7 @@ describe("PluginManager.drainPendingReloads", () => {
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: [] }, {},
-      registries.eventBus, registries.toolRegistry, registries.executorRegistry,
-      registries.uiRegistry, registries.capabilityRegistry, registries.serviceRegistry,
+      registries.eventBus, registries.capabilityRegistry, registries.serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
@@ -325,14 +226,14 @@ describe("PluginManager.drainPendingReloads", () => {
   });
 
   test("drains queued reloads in order", async () => {
-    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
     const drained: string[] = [];
     const pluginA = makePlugin("a", async () => { drained.push("a"); });
     const pluginB = makePlugin("b", async () => { drained.push("b"); });
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: [] }, { a: pluginA, b: pluginB },
-      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
@@ -367,7 +268,7 @@ describe("PluginManager runtime accept-and-record (item 2)", () => {
       "};",
     ].join("\n"));
 
-    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
     const enforcer = new PermissionEnforcer({ mode: "log-only" });
     const auditLog = new AuditLog({
       rootDir: mkdtempSync(join(tmpdir(), "kaizen-test-audit-")),
@@ -388,7 +289,7 @@ describe("PluginManager runtime accept-and-record (item 2)", () => {
     const manager = new PluginManager(
       { plugins: [pluginDir, "core-lifecycle"] },
       { "core-lifecycle": lifePlugin },
-      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
@@ -405,12 +306,12 @@ describe("PluginManager runtime accept-and-record (item 2)", () => {
 
 describe("PluginManager.list", () => {
   test("returns loaded plugin entries", async () => {
-    const { eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry } = makeRegistries();
+    const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
     const plugin = makePlugin("listed-plugin");
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: [] }, { "listed-plugin": plugin },
-      eventBus, toolRegistry, executorRegistry, uiRegistry, capabilityRegistry, serviceRegistry,
+      eventBus, capabilityRegistry, serviceRegistry,
       enforcer, auditLog,
       lockfilePath, options,
     );
@@ -427,9 +328,6 @@ describe("PluginManager capability validation", () => {
     const stubs = makeSandboxStubs();
     return {
       eventBus: new EventBus(),
-      toolRegistry: new ToolRegistry(),
-      executorRegistry: new ExecutorRegistry(),
-      uiRegistry: new UiRegistry(),
       capabilityRegistry: new CapabilityRegistry(),
       serviceRegistry: new ServiceRegistry(),
       enforcer: stubs.enforcer,
@@ -455,7 +353,7 @@ describe("PluginManager capability validation", () => {
     };
     const manager = new PluginManager(
       { plugins: ["owner", "consumer"] }, { owner, consumer },
-      regs.eventBus, regs.toolRegistry, regs.executorRegistry, regs.uiRegistry, regs.capabilityRegistry, regs.serviceRegistry,
+      regs.eventBus, regs.capabilityRegistry, regs.serviceRegistry,
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
     );
@@ -485,7 +383,7 @@ describe("PluginManager capability validation", () => {
     };
     const manager = new PluginManager(
       { plugins: ["owner", "a", "b", "consumer"] }, { owner, a, b, consumer },
-      regs.eventBus, regs.toolRegistry, regs.executorRegistry, regs.uiRegistry, regs.capabilityRegistry, regs.serviceRegistry,
+      regs.eventBus, regs.capabilityRegistry, regs.serviceRegistry,
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
     );
@@ -515,7 +413,7 @@ describe("PluginManager capability validation", () => {
     const manager = new PluginManager(
       { plugins: ["owner", "consumer", "core-lifecycle"] },
       { owner, consumer, "core-lifecycle": life },
-      regs.eventBus, regs.toolRegistry, regs.executorRegistry, regs.uiRegistry, regs.capabilityRegistry, regs.serviceRegistry,
+      regs.eventBus, regs.capabilityRegistry, regs.serviceRegistry,
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
     );
@@ -536,7 +434,7 @@ describe("PluginManager capability validation", () => {
     };
     const manager = new PluginManager(
       { plugins: ["a", "b"] }, { a, b },
-      regs.eventBus, regs.toolRegistry, regs.executorRegistry, regs.uiRegistry, regs.capabilityRegistry, regs.serviceRegistry,
+      regs.eventBus, regs.capabilityRegistry, regs.serviceRegistry,
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
     );
@@ -564,7 +462,7 @@ describe("PluginManager capability validation", () => {
     const manager = new PluginManager(
       { plugins: ["consumer", "core-lifecycle"] },
       { consumer, "core-lifecycle": life },
-      regs.eventBus, regs.toolRegistry, regs.executorRegistry, regs.uiRegistry, regs.capabilityRegistry, regs.serviceRegistry,
+      regs.eventBus, regs.capabilityRegistry, regs.serviceRegistry,
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
     );
@@ -590,7 +488,7 @@ describe("PluginManager capability validation", () => {
     const manager = new PluginManager(
       { plugins: ["bad", "core-lifecycle"] },
       { bad, "core-lifecycle": life },
-      regs.eventBus, regs.toolRegistry, regs.executorRegistry, regs.uiRegistry, regs.capabilityRegistry, regs.serviceRegistry,
+      regs.eventBus, regs.capabilityRegistry, regs.serviceRegistry,
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
     );

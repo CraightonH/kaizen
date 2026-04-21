@@ -208,17 +208,6 @@ export interface PluginContext {
   /** Retrieve a typed service. Valid at any lifecycle state. Throws if not registered. */
   getService<T>(token: ServiceToken<T>): T;
 
-  // --- Tool registration (INITIALIZING state only) -------------------------
-  registerTool(tool: ToolDefinition): void;
-
-  // --- Executor registration (INITIALIZING state only) ---------------------
-  /** Register the executor implementation. Exactly one plugin must call this. */
-  registerExecutor(impl: Executor): void;
-
-  // --- UI registration (INITIALIZING state only) ---------------------------
-  /** Register the UI provider. Exactly one plugin must call this. */
-  registerUi(impl: UiProvider): void;
-
   // --- Capability registry (INITIALIZING state only) -----------------------
   /** Declare a capability. Name must be prefixed with the calling plugin's name. */
   defineCapability(name: string, spec: CapabilitySpec): void;
@@ -259,28 +248,6 @@ export interface PluginContext {
   // --- Runtime primitives --------------------------------------------------
 
   runtime: {
-    /** All registered executors; routing mechanism deferred. */
-    executors: {
-      list(): Executor[];
-      getFirst(): Executor;
-    };
-    /** First-registered executor — preserved for back-compat. Deprecated once routing lands. */
-    executor: Executor;
-    /** All registered UI providers, in registration order. */
-    ui: {
-      list(): UiProvider[];
-      getFirst(): UiProvider;
-    };
-    tools: {
-      /** Returns all registered tools at the time of the call. */
-      list(): ToolDefinition[];
-      /**
-       * Execute a tool by name. Core validates args against the tool's JSON Schema
-       * before calling execute(). If validation fails, returns { ok: false, error: ... }
-       * without calling execute(). If execute() throws, core wraps it as { ok: false, error }.
-       */
-      execute(name: string, args: Record<string, unknown>): Promise<ToolResult>;
-    };
     /** Call drainPendingReloads() between turns. Required for hot-reload support. */
     pluginManager: PluginManagerLifecycleApi;
   };
