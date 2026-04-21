@@ -22,7 +22,7 @@ afterEach(() => {
 
 describe("core orchestration against ci-marketplace fixtures", () => {
   it("boots plugins, runs one session turn, tears down cleanly", async () => {
-    const lockfilePath = join(home, "kaizen.permissions.lock");
+    const lockfilePath = join(home, "permissions.lock");
     await bootstrapMissingPlugins(
       {
         plugins: [
@@ -75,8 +75,8 @@ describe("core orchestration against ci-marketplace fixtures", () => {
 
     // Pre-consent the scoped spy plugin by seeding an isolated lockfile.
     // Pass testLockfile directly to bootstrap() so this test never touches
-    // the repo's committed kaizen.permissions.lock.
-    const testLockfile = join(home, "kaizen.permissions.lock");
+    // the repo's committed permissions.lock.
+    const testLockfile = join(home, "permissions.lock");
     const spyPerms = { tier: "scoped" as const, events: { subscribe: ["*"] } };
     const spyHash = canonicalTierGrantHash(spyPerms);
     const seeded = upsertPluginEntry({ schemaVersion: 1, plugins: {} }, "spy", {

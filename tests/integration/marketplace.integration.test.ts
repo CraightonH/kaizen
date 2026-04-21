@@ -68,7 +68,7 @@ describe("integration: local git marketplace, file-source plugin", () => {
 
   it("add → install → uninstall --purge", async () => {
     await addMarketplace(upstream, { id: "local" });
-    const lock = join(project, "kaizen.permissions.lock");
+    const lock = join(project, "permissions.lock");
 
     const code = await runUnifiedInstall({
       ref: "local/demo@1.0.0", lockfilePath: lock,
