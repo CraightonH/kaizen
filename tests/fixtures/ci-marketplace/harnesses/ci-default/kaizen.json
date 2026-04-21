@@ -1,0 +1,8 @@
+{
+  "plugins": [
+    "ci/fixture-events@1.0.0",
+    "ci/fixture-executor@1.0.0",
+    "ci/fixture-ui@1.0.0",
+    "ci/fixture-lifecycle@1.0.0"
+  ]
+}
