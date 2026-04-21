@@ -4,7 +4,7 @@ import type { KaizenConfig } from "../types/plugin.js";
 import { EventBus } from "./event-bus.js";
 import { ServiceRegistry } from "./service-registry.js";
 import { CapabilityRegistry } from "./capability-registry.js";
-import { PluginManager, type Builtins } from "./plugin-manager.js";
+import { PluginManager } from "./plugin-manager.js";
 import { createPluginContext } from "./context.js";
 import { SecretsRegistry, createSecretsContext } from "./secrets.js";
 import { PermissionEnforcer } from "./permission-enforcer.js";
@@ -18,7 +18,6 @@ export { PluginManager } from "./plugin-manager.js";
 
 export { PLUGIN_API_VERSION } from "../types/plugin.js";
 export type { KaizenPlugin, PluginContext } from "../types/plugin.js";
-export type { Builtins } from "./plugin-manager.js";
 export { PermissionEnforcer } from "./permission-enforcer.js";
 
 interface InitializedSystem {
@@ -33,7 +32,6 @@ interface InitializedSystem {
 
 export async function initializePluginSystem(
   kaizenConfig: KaizenConfig,
-  builtins: Builtins = {},
   injectedEnforcer?: PermissionEnforcer,
 ): Promise<InitializedSystem> {
   const eventBus = new EventBus();
@@ -57,10 +55,10 @@ export async function initializePluginSystem(
   const trustLockfile = process.argv.includes("--trust-lockfile");
   const allowUnscoped = process.argv.includes("--allow-unscoped");
   const nonInteractive = process.argv.includes("--non-interactive");
-  const lockfilePath = join(process.cwd(), "kaizen.permissions.lock");
+  const lockfilePath = process.env["KAIZEN_LOCKFILE_OVERRIDE"] ?? join(process.cwd(), "kaizen.permissions.lock");
 
   const manager = new PluginManager(
-    kaizenConfig, builtins,
+    kaizenConfig,
     eventBus, capabilityRegistry, serviceRegistry,
     enforcer, auditLog,
     lockfilePath, { trustLockfile, allowUnscoped, nonInteractive },
@@ -74,15 +72,14 @@ export async function initializePluginSystem(
 
 export interface RunHarnessOpts {
   kaizenConfig: KaizenConfig;
-  builtins?: Builtins;
   enforcer?: PermissionEnforcer;
 }
 
 export async function runHarness(opts: RunHarnessOpts): Promise<void> {
-  const { kaizenConfig, builtins = {}, enforcer: injectedEnforcer } = opts;
+  const { kaizenConfig, enforcer: injectedEnforcer } = opts;
   const {
     manager, eventBus, capabilityRegistry, serviceRegistry, enforcer, auditLog, lifecycleProvider,
-  } = await initializePluginSystem(kaizenConfig, builtins, injectedEnforcer);
+  } = await initializePluginSystem(kaizenConfig, injectedEnforcer);
 
   const lifecycleConfig =
     (kaizenConfig[lifecycleProvider.name] as Record<string, unknown> | undefined) ?? {};
@@ -107,9 +104,6 @@ export async function runHarness(opts: RunHarnessOpts): Promise<void> {
   }
 }
 
-export async function bootstrap(
-  kaizenConfig: KaizenConfig,
-  builtins: Builtins = {},
-): Promise<void> {
-  return runHarness({ kaizenConfig, builtins });
+export async function bootstrap(kaizenConfig: KaizenConfig): Promise<void> {
+  return runHarness({ kaizenConfig });
 }

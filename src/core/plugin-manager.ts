@@ -20,7 +20,7 @@ import type { AuditLog } from "./audit-log.js";
 import { runInPluginScope } from "./plugin-scope.js";
 import { scanPluginEntryImports } from "./manifest-import-scan.js";
 import { readLockfile, writeLockfile, upsertPluginEntry } from "./lockfile.js";
-import { computePluginHash } from "./plugin-hash.js";
+import { canonicalTierGrantHash } from "./plugin-hash.js";
 import { decideConsent } from "./consent-flow.js";
 
 // ---------------------------------------------------------------------------
@@ -55,8 +55,6 @@ export async function isInstalled(
 // ---------------------------------------------------------------------------
 // Plugin resolution
 // ---------------------------------------------------------------------------
-
-export type Builtins = Record<string, KaizenPlugin>;
 
 interface LoadedPlugin {
   plugin: KaizenPlugin;
@@ -135,9 +133,7 @@ async function loadPluginFromMarketplaceInstall(
   }
 }
 
-async function resolvePlugin(name: string, builtins: Builtins): Promise<LoadedPlugin | null> {
-  if (builtins[name]) return { plugin: builtins[name]!, resolvedPath: null };
-
+async function resolvePlugin(name: string): Promise<LoadedPlugin | null> {
   const isPath = name.startsWith("./") || name.startsWith("/") || name.startsWith("../");
 
   // Canonical marketplace ref: "<id>/<name>@<version>" → marketplace install dir.
@@ -259,7 +255,6 @@ export class PluginManager {
 
   constructor(
     private readonly config: KaizenConfig,
-    private readonly builtins: Builtins,
     private readonly eventBus: EventBus,
     private readonly capabilityRegistry: CapabilityRegistry,
     private readonly serviceRegistry: ServiceRegistry,
@@ -296,8 +291,8 @@ export class PluginManager {
     const version = existsSync(pkgPath)
       ? ((JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: string }).version ?? "unknown")
       : "unknown";
-    const hash = computePluginHash(pluginDir);
     const permissions = plugin.permissions ?? { tier: "trusted" };
+    const hash = canonicalTierGrantHash(permissions);
 
     const decision = decideConsent({
       pluginName: plugin.name,
@@ -340,7 +335,7 @@ export class PluginManager {
         warn(`Plugin name '${name}' collides with reserved config key. Skipping.`);
         continue;
       }
-      const loaded = await resolvePlugin(String(name), this.builtins);
+      const loaded = await resolvePlugin(String(name));
       if (!loaded) continue;
       const pluginDir = loaded.resolvedPath ? findPackageRoot(loaded.resolvedPath) : null;
       if (!this.consultLockfile(loaded.plugin, pluginDir)) continue;
@@ -447,7 +442,7 @@ export class PluginManager {
   // --------------------------------------------------------------------------
 
   async load(name: string): Promise<void> {
-    const loaded = await resolvePlugin(name, this.builtins);
+    const loaded = await resolvePlugin(name);
     if (!loaded) {
       warn(`Cannot load plugin '${name}': not found.`);
       return;

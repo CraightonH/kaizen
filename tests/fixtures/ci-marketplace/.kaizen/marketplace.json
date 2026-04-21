@@ -34,6 +34,54 @@
       "versions": [
         { "version": "1.0.0", "source": { "type": "file", "path": "plugins/fixture-lifecycle" } }
       ]
+    },
+    {
+      "kind": "plugin",
+      "name": "cap-provider",
+      "description": "Capability-resolution test fixture: defines and provides cap:thing.",
+      "versions": [
+        { "version": "1.0.0", "source": { "type": "file", "path": "plugins/cap-provider" } }
+      ]
+    },
+    {
+      "kind": "plugin",
+      "name": "cap-driver",
+      "description": "Capability-resolution test fixture: lifecycle driver consuming cap:thing.",
+      "versions": [
+        { "version": "1.0.0", "source": { "type": "file", "path": "plugins/cap-driver" } }
+      ]
+    },
+    {
+      "kind": "plugin",
+      "name": "cap-owner",
+      "description": "Capability-resolution test fixture: defines conflict:thing.",
+      "versions": [
+        { "version": "1.0.0", "source": { "type": "file", "path": "plugins/cap-owner" } }
+      ]
+    },
+    {
+      "kind": "plugin",
+      "name": "cap-dup-a",
+      "description": "Capability-resolution test fixture: provides conflict:thing.",
+      "versions": [
+        { "version": "1.0.0", "source": { "type": "file", "path": "plugins/cap-dup-a" } }
+      ]
+    },
+    {
+      "kind": "plugin",
+      "name": "cap-dup-b",
+      "description": "Capability-resolution test fixture: provides conflict:thing.",
+      "versions": [
+        { "version": "1.0.0", "source": { "type": "file", "path": "plugins/cap-dup-b" } }
+      ]
+    },
+    {
+      "kind": "plugin",
+      "name": "cap-driver-conflict",
+      "description": "Capability-resolution test fixture: lifecycle driver consuming conflict:thing.",
+      "versions": [
+        { "version": "1.0.0", "source": { "type": "file", "path": "plugins/cap-driver-conflict" } }
+      ]
     }
   ]
 }

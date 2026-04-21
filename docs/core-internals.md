@@ -24,7 +24,7 @@ src/core/
 `src/core/index.ts` is the single public entry point for the runtime:
 
 ```typescript
-await bootstrap(kaizenConfig, builtins);
+await bootstrap(kaizenConfig);
 ```
 
 1. Creates `EventBus`, `CapabilityRegistry`, `ServiceRegistry`.
@@ -34,10 +34,8 @@ await bootstrap(kaizenConfig, builtins);
 5. Calls `lifecycleProvider.start(ctx)` — control passes to the lifecycle plugin.
 6. Sets state to `CLOSED` in a `finally` block.
 
-`builtins` is a `Record<string, KaizenPlugin>` populated by the CLI entrypoint
-with statically-imported plugins. The loader checks builtins first; if no match,
-it attempts marketplace-install resolution. The compiled binary can ship with
-built-in plugins and never touch the filesystem for them.
+All plugins are resolved from canonical marketplace refs or local paths — the
+core binary ships with no built-in plugins.
 
 ## Plugin loader (`plugin-manager.ts`)
 
@@ -52,8 +50,7 @@ For each plugin name in `config.plugins`:
 3. Otherwise: fail with a helpful error.
 
 There is no `node_modules` involvement, no `npm`/`bun` global lookup, and no
-bare-name authored-plugin fallback. The `builtins` parameter on
-`initializePluginSystem` is a test-only seam — the shipping CLI passes `{}`.
+bare-name authored-plugin fallback.
 
 ### Topological sort
 
