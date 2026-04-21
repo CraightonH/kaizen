@@ -31,20 +31,33 @@ export const RESERVED_KEYS = new Set(["plugins", "extends"]);
 // project/home fallback directories.
 // ---------------------------------------------------------------------------
 
-export function loadHarnessConfig(nameOrPath: string): KaizenConfig {
+export interface ResolvedHarness {
+  kaizenJsonPath: string;
+  config: KaizenConfig;
+}
+
+/**
+ * Resolve a harness name-or-path to both its kaizen.json location and parsed config.
+ * Callers derive the lockfile path from `dirname(kaizenJsonPath) + "/permissions.lock"`.
+ */
+export function resolveHarness(nameOrPath: string): ResolvedHarness {
   // 1. Project-scoped harness
   const projectHarness = join(PROJECT_HARNESSES, nameOrPath, "kaizen.json");
-  if (existsSync(projectHarness)) return parseAndValidateHarness(projectHarness, nameOrPath);
+  if (existsSync(projectHarness)) {
+    return { kaizenJsonPath: projectHarness, config: parseAndValidateHarness(projectHarness, nameOrPath) };
+  }
 
   // 2. Global kaizen home harness
   const homeHarness = join(KAIZEN_HOME_HARNESSES, nameOrPath, "kaizen.json");
-  if (existsSync(homeHarness)) return parseAndValidateHarness(homeHarness, nameOrPath);
+  if (existsSync(homeHarness)) {
+    return { kaizenJsonPath: homeHarness, config: parseAndValidateHarness(homeHarness, nameOrPath) };
+  }
 
   // 3. Explicit path (./relative or /absolute)
   if (nameOrPath.startsWith("./") || nameOrPath.startsWith("/") || nameOrPath.startsWith("../")) {
     const filePath = nameOrPath.endsWith(".json") ? nameOrPath : join(nameOrPath, "kaizen.json");
     if (!existsSync(filePath)) fatal(`Harness not found at path: ${filePath}`);
-    return parseAndValidateHarness(filePath, nameOrPath);
+    return { kaizenJsonPath: filePath, config: parseAndValidateHarness(filePath, nameOrPath) };
   }
 
   // 4. URL — not supported; use marketplace
@@ -62,6 +75,10 @@ export function loadHarnessConfig(nameOrPath: string): KaizenConfig {
     `  Global:         ~/.kaizen/harnesses/${nameOrPath}/kaizen.json\n` +
     `  Path:           ./path/to/kaizen.json`,
   );
+}
+
+export function loadHarnessConfig(nameOrPath: string): KaizenConfig {
+  return resolveHarness(nameOrPath).config;
 }
 
 // ---------------------------------------------------------------------------
