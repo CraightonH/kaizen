@@ -123,7 +123,7 @@ This is a standalone skill (not a wrapper over any other skill). It knows:
 ### Enforcement
 
 Add to kaizen's `CLAUDE.md`:
-> Before invoking `ship`, run `kaizen:update-docs`. This is mandatory, not optional.
+> Before invoking `superpowers:finishing-a-development-branch`, run `kaizen:update-docs`. This is mandatory, not optional.
 
 Agents see this at session start. It becomes a workflow contract.
 
