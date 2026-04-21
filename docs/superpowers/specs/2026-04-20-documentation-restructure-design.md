@@ -114,7 +114,7 @@ A new project-local skill that:
 5. Verifies every plugin author journey step still has a valid answer
 6. Commits doc changes as a `docs(...)` commit before the branch ships
 
-This is a kaizen-aware wrapper over `/document-release`. It knows:
+This is a standalone skill (not a wrapper over any other skill). It knows:
 - The repo audience (plugin/marketplace authors, core contributors)
 - The doc structure (which layer each change touches)
 - To skip `docs/superpowers/` (dev artifacts, not living docs)
