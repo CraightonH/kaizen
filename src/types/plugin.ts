@@ -18,7 +18,7 @@ export const PLUGIN_API_VERSION = "2";
  * import runtime symbols from their owning modules, not from here.
  */
 
-export type { CtxFs, CtxNet, CtxSecrets, CtxExec, CtxLog, CtxIo, ExecOpts, ExecResult } from "../core/plugin-ctx-io.js";
+export type { CtxFs, CtxNet, CtxExec, CtxIo, ExecOpts, ExecResult } from "../core/plugin-ctx-io.js";
 export type { SecretProvider } from "../core/secret-providers/types.js";
 
 // ServiceToken is the type of the class instance; the class itself is
