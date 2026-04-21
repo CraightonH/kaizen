@@ -274,7 +274,7 @@ export function generateReadme(cfg: PluginScaffoldConfig): string {
     `## Installation`,
     ``,
     `\`\`\`sh`,
-    `kaizen plugin install <marketplace>/${cfg.name}`,
+    `kaizen install <marketplace>/${cfg.name}@<version>`,
     `\`\`\``,
     ``,
     `## Configuration`,

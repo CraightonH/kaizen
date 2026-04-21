@@ -141,32 +141,31 @@ First-party plugins and harnesses live in a separate repo:
 ```
 ~/.kaizen/                   Global kaizen home (created by install.sh or kaizen init --global)
   kaizen.json                Default config — used when no project config found
-  node_modules/              Plugins installed via kaizen plugin install
-  plugins/                   Locally authored / extracted plugins (require-able directories)
-  harnesses/                 Custom harnesses (folders containing kaizen.json)
+  marketplaces/              Per-marketplace install trees (see "Install tree" below)
+  harnesses/                 Authored harnesses, resolved by bare name
 
 <project>/
   .kaizen/                   Project-local config (like .vscode/)
     kaizen.json              Project config — extends a harness or defines full plugin stack
-    node_modules/            Plugins installed with kaizen plugin install --local (future)
-    plugins/                 Project-local authored plugins
-    harnesses/               Project-local harnesses
+    harnesses/               Project-local authored harnesses
 ```
+
+Plugins installed from marketplaces live under
+`~/.kaizen/marketplaces/<id>/plugins/`. Harnesses installed from marketplaces
+live under `~/.kaizen/marketplaces/<id>/harnesses/`. The top-level
+`~/.kaizen/harnesses/` (and `.kaizen/harnesses/`) are reserved for *authored*
+harnesses — ones the user writes by hand.
 
 ### Plugin resolution order
 
-Canonical refs (`<marketplace>/<name>@<version>`) resolve through the installed
-marketplace tree only:
+1. **Canonical marketplace ref** (`<marketplace>/<name>@<version>`):
+   `~/.kaizen/marketplaces/<id>/plugins/<name>@<version>/`, loaded by absolute
+   path.
+2. **Local path** (`./`, `../`, or `/`): loaded directly.
 
-1. `~/.kaizen/marketplaces/<id>/plugins/<name>@<version>/` — the sole supported path.
-
-Bare names in legacy configs still walk these fallbacks before failing:
-
-2. `.kaizen/plugins/<name>/` — project-scoped authored plugin
-3. `~/.kaizen/plugins/<name>/` — global authored plugin
-4. `.kaizen/node_modules/<name>` — project npm-installed plugin
-5. `~/.kaizen/node_modules/<name>` — globally npm-installed plugin
-6. Standard npm resolution (bun global, npm global, `./node_modules`)
+There is no `node_modules` fallback, no `npm`/`bun` global resolution, and no
+bare-name authored-plugin fallback — publish plugins to a marketplace or
+reference them by local path.
 
 ## Marketplaces & plugin resolution
 

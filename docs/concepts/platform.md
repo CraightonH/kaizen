@@ -71,8 +71,7 @@ them is out of scope.
 
 - **Language/runtime.** TypeScript, Bun. Ships as a standalone binary via
   GitHub Releases (`bun build --compile`). No Node.js or Bun required on the
-  user's machine. `npm install -g kaizen` also works as a secondary install
-  path for Node users.
+  user's machine.
 - **Open source.** MIT.
 - **Zero config from the user's perspective** for the default use case.
 - **Core is minimal.** Plugin loader + event bus + tool primitives. No
