@@ -287,7 +287,7 @@ describe("PluginManager runtime accept-and-record (item 2)", () => {
     const lockfilePath = join(lockDir, "permissions.lock");
 
     writeFileSync(join(pluginDir, "package.json"), JSON.stringify({ name: "ext-trusted", version: "1.0.0", main: "index.js" }));
-    // Plugin file exports a minimal trusted plugin + lifecycle role
+    // Plugin file exports a minimal trusted plugin + driver role
     writeFileSync(join(pluginDir, "index.js"), [
       "exports.default = {",
       "  name: 'ext-trusted',",
