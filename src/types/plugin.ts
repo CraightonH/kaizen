@@ -283,7 +283,7 @@ export interface PluginPermissions {
   };
 
   events?: {
-    /** Cross-plugin event subscription patterns, e.g. ["core-lifecycle:tool:before"]. */
+    /** Cross-plugin event subscription patterns, e.g. ["core-driver:tool:before"]. */
     subscribe?: string[];
   };
 }
