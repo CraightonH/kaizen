@@ -1,6 +1,6 @@
 import type { ServiceRegistry } from "../core/service-registry.js";
 
-export function capabilityList(reg: ServiceRegistry): void {
+export function serviceList(reg: ServiceRegistry): void {
   const entries = reg.list().sort((a, b) => a.name.localeCompare(b.name));
   if (entries.length === 0) {
     console.log("No services defined.");
@@ -14,7 +14,7 @@ export function capabilityList(reg: ServiceRegistry): void {
   }
 }
 
-export function capabilityShow(reg: ServiceRegistry, name: string): void {
+export function serviceShow(reg: ServiceRegistry, name: string): void {
   const entry = reg.list().find((e) => e.name === name);
   if (!entry) {
     console.error(`Service '${name}' not defined.`);

@@ -114,7 +114,7 @@ Subcommands:
   update [<ref>]                        update plugins
   plugin {list|consent|review|audit|dev|create|validate}
   marketplace {add|list|remove|update|browse|create|validate}
-  capability {list|show <name>}
+  service {list|show <name>}
   config {show|get|set|set-secret}
 
 Flags:
@@ -464,28 +464,28 @@ if (subcommand === "plugin") {
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: kaizen capability list|show <name>
+// Subcommand: kaizen service list|show <name>
 // ---------------------------------------------------------------------------
 
-if (subcommand === "capability") {
+if (subcommand === "service") {
   const sub = rawArgs[1];
-  const { capabilityList, capabilityShow } = await import("./commands/capability.js");
+  const { serviceList, serviceShow } = await import("./commands/service.js");
   const { initializePluginSystem } = await import("./core/index.js");
   const harnessJsonPath = resolveHarnessJsonPath({});
   const lockfilePath = deriveLockfilePath(harnessJsonPath);
   const cfg = resolveConfig({});
   const { serviceRegistry } = await initializePluginSystem(cfg, { lockfilePath });
   if (sub === "list") {
-    capabilityList(serviceRegistry);
+    serviceList(serviceRegistry);
   } else if (sub === "show") {
     const name = rawArgs[2];
     if (!name) {
-      console.error("Usage: kaizen capability show <name>");
+      console.error("Usage: kaizen service show <name>");
       process.exit(1);
     }
-    capabilityShow(serviceRegistry, name);
+    serviceShow(serviceRegistry, name);
   } else {
-    console.error("Usage: kaizen capability list|show <name>");
+    console.error("Usage: kaizen service list|show <name>");
     process.exit(1);
   }
   process.exit(0);
