@@ -27,7 +27,7 @@ interface InitializedSystem {
   serviceRegistry: ServiceRegistry;
   enforcer: PermissionEnforcer;
   auditLog: AuditLog;
-  lifecycleProvider: Awaited<ReturnType<PluginManager["initialize"]>>["lifecycleProvider"];
+  driver: Awaited<ReturnType<PluginManager["initialize"]>>["driver"];
 }
 
 export interface InitializePluginSystemOpts {
@@ -68,10 +68,10 @@ export async function initializePluginSystem(
     enforcer, auditLog,
     lockfilePath, { trustLockfile, allowUnscoped, nonInteractive },
   );
-  const { lifecycleProvider } = await manager.initialize();
+  const { driver } = await manager.initialize();
   return {
     capabilityRegistry, manager, eventBus, serviceRegistry,
-    enforcer, auditLog, lifecycleProvider,
+    enforcer, auditLog, driver,
   };
 }
 
@@ -88,19 +88,19 @@ export async function runHarness(opts: RunHarnessOpts): Promise<void> {
     ...(injectedEnforcer !== undefined ? { injectedEnforcer } : {}),
   };
   const {
-    manager, eventBus, capabilityRegistry, serviceRegistry, enforcer, auditLog, lifecycleProvider,
+    manager, eventBus, capabilityRegistry, serviceRegistry, enforcer, auditLog, driver,
   } = await initializePluginSystem(kaizenConfig, init);
 
-  const lifecycleConfig =
-    (kaizenConfig[lifecycleProvider.name] as Record<string, unknown> | undefined) ?? {};
-  const secretsCtx = createSecretsContext(new SecretsRegistry(), lifecycleProvider.name, {});
+  const driverConfig =
+    (kaizenConfig[driver.name] as Record<string, unknown> | undefined) ?? {};
+  const secretsCtx = createSecretsContext(new SecretsRegistry(), driver.name, {});
   const ctx = createPluginContext(
-    lifecycleProvider.name, lifecycleConfig, secretsCtx, eventBus, capabilityRegistry, serviceRegistry,
+    driver.name, driverConfig, secretsCtx, eventBus, capabilityRegistry, serviceRegistry,
     enforcer, () => "RUNNING", manager.getPublicApi(), manager.getLifecycleApi(),
   );
 
   try {
-    await runInPluginScope(lifecycleProvider.name, async () => { await lifecycleProvider.start!(ctx); });
+    await runInPluginScope(driver.name, async () => { await driver.start!(ctx); });
   } finally {
     await auditLog.flush();
   }

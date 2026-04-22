@@ -126,10 +126,10 @@ describe("PluginManager.initialize", () => {
       enforcer, auditLog,
       lockfilePath, options,
     );
-    const { lifecycleProvider } = await manager.initialize();
+    const { driver } = await manager.initialize();
     const bridge = (globalThis as unknown as Record<string, { calls: string[] }>)[bridgeKey]!;
     expect(bridge.calls).toEqual(["core-lifecycle"]);
-    expect(lifecycleProvider.name).toBe("core-lifecycle");
+    expect(driver.name).toBe("core-lifecycle");
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
 
@@ -165,8 +165,8 @@ describe("PluginManager.initialize", () => {
       enforcer, auditLog,
       lockfilePath, options,
     );
-    const { lifecycleProvider } = await manager.initialize();
-    expect(lifecycleProvider.name).toBe("fixture-lifecycle");
+    const { driver } = await manager.initialize();
+    expect(driver.name).toBe("fixture-lifecycle");
   });
 
   test("fatals when no plugin declares lifecycle:true", async () => {
