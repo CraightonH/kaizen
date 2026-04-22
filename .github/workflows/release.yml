@@ -1,6 +1,6 @@
 # .github/workflows/release.yml
-# Tag-triggered release. Compiles all 4 targets, generates SHA256SUMS, and
-# publishes a GitHub Release with binaries + install.sh.
+# Tag-triggered release. Cross-compiles all 4 targets on Linux runners,
+# generates SHA256SUMS, and publishes a GitHub Release with the binaries.
 name: release
 
 on:
@@ -22,42 +22,55 @@ jobs:
             echo "Tag '$tag' does not match v<major>.<minor>.<patch>[-suffix]" >&2
             exit 1
           fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-        id: validate
 
-  build:
+  test:
     needs: validate-tag
+    runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - os: darwin
-            arch: x64
-            runner: macos-13
-            target: bun-darwin-x64
-            outfile: kaizen-darwin-x64
-          - os: darwin
-            arch: arm64
-            runner: macos-14
-            target: bun-darwin-arm64
-            outfile: kaizen-darwin-arm64
-          - os: linux
-            arch: x64
-            runner: ubuntu-latest
-            target: bun-linux-x64
-            outfile: kaizen-linux-x64
-          - os: linux
-            arch: arm64
-            runner: ubuntu-24.04-arm
-            target: bun-linux-arm64
-            outfile: kaizen-linux-arm64
-    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+      - run: bun install --frozen-lockfile
+      - run: bun x tsc --noEmit
+      - run: bun test
+
+  build:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: bun-darwin-x64
+            outfile: kaizen-darwin-x64
+          - target: bun-darwin-arm64
+            outfile: kaizen-darwin-arm64
+          - target: bun-linux-x64
+            outfile: kaizen-linux-x64
+          - target: bun-linux-arm64
+            outfile: kaizen-linux-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
       - run: bun install --frozen-lockfile
       - name: Compile ${{ matrix.target }}
         run: bun build --compile --target=${{ matrix.target }} ./src/cli.ts --outfile ${{ matrix.outfile }}
@@ -72,8 +85,6 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/checkout@v4
-
       - name: Download all binaries
         uses: actions/download-artifact@v4
         with:
@@ -84,9 +95,6 @@ jobs:
         working-directory: dist
         run: sha256sum kaizen-* > SHA256SUMS
 
-      - name: Stage install.sh
-        run: cp scripts/install.sh dist/install.sh
-
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -94,6 +102,6 @@ jobs:
           tag="${GITHUB_REF#refs/tags/}"
           gh release create "$tag" \
             --generate-notes \
+            --repo "$GITHUB_REPOSITORY" \
             dist/kaizen-* \
-            dist/SHA256SUMS \
-            dist/install.sh
+            dist/SHA256SUMS
