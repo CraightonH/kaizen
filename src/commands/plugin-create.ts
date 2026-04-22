@@ -132,6 +132,13 @@ export function generateIndexTs(cfg: PluginScaffoldConfig): string {
     const first = secretKeys[0]!;
     setupLines.push(`    const ${first.name} = await ctx.secrets.get("${first.name}");`);
   }
+  for (const svc of cfg.provides) {
+    setupLines.push(`    ctx.defineService("${svc}", { description: "TODO" });`);
+    setupLines.push(`    ctx.provideService("${svc}", { /* TODO: implementation */ });`);
+  }
+  for (const svc of consumesArr) {
+    setupLines.push(`    ctx.consumeService("${svc}");`);
+  }
   setupLines.push("    ctx.log(`" + cfg.name + " setup complete`);");
 
   const lines: string[] = [
@@ -343,10 +350,10 @@ async function promptConfig(rl: readline.Interface, targetPath: string): Promise
       >)
     : [];
 
-  const providesInput = await prompt(rl, `Capabilities provided (comma-separated) [none]: `);
+  const providesInput = await prompt(rl, `Services provided (comma-separated) [none]: `);
   const provides = providesInput ? providesInput.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
-  const consumesInput = await prompt(rl, `Capabilities consumed (comma-separated) [none]: `);
+  const consumesInput = await prompt(rl, `Services consumed (comma-separated) [none]: `);
   const consumes = consumesInput ? consumesInput.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
   const hasConfigInput = await prompt(rl, `Does this plugin have config? (y/N) [N]: `);
