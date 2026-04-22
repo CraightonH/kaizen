@@ -1,6 +1,7 @@
 # .github/workflows/ci-master.yml
-# Runs on every master push touching build-affecting files. Proves master
-# compiles on all four supported targets. No publish.
+# Runs on every master push touching source/test files. Keeps master green
+# via typecheck, test suite, and installer shell test. Compile matrix runs
+# at release time (see release.yml).
 name: ci-master
 
 on:
@@ -37,44 +38,3 @@ jobs:
       - run: bun test
       - name: Installer shell test
         run: bash tests/install-sh-test.sh
-
-  build:
-    needs: test
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: darwin
-            arch: x64
-            runner: macos-13
-            target: bun-darwin-x64
-            outfile: kaizen-darwin-x64
-          - os: darwin
-            arch: arm64
-            runner: macos-14
-            target: bun-darwin-arm64
-            outfile: kaizen-darwin-arm64
-          - os: linux
-            arch: x64
-            runner: ubuntu-latest
-            target: bun-linux-x64
-            outfile: kaizen-linux-x64
-          - os: linux
-            arch: arm64
-            runner: ubuntu-24.04-arm
-            target: bun-linux-arm64
-            outfile: kaizen-linux-arm64
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Compile ${{ matrix.target }}
-        run: bun build --compile --target=${{ matrix.target }} ./src/cli.ts --outfile ${{ matrix.outfile }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.outfile }}
-          path: ${{ matrix.outfile }}
-          if-no-files-found: error
