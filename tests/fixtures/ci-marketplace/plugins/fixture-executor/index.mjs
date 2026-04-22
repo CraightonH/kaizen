@@ -6,7 +6,7 @@
 export default {
   name: "fixture-executor",
   apiVersion: "2",
-  capabilities: { provides: ["fixture-lifecycle:executor.send"] },
+  capabilities: { provides: ["fixture-driver:executor.send"] },
   async setup(ctx) {
     const impl = {
       async send(messages, tools) {
@@ -18,6 +18,6 @@ export default {
       },
       async *stream() { yield { type: "done" }; },
     };
-    (globalThis.__kaizenFixtureImpls ??= {})["fixture-lifecycle:executor.send"] = impl;
+    (globalThis.__kaizenFixtureImpls ??= {})["fixture-driver:executor.send"] = impl;
   },
 };

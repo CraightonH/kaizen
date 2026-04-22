@@ -108,7 +108,7 @@ permissions: {
 ### Format and conventions
 
 - [required] Capability names follow the format `<owner-plugin>:<local-name>`
-- [required] `<owner-plugin>` is the kebab-case plugin name (e.g., `my-tool`, `core-lifecycle`)
+- [required] `<owner-plugin>` is the kebab-case plugin name (e.g., `my-tool`, `core-driver`)
 - [required] `<local-name>` uses dot-separated kebab-case for nested concepts (e.g., `tool.handler`, `events.before-turn`)
 - [required] Use existing capabilities from core or other plugins when available; do not duplicate
 - [guideline] Document each provided capability with a `defineCapability()` call that includes a human-readable description
@@ -271,7 +271,7 @@ async setup(ctx) {
   ctx.defineEvent("my-tool:task-completed");
 
   // Subscribe to events from other plugins
-  ctx.on("core-lifecycle:tool:before", async (payload) => {
+  ctx.on("core-driver:tool:before", async (payload) => {
     ctx.log(`Tool execution starting: ${payload?.name}`);
   });
 
@@ -286,7 +286,7 @@ async setup(ctx) {
 permissions: {
   tier: "scoped",
   events: {
-    subscribe: ["core-lifecycle:tool:before", "core-lifecycle:tool:after"]
+    subscribe: ["core-driver:tool:before", "core-driver:tool:after"]
   }
 }
 ```

@@ -29,7 +29,7 @@ describe("core orchestration against ci-marketplace fixtures", () => {
           "ci/fixture-events@1.0.0",
           "ci/fixture-executor@1.0.0",
           "ci/fixture-ui@1.0.0",
-          "ci/fixture-lifecycle@1.0.0",
+          "ci/fixture-driver@1.0.0",
         ],
         marketplaces: [{ id: "ci", url: FIXTURE_MARKETPLACE }],
       },
@@ -37,14 +37,14 @@ describe("core orchestration against ci-marketplace fixtures", () => {
     );
 
     const EVENTS = [
-      "test:lifecycle:start",
+      "test:driver:start",
       "session:start",
       "session:user_message",
       "test:executor:send",
       "session:response",
       "test:ui:sent",
       "session:end",
-      "test:lifecycle:end",
+      "test:driver:end",
     ];
 
     // Write spy plugin to disk; stash observations in globalThis to
@@ -96,7 +96,7 @@ describe("core orchestration against ci-marketplace fixtures", () => {
             spyDir,
             "ci/fixture-executor@1.0.0",
             "ci/fixture-ui@1.0.0",
-            "ci/fixture-lifecycle@1.0.0",
+            "ci/fixture-driver@1.0.0",
           ],
           marketplaces: [{ id: "ci", url: FIXTURE_MARKETPLACE }],
         },
@@ -106,14 +106,14 @@ describe("core orchestration against ci-marketplace fixtures", () => {
       const { observed, payloads } = (globalThis as unknown as Record<string, { observed: string[]; payloads: Record<string, unknown[]> }>)[bridgeKey]!;
 
       expect(observed).toEqual([
-        "test:lifecycle:start",
+        "test:driver:start",
         "session:start",
         "session:user_message",
         "test:executor:send",
         "session:response",
         "test:ui:sent",
         "session:end",
-        "test:lifecycle:end",
+        "test:driver:end",
       ]);
       expect(payloads["test:executor:send"]?.[0]).toMatchObject({ messageCount: 1 });
       expect(payloads["session:response"]?.[0]).toMatchObject({ content: "fixture response" });

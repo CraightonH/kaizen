@@ -84,7 +84,7 @@ describe("marketplace harness ref → load flow (--harness ci/ci-default@1.0.0)"
     // Contains entries for at least the fixture plugins we just consented to.
     const lockRaw = readFileSync(lockfilePath, "utf8");
     expect(lockRaw).toContain("fixture-events");
-    expect(lockRaw).toContain("fixture-lifecycle");
+    expect(lockRaw).toContain("fixture-driver");
   });
 
   it("preserves permissions.lock across re-materialization of the harness", async () => {

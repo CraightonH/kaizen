@@ -1,5 +1,5 @@
 // Minimal fixture mirroring core-events. Pre-defines the six canonical
-// session events so fixture-lifecycle and fixture-executor can emit them.
+// session events so fixture-driver and fixture-executor can emit them.
 export const EVENTS = {
   SESSION_START:  "session:start",
   SESSION_END:    "session:end",
@@ -18,7 +18,7 @@ export default {
     ctx.defineEvent("test:executor:send");
     ctx.defineEvent("test:ui:received");
     ctx.defineEvent("test:ui:sent");
-    ctx.defineEvent("test:lifecycle:start");
-    ctx.defineEvent("test:lifecycle:end");
+    ctx.defineEvent("test:driver:start");
+    ctx.defineEvent("test:driver:end");
   },
 };

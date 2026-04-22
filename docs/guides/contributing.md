@@ -89,7 +89,7 @@ through there.
 - **Commits:** [Conventional Commits](https://www.conventionalcommits.org/).
   Allowed types: `feat`, `fix`, `refactor`, `build`, `ci`, `chore`, `docs`,
   `style`, `perf`, `test`. Scope where useful:
-  `feat(core): resolve session driver via lifecycle flag`.
+  `feat(core): resolve session driver via driver flag`.
 - **Tests:** add or update tests for any behavior change. Bugs get a
   regression test.
 - **Docs:** if you change behavior or the plugin/host API, update the relevant

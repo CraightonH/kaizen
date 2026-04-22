@@ -44,7 +44,7 @@ permissions: {
   net:    { connect: ["api.example.com:443", "*.internal:*"] },
   env:    ["MY_API_KEY"],
   exec:   { binaries: ["git", "rg"] },
-  events: { subscribe: ["core-lifecycle:*", "session:user_message"] },
+  events: { subscribe: ["core-driver:*", "session:user_message"] },
 },
 ```
 

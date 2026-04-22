@@ -172,7 +172,7 @@ function resolveCapName(name: string, aliases: Record<string, string>): string {
 }
 
 function isCritical(plugin: KaizenPlugin, reg: CapabilityRegistry): boolean {
-  if (plugin.lifecycle === true) return true;
+  if (plugin.driver === true) return true;
   const aliases = plugin.aliases ?? {};
   for (const raw of plugin.capabilities?.provides ?? []) {
     const cap = resolveCapName(raw, aliases);
@@ -328,7 +328,7 @@ export class PluginManager {
   // Initialization (startup path — replaces loadPlugins)
   // --------------------------------------------------------------------------
 
-  async initialize(): Promise<{ lifecycleProvider: KaizenPlugin }> {
+  async initialize(): Promise<{ driver: KaizenPlugin }> {
     const resolvedPlugins: LoadedPlugin[] = [];
     for (const name of this.config.plugins) {
       if (RESERVED_KEYS.has(name)) {
@@ -410,31 +410,31 @@ export class PluginManager {
       if (!claimedKeys.has(key)) warn(`Unknown config key '${key}'. No plugin claimed it.`);
     }
 
-    // Resolve lifecycle provider — the one plugin with `lifecycle: true`.
+    // Resolve driver — the one plugin with `driver: true`.
     // Core's single cross-plugin contract: call start() on the session driver.
-    const lifecyclePluginNames: string[] = [];
+    const driverNames: string[] = [];
     for (const [name, entry] of this.plugins) {
-      if (entry.plugin.lifecycle === true && entry.entry.status === "loaded") {
-        lifecyclePluginNames.push(name);
+      if (entry.plugin.driver === true && entry.entry.status === "loaded") {
+        driverNames.push(name);
       }
     }
-    if (lifecyclePluginNames.length === 0) {
-      fatal("No lifecycle plugin found. A plugin with 'lifecycle: true' must be loaded. Add one to kaizen.json.");
+    if (driverNames.length === 0) {
+      fatal("No driver plugin found. A plugin with 'driver: true' must be loaded. Add one to kaizen.json.");
     }
-    if (lifecyclePluginNames.length > 1) {
-      const quoted = lifecyclePluginNames.map((n) => `'${n}'`).join(", ");
+    if (driverNames.length > 1) {
+      const quoted = driverNames.map((n) => `'${n}'`).join(", ");
       fatal(
-        `Multiple lifecycle plugins loaded: ${quoted}. ` +
-        `A harness may have exactly one plugin with 'lifecycle: true'. Remove one from your kaizen.json.`,
+        `Multiple driver plugins loaded: ${quoted}. ` +
+        `A harness may have exactly one plugin with 'driver: true'. Remove one from your kaizen.json.`,
       );
     }
-    const lifecycleName = lifecyclePluginNames[0]!;
-    const lifecycleProvider = this.plugins.get(lifecycleName)?.plugin;
-    if (!lifecycleProvider || typeof lifecycleProvider.start !== "function") {
-      fatal(`Plugin '${lifecycleName}' declares 'lifecycle: true' but does not export a start() function.`);
+    const driverName = driverNames[0]!;
+    const driver = this.plugins.get(driverName)?.plugin;
+    if (!driver || typeof driver.start !== "function") {
+      fatal(`Plugin '${driverName}' declares 'driver: true' but does not export a start() function.`);
     }
 
-    return { lifecycleProvider: lifecycleProvider! };
+    return { driver: driver! };
   }
 
   // --------------------------------------------------------------------------

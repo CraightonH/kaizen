@@ -283,7 +283,7 @@ export interface PluginPermissions {
   };
 
   events?: {
-    /** Cross-plugin event subscription patterns, e.g. ["core-lifecycle:tool:before"]. */
+    /** Cross-plugin event subscription patterns, e.g. ["core-driver:tool:before"]. */
     subscribe?: string[];
   };
 }
@@ -311,10 +311,10 @@ export interface KaizenPlugin {
 
   /**
    * True if this plugin drives the session loop. Core calls start() on the
-   * one plugin with lifecycle=true after bootstrap. Exactly one loaded
+   * one plugin with driver=true after bootstrap. Exactly one loaded
    * plugin must declare this; zero or two+ is a fatal startup error.
    */
-  lifecycle?: boolean;
+  driver?: boolean;
 
   /** What this plugin provides and consumes in the capability registry. */
   capabilities?: PluginCapabilities;
@@ -322,7 +322,7 @@ export interface KaizenPlugin {
   /**
    * Map short or alternative capability names to canonical owner-qualified names.
    * Resolved when reading the `capabilities` lists above.
-   * e.g. { "ui.input": "core-lifecycle:ui.input" }
+   * e.g. { "ui.input": "core-driver:ui.input" }
    */
   aliases?: Record<string, string>;
 

@@ -53,13 +53,13 @@ describe("canonicalTierGrantHash", () => {
     net: { connect: ["x:1", "y:2"] },
     env: ["HOME"],
     exec: { binaries: ["git"] },
-    events: { subscribe: ["core-lifecycle:tool:before"] },
+    events: { subscribe: ["core-driver:tool:before"] },
   };
 
   it("is stable under key reorder", () => {
     const reordered: PluginPermissions = {
       exec: { binaries: ["git"] },
-      events: { subscribe: ["core-lifecycle:tool:before"] },
+      events: { subscribe: ["core-driver:tool:before"] },
       env: ["HOME"],
       net: { connect: ["x:1", "y:2"] },
       fs: { write: ["c"], read: ["a", "b"] },

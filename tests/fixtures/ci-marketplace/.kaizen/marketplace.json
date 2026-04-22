@@ -29,10 +29,10 @@
     },
     {
       "kind": "plugin",
-      "name": "fixture-lifecycle",
-      "description": "Minimal lifecycle provider for core orchestration tests.",
+      "name": "fixture-driver",
+      "description": "Minimal driver plugin for core orchestration tests.",
       "versions": [
-        { "version": "1.0.0", "source": { "type": "file", "path": "plugins/fixture-lifecycle" } }
+        { "version": "1.0.0", "source": { "type": "file", "path": "plugins/fixture-driver" } }
       ]
     },
     {
@@ -46,7 +46,7 @@
     {
       "kind": "plugin",
       "name": "cap-driver",
-      "description": "Capability-resolution test fixture: lifecycle driver consuming cap:thing.",
+      "description": "Capability-resolution test fixture: session driver consuming cap:thing.",
       "versions": [
         { "version": "1.0.0", "source": { "type": "file", "path": "plugins/cap-driver" } }
       ]
@@ -78,7 +78,7 @@
     {
       "kind": "plugin",
       "name": "cap-driver-conflict",
-      "description": "Capability-resolution test fixture: lifecycle driver consuming conflict:thing.",
+      "description": "Capability-resolution test fixture: session driver consuming conflict:thing.",
       "versions": [
         { "version": "1.0.0", "source": { "type": "file", "path": "plugins/cap-driver-conflict" } }
       ]

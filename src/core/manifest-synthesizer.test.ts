@@ -58,8 +58,8 @@ describe("synthesizeManifest", () => {
 
   test("events.subscribe collected", () => {
     const records: CheckRecord[] = [
-      rec("p1", { kind: "events.subscribe", event: "core-lifecycle:tool:before" }),
+      rec("p1", { kind: "events.subscribe", event: "core-driver:tool:before" }),
     ];
-    expect(synthesizeManifest("p1", records).events?.subscribe).toEqual(["core-lifecycle:tool:before"]);
+    expect(synthesizeManifest("p1", records).events?.subscribe).toEqual(["core-driver:tool:before"]);
   });
 });
