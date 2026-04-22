@@ -115,7 +115,7 @@ src/
   commands/
     manage.ts          Management commands (apply, install, plugin *)
   core/
-    index.ts           bootstrap() — wires everything and calls lifecycle.start()
+    index.ts           bootstrap() — wires everything and calls driver.start()
     loader.ts          Plugin resolution, topo-sort, capability validation, setup()
     event-bus.ts       EventBus: defineEvent / on / emit
     capability-registry.ts  CapabilityRegistry: define / validate cardinality

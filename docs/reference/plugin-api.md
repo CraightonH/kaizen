@@ -20,7 +20,7 @@ export of an npm package (or workspace package).
 export interface KaizenPlugin {
   name: string;
   apiVersion: string;
-  lifecycle?: boolean;
+  driver?: boolean;
   capabilities?: PluginCapabilities;
   aliases?: Record<string, string>;
   permissions?: PluginPermissions;
@@ -112,7 +112,7 @@ export type PermissionOp =
 
 ## PluginContext (setup argument)
 
-The `ctx` object passed to `setup()` (and to `start()` for lifecycle plugins).
+The `ctx` object passed to `setup()` (and to `start()` for driver plugins).
 
 ```ts
 export interface PluginContext {
