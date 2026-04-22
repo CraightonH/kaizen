@@ -1,6 +1,8 @@
 export default {
   name: "cap-dup-a",
   apiVersion: "2",
-  capabilities: { provides: ["cap-owner:thing"] },
-  async setup() {},
+  services: { provides: ["cap-owner:thing"] },
+  async setup(ctx) {
+    ctx.provideService("cap-owner:thing", { from: "a" });
+  },
 };

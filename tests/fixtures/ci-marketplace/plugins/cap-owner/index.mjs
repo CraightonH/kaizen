@@ -2,6 +2,6 @@ export default {
   name: "cap-owner",
   apiVersion: "2",
   async setup(ctx) {
-    ctx.defineCapability("cap-owner:thing", { cardinality: "one", description: "test" });
+    ctx.defineService("cap-owner:thing", { description: "test" });
   },
 };

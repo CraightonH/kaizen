@@ -3,7 +3,6 @@ import { randomUUID } from "crypto";
 import type { KaizenConfig } from "../types/plugin.js";
 import { EventBus } from "./event-bus.js";
 import { ServiceRegistry } from "./service-registry.js";
-import { CapabilityRegistry } from "./capability-registry.js";
 import { PluginManager } from "./plugin-manager.js";
 import { createPluginContext } from "./context.js";
 import { SecretsRegistry, createSecretsContext } from "./secrets.js";
@@ -13,15 +12,14 @@ import { AuditLog } from "./audit-log.js";
 import { initializeSandbox } from "./sandbox-bootstrap.js";
 import { runInPluginScope } from "./plugin-scope.js";
 
-export { CapabilityRegistry } from "./capability-registry.js";
 export { PluginManager } from "./plugin-manager.js";
+export { ServiceRegistry } from "./service-registry.js";
 
 export { PLUGIN_API_VERSION } from "../types/plugin.js";
 export type { KaizenPlugin, PluginContext } from "../types/plugin.js";
 export { PermissionEnforcer } from "./permission-enforcer.js";
 
 interface InitializedSystem {
-  capabilityRegistry: CapabilityRegistry;
   manager: PluginManager;
   eventBus: EventBus;
   serviceRegistry: ServiceRegistry;
@@ -41,7 +39,6 @@ export async function initializePluginSystem(
 ): Promise<InitializedSystem> {
   const { lockfilePath, injectedEnforcer } = opts;
   const eventBus = new EventBus();
-  const capabilityRegistry = new CapabilityRegistry();
   const serviceRegistry = new ServiceRegistry();
 
   let enforcer: PermissionEnforcer;
@@ -64,13 +61,13 @@ export async function initializePluginSystem(
 
   const manager = new PluginManager(
     kaizenConfig,
-    eventBus, capabilityRegistry, serviceRegistry,
+    eventBus, serviceRegistry,
     enforcer, auditLog,
     lockfilePath, { trustLockfile, allowUnscoped, nonInteractive },
   );
   const { driver } = await manager.initialize();
   return {
-    capabilityRegistry, manager, eventBus, serviceRegistry,
+    manager, eventBus, serviceRegistry,
     enforcer, auditLog, driver,
   };
 }
@@ -88,14 +85,14 @@ export async function runHarness(opts: RunHarnessOpts): Promise<void> {
     ...(injectedEnforcer !== undefined ? { injectedEnforcer } : {}),
   };
   const {
-    manager, eventBus, capabilityRegistry, serviceRegistry, enforcer, auditLog, driver,
+    manager, eventBus, serviceRegistry, enforcer, auditLog, driver,
   } = await initializePluginSystem(kaizenConfig, init);
 
   const driverConfig =
     (kaizenConfig[driver.name] as Record<string, unknown> | undefined) ?? {};
   const secretsCtx = createSecretsContext(new SecretsRegistry(), driver.name, {});
   const ctx = createPluginContext(
-    driver.name, driverConfig, secretsCtx, eventBus, capabilityRegistry, serviceRegistry,
+    driver.name, driverConfig, secretsCtx, eventBus, serviceRegistry,
     enforcer, () => "RUNNING", manager.getPublicApi(), manager.getLifecycleApi(),
   );
 

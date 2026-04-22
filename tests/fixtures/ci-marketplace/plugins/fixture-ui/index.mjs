@@ -1,15 +1,12 @@
 // Scripted single-turn UI. accept() yields one channel; the channel delivers
-// one user message via receive() then closes. send() just records.
+// one user message via receive() then closes.
 //
-// Post-registry-refactor: core no longer has a UiRegistry. In real plugins the
-// driver plugin would export a ServiceToken and providers would registerService
-// against it. These fixtures are separately-installed packages that can't share
-// a token instance via imports, so they coordinate through a globalThis map
-// keyed by capability name. This is a test-only pattern.
+// Post service-registry-merge: UI sharing remains via globalThis because
+// the UI is keyed by a fixture-driver service name (which is cardinality-one)
+// and this fixture is intentionally decoupled from registering against it.
 export default {
   name: "fixture-ui",
   apiVersion: "2",
-  capabilities: { provides: ["fixture-driver:ui"] },
   async setup(ctx) {
     const impl = {
       async *accept() {

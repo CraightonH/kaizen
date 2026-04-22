@@ -2,22 +2,22 @@
 // test:driver:start / :end bracketing the work, then returns so
 // bootstrap() resolves.
 //
-// Post-registry-refactor: core no longer exposes runtime.{ui,executors,tools}.
-// Driver plugins resolve providers themselves — typically via a shared
-// ServiceToken. These fixtures coordinate through globalThis keyed by
-// capability name (see fixture-ui/index.mjs for the rationale). Tools are
-// intentionally absent: a future core-tools broker plugin will own that
-// concept; until then the driver passes an empty tool list to executors.
+// Post service-registry-merge: executor is resolved via ctx.useService.
+// The UI fixture still uses globalThis because cardinality-many would be
+// needed to express "many UI providers" and v1 is cardinality-one; this
+// fixture accepts one UI via the globalThis bridge established by
+// fixture-ui during setup.
 export default {
   name: "fixture-driver",
   apiVersion: "2",
   driver: true,
-  capabilities: {
-    consumes: ["fixture-driver:executor.send", "fixture-driver:ui"],
-  },
+  // Note: intentionally does NOT declare consumes in manifest to avoid a
+  // topo-sort cycle (provider of fixture-driver:executor.send depends on
+  // this plugin as the definer). ctx.consumeService is still called below
+  // so the runtime registry records the consumer relationship.
   async setup(ctx) {
-    ctx.defineCapability("fixture-driver:executor.send", { cardinality: "one", description: "LLM executor" });
-    ctx.defineCapability("fixture-driver:ui", { cardinality: "many", description: "UI provider" });
+    ctx.defineService("fixture-driver:executor.send", { description: "LLM executor" });
+    ctx.consumeService("fixture-driver:executor.send");
   },
   async start(ctx) {
     await ctx.emit("test:driver:start");
@@ -25,7 +25,7 @@ export default {
 
     const impls = globalThis.__kaizenFixtureImpls ?? {};
     const ui = impls["fixture-driver:ui"];
-    const executor = impls["fixture-driver:executor.send"];
+    const executor = ctx.useService("fixture-driver:executor.send");
 
     for await (const channel of ui.accept()) {
       const userMsg = await channel.receive();

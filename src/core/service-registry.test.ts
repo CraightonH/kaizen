@@ -1,96 +1,167 @@
-import { describe, expect, test } from "bun:test";
-import { ServiceToken, ServiceRegistry } from "./service-registry.js";
-
-describe("ServiceToken", () => {
-  test("label property matches constructor arg", () => {
-    const token = new ServiceToken<string>("MyService");
-    expect(token.label).toBe("MyService");
-  });
-
-  test("two tokens with same label are distinct objects (FR3)", () => {
-    const a = new ServiceToken<string>("Svc");
-    const b = new ServiceToken<string>("Svc");
-    expect(a).not.toBe(b);
-  });
-
-  test("label is stable when token is passed by reference", () => {
-    const token = new ServiceToken<string>("Svc");
-    const ref: ServiceToken<string> = token;
-    expect(ref.label).toBe("Svc");
-  });
-});
+import { describe, it, expect } from "bun:test";
+import { ServiceRegistry } from "./service-registry.js";
 
 describe("ServiceRegistry", () => {
-  test("register then get returns impl typed correctly", () => {
-    const token = new ServiceToken<{ greet(): string }>("Greeter");
-    const impl = { greet: () => "hello" };
-    const registry = new ServiceRegistry();
-    registry.register(token, impl, "test-plugin");
-    expect(registry.get(token)).toBe(impl);
-    expect(registry.get(token).greet()).toBe("hello");
+  describe("define", () => {
+    it("accepts a well-prefixed name", () => {
+      const reg = new ServiceRegistry();
+      reg.define("owner:thing", "owner", { description: "ok" });
+      expect(reg.getSpec("owner:thing")).toEqual({ description: "ok" });
+    });
+
+    it("rejects a name that doesn't start with the plugin's prefix", () => {
+      const reg = new ServiceRegistry();
+      expect(() => reg.define("other:thing", "owner", { description: "x" })).toThrow(
+        /must be prefixed with plugin name 'owner'/,
+      );
+    });
+
+    it("rejects a name with no prefix", () => {
+      const reg = new ServiceRegistry();
+      expect(() => reg.define("thing", "owner", { description: "x" })).toThrow(
+        /must be prefixed with plugin name 'owner'/,
+      );
+    });
+
+    it("keeps the first definition and warns on duplicate", () => {
+      const reg = new ServiceRegistry();
+      reg.define("owner:x", "owner", { description: "first" });
+      reg.define("owner:x", "owner", { description: "second" });
+      expect(reg.getSpec("owner:x")).toEqual({ description: "first" });
+    });
   });
 
-  test("get unregistered token throws named not-found error", () => {
-    const token = new ServiceToken<string>("MissingService");
-    const registry = new ServiceRegistry();
-    expect(() => registry.get(token)).toThrow(
-      "Service 'MissingService' not found. Ensure the provider plugin is listed in depends[] before this plugin.",
-    );
+  describe("provide", () => {
+    it("throws when defining is missing", () => {
+      const reg = new ServiceRegistry();
+      expect(() => reg.provide("owner:thing", "owner", {})).toThrow(
+        /undefined service 'owner:thing'/,
+      );
+    });
+
+    it("stores impl and returns it from use", () => {
+      const reg = new ServiceRegistry();
+      reg.define("owner:paths", "owner", { description: "x" });
+      const impl = { resolve: () => "/" };
+      reg.provide("owner:paths", "owner", impl);
+      expect(reg.use("owner:paths")).toBe(impl);
+    });
+
+    it("throws on a second provider (cardinality one)", () => {
+      const reg = new ServiceRegistry();
+      reg.define("owner:x", "owner", { description: "x" });
+      reg.provide("owner:x", "owner", { a: 1 });
+      expect(() => reg.provide("owner:x", "other", { a: 2 })).toThrow(
+        /already has a provider/,
+      );
+    });
   });
 
-  test("duplicate registration throws named duplicate error", () => {
-    const token = new ServiceToken<string>("DupeService");
-    const registry = new ServiceRegistry();
-    registry.register(token, "first", "test-plugin");
-    expect(() => registry.register(token, "second", "test-plugin")).toThrow(
-      "Service 'DupeService' is already registered. Each service token may only have one provider.",
-    );
+  describe("consume", () => {
+    it("records consumer intent without requiring a provider", () => {
+      const reg = new ServiceRegistry();
+      reg.consume("owner:thing", "consumer");
+      expect(reg.consumersOf("owner:thing")).toEqual(["consumer"]);
+    });
+
+    it("deduplicates when the same plugin consumes twice", () => {
+      const reg = new ServiceRegistry();
+      reg.consume("owner:thing", "consumer");
+      reg.consume("owner:thing", "consumer");
+      expect(reg.consumersOf("owner:thing")).toEqual(["consumer"]);
+    });
   });
 
-  test("two tokens with same label are distinct keys (FR3)", () => {
-    const tokenA = new ServiceToken<string>("Svc");
-    const tokenB = new ServiceToken<string>("Svc");
-    const registry = new ServiceRegistry();
-    registry.register(tokenA, "implA", "test-plugin");
-    registry.register(tokenB, "implB", "test-plugin");
-    expect(registry.get(tokenA)).toBe("implA");
-    expect(registry.get(tokenB)).toBe("implB");
+  describe("use", () => {
+    it("throws when no provider has registered", () => {
+      const reg = new ServiceRegistry();
+      expect(() => reg.use("owner:missing")).toThrow(/has no provider/);
+    });
+
+    it("returns the exact reference registered by provide", () => {
+      const reg = new ServiceRegistry();
+      reg.define("owner:thing", "owner", { description: "x" });
+      const obj = { id: Symbol() };
+      reg.provide("owner:thing", "owner", obj);
+      expect(reg.use("owner:thing")).toBe(obj);
+    });
   });
 
-  test("registering undefined as impl is valid and retrievable", () => {
-    const token = new ServiceToken<undefined>("NullService");
-    const registry = new ServiceRegistry();
-    registry.register(token, undefined, "test-plugin");
-    expect(registry.get(token)).toBeUndefined();
+  describe("validateAll", () => {
+    it("fatal when a consumed service is undefined", () => {
+      const reg = new ServiceRegistry();
+      reg.consume("missing:x", "consumer");
+      expect(() => reg.validateAll()).toThrow(/undefined service 'missing:x'/);
+    });
+
+    it("fatal when a defined service has consumers but no provider", () => {
+      const reg = new ServiceRegistry();
+      reg.define("owner:x", "owner", { description: "x" });
+      reg.consume("owner:x", "consumer");
+      expect(() => reg.validateAll()).toThrow(/No plugin provides service 'owner:x'/);
+    });
+
+    it("passes when defined, provided, and consumed correctly", () => {
+      const reg = new ServiceRegistry();
+      reg.define("owner:x", "owner", { description: "x" });
+      reg.provide("owner:x", "owner", {});
+      reg.consume("owner:x", "consumer");
+      expect(() => reg.validateAll()).not.toThrow();
+    });
+
+    it("passes when defined but unused (no consumers, no provider)", () => {
+      const reg = new ServiceRegistry();
+      reg.define("owner:x", "owner", { description: "x" });
+      expect(() => reg.validateAll()).not.toThrow();
+    });
   });
 
-  test("fresh registry instance has no services (per-bootstrap isolation)", () => {
-    const token = new ServiceToken<string>("IsolatedService");
-    const r1 = new ServiceRegistry();
-    r1.register(token, "value", "test-plugin");
-    const r2 = new ServiceRegistry();
-    expect(() => r2.get(token)).toThrow("not found");
-  });
-});
+  describe("deregisterByPlugin", () => {
+    it("removes definitions owned by that plugin", () => {
+      const reg = new ServiceRegistry();
+      reg.define("owner:x", "owner", { description: "x" });
+      reg.deregisterByPlugin("owner");
+      expect(reg.getSpec("owner:x")).toBeUndefined();
+    });
 
-describe("ServiceRegistry.deregisterByPlugin", () => {
-  test("removes services registered by named plugin", () => {
-    const tokenA = new ServiceToken<string>("SvcA");
-    const tokenB = new ServiceToken<string>("SvcB");
-    const registry = new ServiceRegistry();
-    registry.register(tokenA, "implA", "plugin-a");
-    registry.register(tokenB, "implB", "plugin-b");
-    registry.deregisterByPlugin("plugin-a");
-    expect(() => registry.get(tokenA)).toThrow("not found");
-    expect(registry.get(tokenB)).toBe("implB");
+    it("removes provider + impl owned by that plugin", () => {
+      const reg = new ServiceRegistry();
+      reg.define("owner:x", "owner", { description: "x" });
+      reg.provide("owner:x", "owner", { a: 1 });
+      reg.deregisterByPlugin("owner");
+      expect(reg.providersOf("owner:x")).toEqual([]);
+      expect(() => reg.use("owner:x")).toThrow();
+    });
+
+    it("removes the plugin from consumer lists", () => {
+      const reg = new ServiceRegistry();
+      reg.consume("owner:x", "consumer-a");
+      reg.consume("owner:x", "consumer-b");
+      reg.deregisterByPlugin("consumer-a");
+      expect(reg.consumersOf("owner:x")).toEqual(["consumer-b"]);
+    });
+
+    it("leaves unrelated entries intact", () => {
+      const reg = new ServiceRegistry();
+      reg.define("a:x", "a", { description: "" });
+      reg.define("b:y", "b", { description: "" });
+      reg.deregisterByPlugin("a");
+      expect(reg.getSpec("a:x")).toBeUndefined();
+      expect(reg.getSpec("b:y")).toBeDefined();
+    });
   });
 
-  test("deregistered token can be re-registered", () => {
-    const token = new ServiceToken<string>("ResettableSvc");
-    const registry = new ServiceRegistry();
-    registry.register(token, "first", "plugin-a");
-    registry.deregisterByPlugin("plugin-a");
-    registry.register(token, "second", "plugin-a");
-    expect(registry.get(token)).toBe("second");
+  describe("list", () => {
+    it("returns entries with populated provider/consumer arrays", () => {
+      const reg = new ServiceRegistry();
+      reg.define("a:x", "a", { description: "test" });
+      reg.provide("a:x", "a", {});
+      reg.consume("a:x", "b");
+      const entries = reg.list();
+      expect(entries).toHaveLength(1);
+      expect(entries[0]!.definedBy).toBe("a");
+      expect(entries[0]!.providers).toEqual(["a"]);
+      expect(entries[0]!.consumers).toEqual(["b"]);
+    });
   });
 });

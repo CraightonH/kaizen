@@ -77,7 +77,7 @@ export function generateIndexTs(cfg: PluginScaffoldConfig): string {
     }
   }
 
-  // Build capabilities block
+  // Build services block
   const capsLines: string[] = [];
   if (cfg.provides.length > 0) {
     const provStr = cfg.provides.map((p) => `"${p}"`).join(", ");
@@ -143,7 +143,7 @@ export function generateIndexTs(cfg: PluginScaffoldConfig): string {
     `  permissions: {`,
     ...permissionsLines,
     `  },`,
-    `  capabilities: {`,
+    `  services: {`,
     ...capsLines,
     `  },`,
   ];
@@ -210,7 +210,10 @@ export function generateIndexTestTs(cfg: PluginScaffoldConfig): string {
     `      get: ${secretsMockGet},`,
     `      refresh: mock(async (_key: string): Promise<string | undefined> => undefined),`,
     `    },`,
-    `    capabilities: { register: mock(() => {}) },`,
+    `    defineService: mock(() => {}),`,
+    `    provideService: mock(() => {}),`,
+    `    consumeService: mock(() => {}),`,
+    `    useService: mock(() => undefined),`,
     `  } as any;`,
     `}`,
     ``,

@@ -21,12 +21,6 @@ export const PLUGIN_API_VERSION = "2";
 export type { CtxFs, CtxNet, CtxExec, CtxIo, ExecOpts, ExecResult } from "../core/plugin-ctx-io.js";
 export type { SecretProvider } from "../core/secret-providers/types.js";
 
-// ServiceToken is the type of the class instance; the class itself is
-// exposed to plugins through host-api.ts. Internal consumers import the
-// class directly from service-registry.js.
-import type { ServiceToken } from "../core/service-registry.js";
-export type { ServiceToken };
-
 // ---------------------------------------------------------------------------
 // JSON Schema (subset used for tool parameter definitions)
 // ---------------------------------------------------------------------------
@@ -174,23 +168,19 @@ export interface UiProvider {
 export type EventHandler = (payload?: unknown) => Promise<unknown | void>;
 
 // ---------------------------------------------------------------------------
-// Capabilities
+// Services
 // ---------------------------------------------------------------------------
 
-export type Cardinality = "one" | "many";
-
-export interface CapabilitySpec {
-  /** "one": exactly one provider required when consumed. "many": any count, including zero. */
-  cardinality: Cardinality;
-  /** Optional JSON schema validated against provider registrations. */
+export interface ServiceSpec {
+  /** Optional JSON schema validated against provider payloads (informational in v1). */
   schema?: JsonSchema;
   /** Optional semver string — future-proofing; currently informational only. */
   version?: string;
-  /** Human-readable; shown by `kaizen capability show`. */
+  /** Human-readable; shown by `kaizen service show`. */
   description: string;
 }
 
-export interface PluginCapabilities {
+export interface PluginServices {
   provides?: string[];
   consumes?: string[];
 }
@@ -202,15 +192,17 @@ export interface PluginCapabilities {
 export interface PluginContext {
   // --- Service registry ----------------------------------------------------
 
-  /** Register a typed service. Only valid during INITIALIZING (setup()). */
-  registerService<T>(token: ServiceToken<T>, impl: T): void;
+  /** Declare a service. Only valid during INITIALIZING (setup()). Name must be prefixed with the calling plugin's name. */
+  defineService(name: string, spec: ServiceSpec): void;
 
-  /** Retrieve a typed service. Valid at any lifecycle state. Throws if not registered. */
-  getService<T>(token: ServiceToken<T>): T;
+  /** Provide an implementation for a previously-defined service. Only valid during INITIALIZING. */
+  provideService<T>(name: string, impl: T): void;
 
-  // --- Capability registry (INITIALIZING state only) -----------------------
-  /** Declare a capability. Name must be prefixed with the calling plugin's name. */
-  defineCapability(name: string, spec: CapabilitySpec): void;
+  /** Declare intent to consume a service. Only valid during INITIALIZING. */
+  consumeService(name: string): void;
+
+  /** Retrieve the provided implementation. Valid only after INITIALIZING. Throws if no provider. */
+  useService<T>(name: string): T;
 
   // --- Event bus -----------------------------------------------------------
 
@@ -316,12 +308,12 @@ export interface KaizenPlugin {
    */
   driver?: boolean;
 
-  /** What this plugin provides and consumes in the capability registry. */
-  capabilities?: PluginCapabilities;
+  /** What services this plugin provides and consumes. */
+  services?: PluginServices;
 
   /**
-   * Map short or alternative capability names to canonical owner-qualified names.
-   * Resolved when reading the `capabilities` lists above.
+   * Map short or alternative service names to canonical owner-qualified names.
+   * Resolved when reading the `services` lists above.
    * e.g. { "ui.input": "core-driver:ui.input" }
    */
   aliases?: Record<string, string>;
@@ -360,7 +352,7 @@ export interface KaizenConfig {
 export interface PluginEntry {
   name: string;
   apiVersion: string;
-  capabilities: PluginCapabilities;
+  services: PluginServices;
   status: "loaded" | "unloaded" | "failed";
 }
 

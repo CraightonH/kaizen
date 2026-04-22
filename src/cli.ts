@@ -474,16 +474,16 @@ if (subcommand === "capability") {
   const harnessJsonPath = resolveHarnessJsonPath({});
   const lockfilePath = deriveLockfilePath(harnessJsonPath);
   const cfg = resolveConfig({});
-  const { capabilityRegistry } = await initializePluginSystem(cfg, { lockfilePath });
+  const { serviceRegistry } = await initializePluginSystem(cfg, { lockfilePath });
   if (sub === "list") {
-    capabilityList(capabilityRegistry);
+    capabilityList(serviceRegistry);
   } else if (sub === "show") {
     const name = rawArgs[2];
     if (!name) {
       console.error("Usage: kaizen capability show <name>");
       process.exit(1);
     }
-    capabilityShow(capabilityRegistry, name);
+    capabilityShow(serviceRegistry, name);
   } else {
     console.error("Usage: kaizen capability list|show <name>");
     process.exit(1);

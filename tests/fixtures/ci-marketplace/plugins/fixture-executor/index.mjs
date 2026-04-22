@@ -1,12 +1,9 @@
 // Returns a canned response. Emits test:executor:send on every call so the
 // spy plugin can count invocations and capture arguments.
-//
-// See fixture-ui/index.mjs for why these fixtures use globalThis instead of
-// ctx.registerService to share implementations.
 export default {
   name: "fixture-executor",
   apiVersion: "2",
-  capabilities: { provides: ["fixture-driver:executor.send"] },
+  services: { provides: ["fixture-driver:executor.send"] },
   async setup(ctx) {
     const impl = {
       async send(messages, tools) {
@@ -18,6 +15,6 @@ export default {
       },
       async *stream() { yield { type: "done" }; },
     };
-    (globalThis.__kaizenFixtureImpls ??= {})["fixture-driver:executor.send"] = impl;
+    ctx.provideService("fixture-driver:executor.send", impl);
   },
 };

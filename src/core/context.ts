@@ -1,10 +1,8 @@
 import type { PluginContext, PluginManagerPublicApi, PluginManagerLifecycleApi, SecretsContext } from "../types/plugin.js";
-import type { ServiceToken } from "../types/plugin.js";
 import type { EventBus } from "./event-bus.js";
 import type { ServiceRegistry } from "./service-registry.js";
 import type { PermissionEnforcer } from "./permission-enforcer.js";
 import { createCtxIo } from "./plugin-ctx-io.js";
-import type { CapabilityRegistry } from "./capability-registry.js";
 
 export type CoreState = "INITIALIZING" | "READY" | "RUNNING" | "CLOSED";
 
@@ -19,7 +17,6 @@ export function createPluginContext(
   pluginConfig: Record<string, unknown>,
   secretsContext: SecretsContext,
   eventBus: EventBus,
-  capabilityRegistry: CapabilityRegistry,
   serviceRegistry: ServiceRegistry,
   enforcer: PermissionEnforcer,
   getState: () => CoreState,
@@ -41,18 +38,23 @@ export function createPluginContext(
     secrets: secretsContext,
     exec: io.exec,
 
-    registerService<T>(token: ServiceToken<T>, impl: T): void {
-      assertInitializing(getState(), "register services");
-      serviceRegistry.register(token, impl, pluginName);
+    defineService(name, spec): void {
+      assertInitializing(getState(), "define services");
+      serviceRegistry.define(name, pluginName, spec);
     },
 
-    getService<T>(token: ServiceToken<T>): T {
-      return serviceRegistry.get(token);
+    provideService<T>(name: string, impl: T): void {
+      assertInitializing(getState(), "provide services");
+      serviceRegistry.provide(name, pluginName, impl);
     },
 
-    defineCapability(name, spec) {
-      assertInitializing(getState(), "define capabilities");
-      capabilityRegistry.define(name, pluginName, spec);
+    consumeService(name: string): void {
+      assertInitializing(getState(), "declare service consumption");
+      serviceRegistry.consume(name, pluginName);
+    },
+
+    useService<T>(name: string): T {
+      return serviceRegistry.use<T>(name);
     },
 
     defineEvent(name: string): void {

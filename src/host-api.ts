@@ -9,18 +9,14 @@
  * authoritative, reviewable contract between kaizen and all plugins.
  */
 
-import { ServiceToken } from "./core/service-registry.js";
 import { readStdinLine } from "./core/stdin.js";
-import { SecretsProviderToken } from "./core/secrets.js";
 import { createLLMRuntime } from "./core/llm.js";
 import { PLUGIN_API_VERSION } from "./types/plugin.js";
 
 /** Runtime values exposed to plugins via `import "kaizen/types"`. */
 export const hostApi = {
-  ServiceToken,
   createLLMRuntime,
   readStdinLine,
-  SecretsProviderToken,
   PLUGIN_API_VERSION,
 } as const;
 
@@ -43,7 +39,7 @@ export type {
   LLMResponse,
   LLMStreamChunk,
   PluginPermissions,
-  PluginCapabilities,
+  PluginServices,
   PluginConfigDeclaration,
   PermissionTier,
   PermissionOp,
@@ -59,8 +55,7 @@ export type {
   PluginVersionEntry,
   HarnessVersionEntry,
   EventHandler,
-  CapabilitySpec,
-  Cardinality,
+  ServiceSpec,
   PluginManagerPublicApi,
   PluginManagerLifecycleApi,
   PluginEntry,
