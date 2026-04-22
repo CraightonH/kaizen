@@ -68,7 +68,7 @@ Omit if not needed. Core falls back to individual `get()` calls.
 
 ## Declaring a secret provider
 
-In your plugin, declare `provides: [{ kind: "core-secrets:provider", name: "your-name" }]`:
+In your plugin, declare `services: { provides: ["core-secrets:provider"] }`:
 
 ```typescript
 import type { KaizenPlugin, SecretProvider } from "kaizen/types";
@@ -135,7 +135,7 @@ Here's a complete in-memory secret provider for testing:
 
 ```typescript
 import type { KaizenPlugin } from "kaizen/types";
-import { SecretsProviderToken, type SecretProvider } from "kaizen/core-secrets";
+import type { SecretProvider } from "kaizen/core-secrets";
 
 const testProvider: SecretProvider = {
   name: "test",
