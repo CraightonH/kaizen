@@ -20,11 +20,25 @@ import { runPluginConsent } from "./commands/plugin-consent.js";
 import { runPluginReview } from "./commands/plugin-review.js";
 import { runPluginAudit } from "./commands/plugin-audit.js";
 import { registerHostApi } from "./core/host-api-register.js";
+import { KaizenError } from "./core/errors.js";
 
 // Register the `kaizen/types` virtual module for plugin imports.
 // Must run before any dynamic plugin import (bootstrap, plugin dev,
 // capability list, tests, etc.).
 registerHostApi();
+
+// Top-level error handling: KaizenError is a user-facing error; print the
+// message and exit 1 without a stack trace. Anything else is a bug and
+// gets the full stack.
+function handleFatal(err: unknown): never {
+  if (err instanceof KaizenError) {
+    console.error(`error: ${err.message}`);
+    process.exit(1);
+  }
+  throw err;
+}
+process.on("uncaughtException", handleFatal);
+process.on("unhandledRejection", handleFatal);
 
 // ---------------------------------------------------------------------------
 // Arg parsing
@@ -57,7 +71,10 @@ function resolveHarnessJsonPath(opts: { harness?: string; extendsOverride?: stri
       if (typeof raw.extends === "string") return resolveHarness(raw.extends).kaizenJsonPath;
     } catch { /* resolveConfig will raise the right error */ }
   }
-  return fatal("kaizen requires a named harness; see docs/concepts/harnesses.md");
+  return fatal(
+    `this command requires an active harness. Pass --harness <marketplace>/<name>@<version>, ` +
+    `or set 'extends' in kaizen.json. See docs/concepts/harnesses.md.`,
+  );
 }
 
 const DEFAULT_PLUGINS = {
@@ -390,7 +407,9 @@ if (subcommand === "plugin") {
     process.exit(code);
   }
 
-  const lockfilePath = deriveLockfilePath(resolveHarnessJsonPath({}));
+  // list/create/validate don't need an active harness; consent/review/audit do.
+  const needsHarness = pluginSub === "consent" || pluginSub === "review" || pluginSub === "audit";
+  const lockfilePath = needsHarness ? deriveLockfilePath(resolveHarnessJsonPath({})) : "";
 
   if (pluginSub === "consent" && name) {
     const code = await runPluginConsent({
