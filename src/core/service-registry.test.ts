@@ -44,7 +44,7 @@ describe("ServiceRegistry", () => {
       reg.define("owner:paths", "owner", { description: "x" });
       const impl = { resolve: () => "/" };
       reg.provide("owner:paths", "owner", impl);
-      expect(reg.use("owner:paths")).toBe(impl);
+      expect(reg.use<typeof impl>("owner:paths")).toBe(impl);
     });
 
     it("throws on a second provider (cardinality one)", () => {
@@ -83,7 +83,7 @@ describe("ServiceRegistry", () => {
       reg.define("owner:thing", "owner", { description: "x" });
       const obj = { id: Symbol() };
       reg.provide("owner:thing", "owner", obj);
-      expect(reg.use("owner:thing")).toBe(obj);
+      expect(reg.use<typeof obj>("owner:thing")).toBe(obj);
     });
   });
 
