@@ -85,9 +85,9 @@ const plugin: KaizenPlugin = {
 export default plugin;
 ```
 
-Required fields: `name`, `apiVersion`, `setup`. Optional: `lifecycle`,
+Required fields: `name`, `apiVersion`, `setup`. Optional: `driver`,
 `capabilities`, `aliases`, `permissions` (defaults to `{ tier: "trusted" }`),
-`config`, `start` (only if `lifecycle: true`). Full field table in
+`config`, `start` (only if `driver: true`). Full field table in
 [`reference/plugin-api.md`](../reference/plugin-api.md#kaizenplugin-manifest).
 
 ## Registering tools {#tools}

@@ -33,10 +33,10 @@ await bootstrap(kaizenConfig, lockfilePath);
 environment-variable override.
 
 1. Creates `EventBus`, `CapabilityRegistry`, `ServiceRegistry`.
-2. Calls `loadPlugins()` → returns `{ lifecycleProvider, state }`.
-3. Creates a `PluginContext` for the lifecycle provider.
+2. Calls `loadPlugins()` → returns `{ driver, state }`.
+3. Creates a `PluginContext` for the driver plugin.
 4. Sets state to `RUNNING`.
-5. Calls `lifecycleProvider.start(ctx)` — control passes to the lifecycle plugin.
+5. Calls `driver.start(ctx)` — control passes to the driver plugin.
 6. Sets state to `CLOSED` in a `finally` block.
 
 All plugins are resolved from canonical marketplace refs or local paths — the
@@ -96,7 +96,7 @@ returns a non-void value. Handler errors are caught, logged to stderr, and
 execution continues with the next handler.
 
 The return value of `emit()` is an array of every handler's return value,
-including `undefined`. The lifecycle plugin inspects this array to implement
+including `undefined`. The driver plugin inspects this array to implement
 short-circuit logic (e.g. skip `execute()` if any handler returns a `ToolResult`).
 
 Calling `on()` or `defineEvent()` outside the `INITIALIZING` state throws because
@@ -105,7 +105,7 @@ Calling `on()` or `defineEvent()` outside the `INITIALIZING` state throws becaus
 ## CapabilityRegistry (`capability-registry.ts`)
 
 - `define(name, ownerPlugin, spec)` — declares a capability. `name` must be
-  prefixed with the owning plugin's name (e.g. `core-lifecycle:executor`).
+  prefixed with the owning plugin's name (e.g. `core-driver:executor`).
   Duplicate definitions by the same plugin warn; a different plugin claiming an
   already-owned name is a fatal error.
 - `register(name, providerPlugin)` — records that a plugin provides a named

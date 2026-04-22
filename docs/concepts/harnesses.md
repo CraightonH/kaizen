@@ -65,7 +65,7 @@ reference it by ref instead.
 ```json
 {
   "extends": "official/core-anthropic@0.1.0",
-  "core-lifecycle": {
+  "core-driver": {
     "systemPrompt": "You are a coding assistant."
   }
 }
@@ -115,7 +115,7 @@ The `kaizen.json` lists plugins (by marketplace ref) and their config:
     "official/core-executor-anthropic@0.1.0",
     "official/core-ui-terminal@0.1.0",
     "official/core-cli@0.1.0",
-    "official/core-lifecycle@0.1.0"
+    "official/core-driver@0.1.0"
   ],
   "core-executor-anthropic": {
     "model": "claude-opus-4-6",
@@ -124,7 +124,7 @@ The `kaizen.json` lists plugins (by marketplace ref) and their config:
   "core-cli": {
     "clis": ["gh", "kubectl"]
   },
-  "core-lifecycle": {
+  "core-driver": {
     "systemPrompt": "You are a DevOps assistant."
   }
 }
@@ -199,7 +199,7 @@ you've added.
     "official/core-executor-openai@0.1.0",
     "official/core-ui-terminal@0.1.0",
     "official/core-cli@0.1.0",
-    "official/core-lifecycle@0.1.0"
+    "official/core-driver@0.1.0"
   ],
   "core-executor-openai": {
     "model": "llama3.2",
@@ -231,7 +231,7 @@ you've added.
 }
 ```
 
-`kaizen-plugin-autonomous` provides the `lifecycle` capability and runs
+`kaizen-plugin-autonomous` provides the `driver` capability and runs
 headless — no `core-ui-terminal` needed.
 
 ### Extending an installed harness with local overrides
@@ -239,7 +239,7 @@ headless — no `core-ui-terminal` needed.
 ```json
 {
   "extends": "./base-harness/kaizen.json",
-  "core-lifecycle": {
+  "core-driver": {
     "systemPrompt": "Focus on the payments service."
   },
   "core-cli": {

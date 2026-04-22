@@ -34,13 +34,13 @@ export interface KaizenPlugin {
 |-------|------|----------|-------------|
 | `name` | `string` | yes | kebab-case. Must match the config namespace key in `kaizen.json`. |
 | `apiVersion` | `string` | yes | semver. Core warns if major differs from `PLUGIN_API_VERSION`. |
-| `lifecycle` | `boolean` | no | If true, this plugin drives the session loop. Core calls `start()` on the one plugin with `lifecycle=true` after bootstrap. Exactly one loaded plugin must declare this — zero or two+ is a fatal startup error. |
+| `driver` | `boolean` | no | If true, this plugin drives the session loop. Core calls `start()` on the one plugin with `driver=true` after bootstrap. Exactly one loaded plugin must declare this — zero or two+ is a fatal startup error. |
 | `capabilities` | `PluginCapabilities` | no | `{ provides?: string[]; consumes?: string[] }`. Declares what this plugin provides and consumes in the capability registry. |
-| `aliases` | `Record<string, string>` | no | Map short or alternative capability names to canonical owner-qualified names. e.g. `{ "ui.input": "core-lifecycle:ui.input" }`. |
+| `aliases` | `Record<string, string>` | no | Map short or alternative capability names to canonical owner-qualified names. e.g. `{ "ui.input": "core-driver:ui.input" }`. |
 | `permissions` | `PluginPermissions` | no | Permission manifest. Defaults to `{ tier: "trusted" }`. See Permissions below. |
 | `config` | `PluginConfigDeclaration` | no | Declares config schema, defaults, and which keys are secrets. |
 | `setup` | `(ctx: PluginContext) => Promise<void>` | yes | Called once during `INITIALIZING`. Register services, declare capabilities, and subscribe to events here. |
-| `start` | `(ctx: PluginContext) => Promise<void>` | no | Only implement if `lifecycle=true`. Core calls this after all plugins initialize. |
+| `start` | `(ctx: PluginContext) => Promise<void>` | no | Only implement if `driver=true`. Core calls this after all plugins initialize. |
 
 ### PluginCapabilities
 
@@ -237,12 +237,12 @@ export type JsonSchema = {
 
 These types are part of the plugin API surface. Executor and UI plugins use
 `ctx.registerService(Token, impl)` plus `ctx.defineCapability(...)` to expose
-their implementations. The driver plugin (e.g. `core-lifecycle`) defines the
+their implementations. The driver plugin (e.g. `core-driver`) defines the
 capability names and `ServiceToken` values it expects and documents them in its
 own README. Core does not enshrine `kaizen.executor`, `kaizen.ui`, or any other
 well-known name.
 
-<!-- TODO: expand once core-lifecycle publishes its tokens and capability names -->
+<!-- TODO: expand once core-driver publishes its tokens and capability names -->
 
 ### Executor
 

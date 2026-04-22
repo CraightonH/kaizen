@@ -46,7 +46,7 @@ kaizen is a **kernel**. Core does exactly three things:
    Core has no session loop, no UI, no tools, no LLM.
 
 After all plugins initialize, core calls `start(ctx)` on the single plugin
-that declared itself the **session driver** (`lifecycle: true`). That plugin
+that declared itself the **session driver** (`driver: true`). That plugin
 owns the session from that point forward. Core never sees another frame.
 
 The unit of sharing is the **harness** — a `kaizen.json` file listing a
@@ -78,7 +78,7 @@ them is out of scope.
   session loop, no UI, no tools, no LLM — all are plugins. Core exposes
   primitives; plugins compose them.
 - **Exactly one session driver.** Exactly one loaded plugin must declare
-  `lifecycle: true`. Zero or more than one is a fatal startup error. This is
+  `driver: true`. Zero or more than one is a fatal startup error. This is
   the sole plugin-to-core contract; everything else is plugin-to-plugin and
   modeled as capabilities.
 - **Security:** destructive command guards and similar policy belong in

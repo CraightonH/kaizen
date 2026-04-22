@@ -27,7 +27,7 @@ itself:
   and subscribe to events — all during `setup()`. Anything registered after
   `setup()` returns will throw.
 
-A plugin may additionally declare `lifecycle: true` to become the session
+A plugin may additionally declare `driver: true` to become the session
 driver (see below), and may provide a `config` section describing the config
 schema and secret keys it accepts.
 
@@ -110,7 +110,7 @@ Three moments matter for a plugin author:
   follows initialization order (so a consumer's handler runs after its
   dependency's handler). If a handler throws, core logs and continues.
 - **`start(ctx)`** — runs once, on the single session driver (the plugin
-  that declared `lifecycle: true`). Core calls it after `READY`. The driver
+  that declared `driver: true`). Core calls it after `READY`. The driver
   owns the session from that point forward: it reads from UI channels, calls
   the executor, iterates tool calls, emits lifecycle events, and eventually
   closes.

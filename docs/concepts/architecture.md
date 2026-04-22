@@ -25,7 +25,7 @@ else — the session loop, terminal UI, CLI tools, and the LLM itself — is a p
 │  core-executor-*      wraps LLM / shell / debug           │
 │  core-ui-terminal     stdin/stdout I/O                    │
 │  core-cli             CLI introspection + tool runner     │
-│  core-lifecycle       session loop (lifecycle: true)      │
+│  core-driver          session loop (driver: true)         │
 └───────────────────────────────────────────────────────────┘
 ```
 
@@ -38,7 +38,7 @@ else — the session loop, terminal UI, CLI tools, and the LLM itself — is a p
 3. **Service and capability registries.** `registerService` / `getService` for
    typed DI; `defineCapability` for named provider declarations with cardinality
    rules. Core has no session loop of its own; after initialization it hands
-   control to the single plugin that declared `lifecycle: true`.
+   control to the single plugin that declared `driver: true`.
 
 ## Startup sequence
 
@@ -52,7 +52,7 @@ kaizen run
   │   │   └─ registerService / defineCapability / defineEvent / on
   │   └─ capability validation (cardinality, exactly-one-driver check)
   │
-  ├─ READY → core calls lifecycle.start(ctx)
+  ├─ READY → core calls driver.start(ctx)
   │
   └─ RUNNING (driven by the session-driver plugin)
       ├─ emit session:start
@@ -70,7 +70,7 @@ kaizen run
 
 ## The session driver
 
-Exactly one loaded plugin must declare `lifecycle: true` on its default
+Exactly one loaded plugin must declare `driver: true` on its default
 export. After `bootstrap()` returns, core calls `start()` on that plugin.
 Zero or more than one driver is a fatal startup error. This is the sole
 plugin-to-core contract; everything else (executor implementations, UI
@@ -90,7 +90,7 @@ throws.
 ## Plugin initialization order
 
 Plugins are topologically sorted by their declared dependencies before
-`setup()` is called. A plugin that depends on `core-lifecycle` is guaranteed
+`setup()` is called. A plugin that depends on `core-driver` is guaranteed
 to initialize after it. Event handler registration order follows
 initialization order, so a plugin's `tool:before` handler runs after its
 dependency's handler.
