@@ -162,7 +162,7 @@ main() {
 
   local tmpdir
   tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
+  trap 'rm -rf "${tmpdir:-}"' EXIT
 
   info "Downloading ${asset_name}..."
   download "${base_url}/${asset_name}" "${tmpdir}/${asset_name}"
@@ -184,6 +184,11 @@ main() {
   fi
 
   green "  ✓ Installed ${BINARY} → ${INSTALL_DIR}/${BINARY}"
+
+  case ":$PATH:" in
+    *":${INSTALL_DIR}:"*) ;;
+    *) red "  ! ${INSTALL_DIR} is not on PATH — add it to your shell profile so 'kaizen' resolves." ;;
+  esac
 
   local global_config="${KAIZEN_HOME}/kaizen.json"
   if [ ! -f "$global_config" ]; then
@@ -211,6 +216,6 @@ main() {
 
 # Only run main if the script is executed directly, not sourced. Lets tests
 # source the file to unit-test individual helpers.
-if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+if [ "${BASH_SOURCE[0]:-$0}" = "${0}" ]; then
   main "$@"
 fi
