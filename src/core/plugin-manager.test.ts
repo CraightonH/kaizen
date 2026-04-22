@@ -374,7 +374,7 @@ describe("PluginManager service validation", () => {
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
     );
-    await expect(manager.initialize()).rejects.toThrow();
+    await expect(manager.initialize()).rejects.toThrow(/No plugin provides service/);
   });
 
   test("two providers for a service is fatal (cardinality one)", async () => {
@@ -407,11 +407,9 @@ describe("PluginManager service validation", () => {
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
     );
-    // The second provideService call throws. "a" runs first (alphabetical-ish via topo),
-    // then "b" fails. Depending on topo order, one of a/b ends up in failed status
-    // and the subsequent validateAll may or may not fire first. Accept either the
-    // "already has a provider" error surfacing, or a downstream fatal.
-    await expect(manager.initialize()).rejects.toThrow();
+    // The second provideService call throws "already has a provider". "a" runs first
+    // (alphabetical-ish via topo), then "b" fails with that error.
+    await expect(manager.initialize()).rejects.toThrow(/already has a provider/);
   });
 
   test("alias resolution in consumes", async () => {

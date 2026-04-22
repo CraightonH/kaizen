@@ -182,6 +182,40 @@ function isCritical(plugin: KaizenPlugin, reg: ServiceRegistry): boolean {
   return false;
 }
 
+/**
+ * Add provider→owner edges so that defineService always runs before provideService.
+ *
+ * When plugin P provides '<owner>:<symbol>' and owner ≠ P, the owner plugin must
+ * complete its setup (calling defineService) before P calls provideService.
+ * If the owner is not in pluginNames it is not loaded in this session; that case
+ * is caught at runtime by ServiceRegistry with a proper error, so we skip it here.
+ */
+function addDefineBeforeProvideEdges(
+  plugins: KaizenPlugin[],
+  pluginNames: Set<string>,
+  edges: Map<string, string[]>,
+  inDegree: Map<string, number>,
+): void {
+  for (const p of plugins) {
+    const aliases = p.aliases ?? {};
+    const seen = new Set<string>();
+    for (const raw of p.services?.provides ?? []) {
+      const cap = resolveCapName(raw, aliases);
+      const colon = cap.indexOf(":");
+      if (colon < 0) continue;
+      const owner = cap.slice(0, colon);
+      if (owner === p.name) continue;
+      if (!pluginNames.has(owner)) continue; // absent owner: runtime error handles it
+      if (seen.has(owner)) continue;
+      seen.add(owner);
+      const existing = edges.get(owner) ?? [];
+      existing.push(p.name);
+      edges.set(owner, existing);
+      inDegree.set(p.name, (inDegree.get(p.name) ?? 0) + 1);
+    }
+  }
+}
+
 function topoSort(plugins: KaizenPlugin[]): KaizenPlugin[] {
   const nameToPlugin = new Map(plugins.map((p) => [p.name, p]));
 
@@ -202,6 +236,7 @@ function topoSort(plugins: KaizenPlugin[]): KaizenPlugin[] {
 
   const pluginNames = new Set(plugins.map((p) => p.name));
 
+  // consume→provider edges: a consumer must initialize after its providers.
   for (const p of plugins) {
     const aliases = p.aliases ?? {};
     const seen = new Set<string>();
@@ -217,23 +252,10 @@ function topoSort(plugins: KaizenPlugin[]): KaizenPlugin[] {
         inDegree.set(p.name, (inDegree.get(p.name) ?? 0) + 1);
       }
     }
-    // A provider of '<owner>:<symbol>' depends on the owner plugin (the
-    // definer), since defineService must run before provideService.
-    for (const raw of p.services?.provides ?? []) {
-      const cap = resolveCapName(raw, aliases);
-      const colon = cap.indexOf(":");
-      if (colon < 0) continue;
-      const owner = cap.slice(0, colon);
-      if (owner === p.name) continue;
-      if (!pluginNames.has(owner)) continue;
-      if (seen.has(owner)) continue;
-      seen.add(owner);
-      const existing = edges.get(owner) ?? [];
-      existing.push(p.name);
-      edges.set(owner, existing);
-      inDegree.set(p.name, (inDegree.get(p.name) ?? 0) + 1);
-    }
   }
+
+  // provider→owner edges (so defineService runs before provideService).
+  addDefineBeforeProvideEdges(plugins, pluginNames, edges, inDegree);
 
   const queue = plugins.filter((p) => (inDegree.get(p.name) ?? 0) === 0);
   const sorted: KaizenPlugin[] = [];
