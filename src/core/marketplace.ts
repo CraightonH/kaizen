@@ -34,7 +34,13 @@ export async function addMarketplace(url: string, opts: AddMarketplaceOpts = {})
     if (!existsSync(url)) throw new Error(`local marketplace path not found: ${url}`);
     symlinkSync(url, repoDir);
   } else {
-    await $`git clone --depth=1 ${url} ${repoDir}`.quiet();
+    try {
+      await $`git clone --depth=1 ${url} ${repoDir}`.quiet();
+    } catch (e) {
+      const proc = e as { stderr?: Buffer | string; exitCode?: number };
+      const stderr = proc.stderr ? proc.stderr.toString().trim() : "";
+      throw new Error(`git clone failed (exit ${proc.exitCode ?? "?"})${stderr ? ":\n" + stderr : ""}`);
+    }
   }
 
   const cat = await readCatalog(id);
@@ -46,17 +52,31 @@ export async function addMarketplace(url: string, opts: AddMarketplaceOpts = {})
 }
 
 export async function pullMarketplace(id: string): Promise<void> {
-  const repoDir = marketplaceRepoDir(id);
-  if (!existsSync(repoDir)) throw new Error(`marketplace '${id}' is not added`);
-  if (lstatSync(repoDir).isSymbolicLink()) return; // no-op for local dev
-  await $`git -C ${repoDir} pull --depth=1 --ff-only`.quiet();
-
   const cfg = await loadKaizenGlobalConfig();
   const ref = cfg.marketplaces?.find((m) => m.id === id);
-  if (ref) {
-    ref.updatedAt = new Date().toISOString();
-    await saveKaizenGlobalConfig(cfg);
+  if (!ref) throw new Error(`marketplace '${id}' is not added`);
+
+  const repoDir = marketplaceRepoDir(id);
+  if (existsSync(repoDir) && lstatSync(repoDir).isSymbolicLink()) {
+    return; // local dev symlink — nothing to refresh
   }
+
+  // The clone is treated as ephemeral cache: wipe and re-clone so we never
+  // get stuck on diverged history, force-pushes, or shallow-fetch quirks.
+  rmSync(repoDir, { recursive: true, force: true });
+  try {
+    await $`git clone --depth=1 ${ref.url} ${repoDir}`.quiet();
+  } catch (e) {
+    const proc = e as { stderr?: Buffer | string; exitCode?: number };
+    const stderr = proc.stderr ? proc.stderr.toString().trim() : "";
+    throw new Error(`git clone failed (exit ${proc.exitCode ?? "?"})${stderr ? ":\n" + stderr : ""}`);
+  }
+
+  const cat = await readCatalog(id);
+  validateCatalog(cat);
+
+  ref.updatedAt = new Date().toISOString();
+  await saveKaizenGlobalConfig(cfg);
 }
 
 export async function removeMarketplace(id: string): Promise<void> {

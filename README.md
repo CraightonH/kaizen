@@ -18,13 +18,25 @@ stack. From source, run `scripts/dev-setup.sh` against a sibling checkout — se
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CraightonH/kaizen/master/scripts/install.sh | bash
+sudo -v && curl -fsSL https://raw.githubusercontent.com/CraightonH/kaizen/master/scripts/install.sh | bash
 ```
 
 The script detects your platform (macOS/Linux, x64/arm64), downloads the
 matching release binary from GitHub, verifies its checksum, installs it to
 `/usr/local/bin/kaizen`, and seeds the `official` marketplace under
 `$KAIZEN_HOME` (default `~/.kaizen`).
+
+`sudo -v` caches your credentials so the script's one `sudo mv` into
+`/usr/local/bin` (root-owned) doesn't stall on a prompt it can't read from
+the curl pipe. Everything else runs as your normal user, and `kaizen`
+itself never needs sudo after install.
+
+To install without root, override `INSTALL_DIR` to a user-writable directory
+on your `PATH`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CraightonH/kaizen/master/scripts/install.sh | INSTALL_DIR=$HOME/.local/bin bash
+```
 
 Environment overrides:
 
