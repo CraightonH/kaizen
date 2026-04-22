@@ -101,9 +101,10 @@ bootstrap() {
     return 0
   fi
 
+  local kaizen_bin="${INSTALL_DIR}/${BINARY}"
   local market_url="https://github.com/CraightonH/kaizen-official-plugins.git"
   info "Registering marketplace 'official'..."
-  if kaizen marketplace add "$market_url" --id official; then
+  if "$kaizen_bin" marketplace add "$market_url" --id official; then
     green "  ✓ marketplace 'official' registered"
   else
     red "  ! marketplace add failed; run manually: kaizen marketplace add $market_url --id official"
@@ -112,7 +113,7 @@ bootstrap() {
 
   local default_harness="official/core-shell@1.0.0"
   info "Installing default harness ${default_harness}..."
-  if kaizen install "$default_harness"; then
+  if "$kaizen_bin" install "$default_harness"; then
     green "  ✓ ${default_harness} installed"
   else
     red "  ! harness install failed; run manually: kaizen install $default_harness"
@@ -162,7 +163,7 @@ main() {
 
   local tmpdir
   tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
+  trap 'rm -rf "${tmpdir:-}"' EXIT
 
   info "Downloading ${asset_name}..."
   download "${base_url}/${asset_name}" "${tmpdir}/${asset_name}"
@@ -211,6 +212,6 @@ main() {
 
 # Only run main if the script is executed directly, not sourced. Lets tests
 # source the file to unit-test individual helpers.
-if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+if [ "${BASH_SOURCE[0]:-$0}" = "${0}" ]; then
   main "$@"
 fi

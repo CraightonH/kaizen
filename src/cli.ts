@@ -79,6 +79,45 @@ const DEFAULT_PLUGINS = {
 };
 
 // ---------------------------------------------------------------------------
+// Subcommand: kaizen --help | -h | help
+// ---------------------------------------------------------------------------
+
+if (subcommand === "--help" || subcommand === "-h" || subcommand === "help" || (subcommand === undefined && (rawArgs.includes("--help") || rawArgs.includes("-h")))) {
+  console.log(`kaizen — platform for composable LLM harnesses
+
+Usage:
+  kaizen --harness <ref> [prompt]       run a harness (prompts for consent first run)
+  kaizen run [prompt]                   run the active harness
+  kaizen <subcommand> [args]
+
+Subcommands:
+  init [--global]                       scaffold kaizen.json (project or ~/.kaizen/)
+  install <ref> [--allow-unscoped]      install a plugin or harness
+  uninstall <ref> [--purge]             uninstall a plugin
+  update [<ref>]                        update plugins
+  plugin {list|consent|review|audit|dev|create|validate}
+  marketplace {add|list|remove|update|browse|create|validate}
+  capability {list|show <name>}
+  config {show|get|set|set-secret}
+
+Flags:
+  --harness <ref>                       harness ref (marketplace/name@version)
+  --config <path>                       alternate kaizen.json path
+  --trust-lockfile                      reuse existing lockfile; no prompts
+  --non-interactive                     refuse any prompt-requiring consent
+  --allow-unscoped                      permit non-interactive UNSCOPED consent
+  --allow-destructive                   enable destructive CLI tools
+  --help, -h                            show this help
+
+Environment:
+  KAIZEN_HOME                           state dir (default ~/.kaizen)
+  KAIZEN_SANDBOX_MODE=log-only          permission enforcer logs instead of throws
+
+See docs/concepts/harnesses.md for harness configuration.`);
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
 // Subcommand: kaizen init [--global]
 // ---------------------------------------------------------------------------
 
@@ -264,8 +303,12 @@ if (subcommand === "install") {
   const rest = rawArgs.slice(1);
   const ref = rest.find((a) => !a.startsWith("--"));
   if (!ref) { console.error("usage: kaizen install <ref> [--allow-unscoped] [--non-interactive]"); process.exit(2); }
-  const harnessJsonPath = resolveHarnessJsonPath({});
-  const lockfilePath = deriveLockfilePath(harnessJsonPath);
+  // Harness installs don't need an active harness context; plugin installs do.
+  // Defer resolution so `kaizen install <harness-ref>` works from a bare setup.
+  let lockfilePath = "";
+  try {
+    lockfilePath = deriveLockfilePath(resolveHarnessJsonPath({}));
+  } catch { /* resolved lazily inside runUnifiedInstall only for plugin installs */ }
   const { runUnifiedInstall } = await import("./commands/install.js");
   const code = await runUnifiedInstall({
     ref,
