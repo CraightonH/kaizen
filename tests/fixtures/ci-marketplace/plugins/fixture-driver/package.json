@@ -1,5 +1,5 @@
 {
-  "name": "fixture-lifecycle",
+  "name": "fixture-driver",
   "version": "1.0.0",
   "type": "module",
   "main": "index.mjs"

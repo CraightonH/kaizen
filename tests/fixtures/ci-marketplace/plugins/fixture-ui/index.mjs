@@ -9,7 +9,7 @@
 export default {
   name: "fixture-ui",
   apiVersion: "2",
-  capabilities: { provides: ["fixture-lifecycle:ui"] },
+  capabilities: { provides: ["fixture-driver:ui"] },
   async setup(ctx) {
     const impl = {
       async *accept() {
@@ -33,6 +33,6 @@ export default {
         };
       },
     };
-    (globalThis.__kaizenFixtureImpls ??= {})["fixture-lifecycle:ui"] = impl;
+    (globalThis.__kaizenFixtureImpls ??= {})["fixture-driver:ui"] = impl;
   },
 };

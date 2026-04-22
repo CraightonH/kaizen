@@ -1,5 +1,5 @@
-// Minimal lifecycle provider. Drives exactly one session turn, emits
-// test:lifecycle:start / :end bracketing the work, then returns so
+// Minimal driver plugin. Drives exactly one session turn, emits
+// test:driver:start / :end bracketing the work, then returns so
 // bootstrap() resolves.
 //
 // Post-registry-refactor: core no longer exposes runtime.{ui,executors,tools}.
@@ -9,23 +9,23 @@
 // intentionally absent: a future core-tools broker plugin will own that
 // concept; until then the driver passes an empty tool list to executors.
 export default {
-  name: "fixture-lifecycle",
+  name: "fixture-driver",
   apiVersion: "2",
-  lifecycle: true,
+  driver: true,
   capabilities: {
-    consumes: ["fixture-lifecycle:executor.send", "fixture-lifecycle:ui"],
+    consumes: ["fixture-driver:executor.send", "fixture-driver:ui"],
   },
   async setup(ctx) {
-    ctx.defineCapability("fixture-lifecycle:executor.send", { cardinality: "one", description: "LLM executor" });
-    ctx.defineCapability("fixture-lifecycle:ui", { cardinality: "many", description: "UI provider" });
+    ctx.defineCapability("fixture-driver:executor.send", { cardinality: "one", description: "LLM executor" });
+    ctx.defineCapability("fixture-driver:ui", { cardinality: "many", description: "UI provider" });
   },
   async start(ctx) {
-    await ctx.emit("test:lifecycle:start");
+    await ctx.emit("test:driver:start");
     await ctx.emit("session:start");
 
     const impls = globalThis.__kaizenFixtureImpls ?? {};
-    const ui = impls["fixture-lifecycle:ui"];
-    const executor = impls["fixture-lifecycle:executor.send"];
+    const ui = impls["fixture-driver:ui"];
+    const executor = impls["fixture-driver:executor.send"];
 
     for await (const channel of ui.accept()) {
       const userMsg = await channel.receive();
@@ -41,6 +41,6 @@ export default {
     }
 
     await ctx.emit("session:end");
-    await ctx.emit("test:lifecycle:end");
+    await ctx.emit("test:driver:end");
   },
 };
