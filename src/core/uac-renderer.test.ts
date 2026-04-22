@@ -11,14 +11,14 @@ describe("renderScopedUAC", () => {
         tier: "scoped",
         net: { connect: ["api.example.com:443"] },
         env: ["EXAMPLE_API_KEY"],
-        events: { subscribe: ["core-lifecycle:tool:before"] },
+        events: { subscribe: ["core-driver:tool:before"] },
       },
     });
     expect(out).toContain("cool-unknown-plugin@1.2.3");
     expect(out).toContain("SCOPED");
     expect(out).toContain("api.example.com:443");
     expect(out).toContain("EXAMPLE_API_KEY");
-    expect(out).toContain("core-lifecycle:tool:before");
+    expect(out).toContain("core-driver:tool:before");
   });
 
   test("empty grants render as '(none)'", () => {

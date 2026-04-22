@@ -83,8 +83,8 @@ describe("PermissionEnforcer", () => {
 
   test("scoped tier: events.subscribe patterns", () => {
     const e = new PermissionEnforcer({ mode: "enforce" });
-    e.register("p1", { tier: "scoped", events: { subscribe: ["core-lifecycle:tool:before", "other:*"] } });
-    expect(() => e.check("p1", { kind: "events.subscribe", event: "core-lifecycle:tool:before" })).not.toThrow();
+    e.register("p1", { tier: "scoped", events: { subscribe: ["core-driver:tool:before", "other:*"] } });
+    expect(() => e.check("p1", { kind: "events.subscribe", event: "core-driver:tool:before" })).not.toThrow();
     expect(() => e.check("p1", { kind: "events.subscribe", event: "other:anything" })).not.toThrow();
     expect(() => e.check("p1", { kind: "events.subscribe", event: "third:event" })).toThrow();
   });

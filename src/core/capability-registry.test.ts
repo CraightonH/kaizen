@@ -4,10 +4,10 @@ import { CapabilityRegistry } from "./capability-registry.js";
 describe("CapabilityRegistry", () => {
   test("define + getSpec round-trips", () => {
     const r = new CapabilityRegistry();
-    r.define("core-lifecycle:ui.input", "core-lifecycle", {
+    r.define("core-driver:ui.input", "core-driver", {
       cardinality: "many", description: "User input source"
     });
-    const spec = r.getSpec("core-lifecycle:ui.input");
+    const spec = r.getSpec("core-driver:ui.input");
     expect(spec?.cardinality).toBe("many");
     expect(spec?.description).toBe("User input source");
   });
@@ -85,13 +85,13 @@ describe("CapabilityRegistry", () => {
 
   test("resolveName: canonical passes through", () => {
     const r = new CapabilityRegistry();
-    expect(r.resolveName("core-lifecycle:ui.input", {})).toBe("core-lifecycle:ui.input");
+    expect(r.resolveName("core-driver:ui.input", {})).toBe("core-driver:ui.input");
   });
 
   test("resolveName: alias resolves", () => {
     const r = new CapabilityRegistry();
-    const aliases = { "ui.input": "core-lifecycle:ui.input" };
-    expect(r.resolveName("ui.input", aliases)).toBe("core-lifecycle:ui.input");
+    const aliases = { "ui.input": "core-driver:ui.input" };
+    expect(r.resolveName("ui.input", aliases)).toBe("core-driver:ui.input");
   });
 
   test("list: returns all defined capabilities", () => {
