@@ -1,9 +1,0 @@
-schemaVersion: 1
-plugins:
-  core-events:
-    version: 1.0.0
-    hash: sha256:3ddaadb212cfd46617e3fcab78dafd68e6416371492a233f8d13faee47fc3965
-    tier: trusted
-    consentedAt: 2026-04-20T18:52:34.975Z
-    consentedBy: chancock
-    permissions: {}
