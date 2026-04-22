@@ -101,10 +101,9 @@ bootstrap() {
     return 0
   fi
 
-  local kaizen_bin="${INSTALL_DIR}/${BINARY}"
   local market_url="https://github.com/CraightonH/kaizen-official-plugins.git"
   info "Registering marketplace 'official'..."
-  if "$kaizen_bin" marketplace add "$market_url" --id official; then
+  if kaizen marketplace add "$market_url" --id official; then
     green "  ✓ marketplace 'official' registered"
   else
     red "  ! marketplace add failed; run manually: kaizen marketplace add $market_url --id official"
@@ -113,7 +112,7 @@ bootstrap() {
 
   local default_harness="official/core-shell@1.0.0"
   info "Installing default harness ${default_harness}..."
-  if "$kaizen_bin" install "$default_harness"; then
+  if kaizen install "$default_harness"; then
     green "  ✓ ${default_harness} installed"
   else
     red "  ! harness install failed; run manually: kaizen install $default_harness"
@@ -185,6 +184,11 @@ main() {
   fi
 
   green "  ✓ Installed ${BINARY} → ${INSTALL_DIR}/${BINARY}"
+
+  case ":$PATH:" in
+    *":${INSTALL_DIR}:"*) ;;
+    *) red "  ! ${INSTALL_DIR} is not on PATH — add it to your shell profile so 'kaizen' resolves." ;;
+  esac
 
   local global_config="${KAIZEN_HOME}/kaizen.json"
   if [ ! -f "$global_config" ]; then
