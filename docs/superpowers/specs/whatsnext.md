@@ -1,0 +1,7 @@
+## What to do now
+
+1. Friction points in the actual user journey. Not unit tests, not docs — literally go through the thing as a first-time user. What's confusing? What requires tribal knowledge? The gap between "works correctly" and "easy to use correctly" is usually where polish lives. Error messages, onboarding, what happens at the edges.
+2. The things you've been deferring. Every project has a mental list of "we'll clean this up later." That list is now overdue. TODOs in code, rough APIs you kept because you were still exploring, naming that made sense at the time. Polish means resolving that debt before it fossilizes into 1.0 forever.                                        
+3. What breaks when you're not careful. The bugs that don't exist yet are usually in the flows nobody's tested under pressure — concurrent usage, bad inputs, partial state. Even a few hours of adversarial manual testing ("what happens if I do this wrong?") finds more than months of happy-path use.
+
+For prioritizing those: I'd weight user-facing issues above internal ones. A confusing error message that trips up every new user matters more than elegant internals that only you see. A 1.0 label signals "this is stable for others" — so the bar shifts from "I understand it" to "a stranger can understand it."
