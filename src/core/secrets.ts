@@ -1,9 +1,8 @@
 import type { SecretProvider } from "./secret-providers/types.js";
 import type { SecretRef, SecretsContext } from "../types/plugin.js";
 import { envVarNameFor } from "./config-merge.js";
-import { ServiceToken } from "./service-registry.js";
 
-export const SecretsProviderToken = new ServiceToken<SecretProvider>("core-secrets:provider");
+export const SECRETS_PROVIDER_SERVICE = "core-secrets:provider";
 
 export class SecretsRegistry {
   private providers = new Map<string, SecretProvider>();

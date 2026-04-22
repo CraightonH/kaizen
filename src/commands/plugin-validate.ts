@@ -166,11 +166,11 @@ export async function checkManifest(dir: string, pkg: Record<string, unknown>): 
     }
   }
 
-  // capabilities present
-  if (!plugin.capabilities || typeof plugin.capabilities !== "object") {
-    results.push({ rule: "plugin.capabilities present", status: "fail", message: "plugin.capabilities is missing (may be {})" });
+  // services present
+  if (!plugin.services || typeof plugin.services !== "object") {
+    results.push({ rule: "plugin.services present", status: "fail", message: "plugin.services is missing (may be {})" });
   } else {
-    results.push({ rule: "plugin.capabilities present", status: "pass" });
+    results.push({ rule: "plugin.services present", status: "pass" });
   }
 
   // run config schema checks if config declared
@@ -215,8 +215,8 @@ export async function checkConfigSchema(plugin: Record<string, unknown>): Promis
 
     // warn if secrets non-empty and core-secrets:provider not in consumes
     if (secrets.length > 0) {
-      const capabilities = plugin.capabilities as Record<string, unknown> | undefined;
-      const consumes = capabilities?.consumes as string[] | undefined;
+      const services = plugin.services as Record<string, unknown> | undefined;
+      const consumes = services?.consumes as string[] | undefined;
       if (!Array.isArray(consumes) || !consumes.includes("core-secrets:provider")) {
         results.push({
           rule: "core-secrets:provider in consumes",

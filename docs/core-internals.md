@@ -10,8 +10,7 @@ src/core/
   index.ts            bootstrap() — public entry point
   loader.ts           Plugin resolution, topo-sort, setup() orchestration
   event-bus.ts        EventBus implementation
-  capability-registry.ts  CapabilityRegistry — named providers, cardinality rules
-  service-registry.ts     ServiceRegistry — typed DI (registerService / getService)
+  service-registry.ts     ServiceRegistry — string-keyed define/provide/consume/use
   context.ts          createPluginContext() — state-checked facade
   config.ts           kaizen.json loading, harness resolution, merging
   errors.ts           fatal / warn / debug
@@ -32,7 +31,7 @@ await bootstrap(kaizenConfig, lockfilePath);
 `src/core/lockfile-path.ts`. There is no `process.cwd()` fallback and no
 environment-variable override.
 
-1. Creates `EventBus`, `CapabilityRegistry`, `ServiceRegistry`.
+1. Creates `EventBus`, `ServiceRegistry`.
 2. Calls `loadPlugins()` → returns `{ driver, state }`.
 3. Creates a `PluginContext` for the driver plugin.
 4. Sets state to `RUNNING`.
@@ -102,32 +101,30 @@ short-circuit logic (e.g. skip `execute()` if any handler returns a `ToolResult`
 Calling `on()` or `defineEvent()` outside the `INITIALIZING` state throws because
 `createPluginContext()` wraps both calls with `assertInitializing()`.
 
-## CapabilityRegistry (`capability-registry.ts`)
+## ServiceRegistry (`service-registry.ts`)
 
-- `define(name, ownerPlugin, spec)` — declares a capability. `name` must be
+- `define(name, ownerPlugin, spec)` — declares a service. `name` must be
   prefixed with the owning plugin's name (e.g. `core-driver:executor`).
   Duplicate definitions by the same plugin warn; a different plugin claiming an
   already-owned name is a fatal error.
-- `register(name, providerPlugin)` — records that a plugin provides a named
-  capability. Called implicitly when a plugin lists a name in
-  `capabilities.provides`.
-- `validate()` — run after all `setup()` calls. Checks cardinality (`one`
-  capabilities must have exactly one provider when consumed) and
-  `consumes`/`provides` consistency.
-
-## ServiceRegistry (`service-registry.ts`)
-
-- `register(token, impl, pluginName)` — only valid during `INITIALIZING`.
-  First registration wins; duplicates throw.
-- `get(token)` — valid at any lifecycle state. Throws a named error if the
-  token has no provider.
+- `provide(name, pluginName, impl)` — registers the implementation. Only valid
+  during `INITIALIZING`. Throws if the service was not defined first, or if a
+  provider is already registered (cardinality-one enforcement).
+- `consume(name, pluginName)` — records consumer intent for topo-sort and
+  post-init validation. Valid only during `INITIALIZING`.
+- `use(name)` — returns the registered implementation by reference. Valid in
+  any state after `INITIALIZING` completes. Throws if no provider is registered.
+- `validateAll()` — run after all `setup()` calls. Fatal if any consumed service
+  has no provider, or if any defined service has zero providers.
 
 ## PluginContext (`context.ts`)
 
 `createPluginContext()` returns an object that:
-- Wraps `EventBus`, `CapabilityRegistry`, `ServiceRegistry`.
-- Guards `registerService`, `defineCapability`, `defineEvent`, and `on`
-  with `assertInitializing()` — all throw after `setup()` returns.
+- Wraps `EventBus`, `ServiceRegistry`.
+- Guards `defineService`, `provideService`, `consumeService`, `defineEvent`,
+  and `on` with `assertInitializing()` — all throw after `setup()` returns.
+- Guards `useService` with an `assertRunning()` check — throws during
+  `INITIALIZING` when providers may not have registered yet.
 - Exposes `runtime.pluginManager` for hot-reload support
   (`drainPendingReloads()`).
 - Prefixes all `log()` output with the plugin name.

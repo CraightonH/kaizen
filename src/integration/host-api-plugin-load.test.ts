@@ -27,18 +27,19 @@ describe("host-api virtual module — plugin load from foreign dir", () => {
     );
     writeFileSync(
       join(pluginDir, "index.ts"),
-      `import { ServiceToken, PLUGIN_API_VERSION } from "kaizen/types";
+      `import { PLUGIN_API_VERSION } from "kaizen/types";
        import type { KaizenPlugin } from "kaizen/types";
-       const token = new ServiceToken<{ hi(): string }>("probe-svc");
        const plugin: KaizenPlugin = {
          name: "probe-plugin",
          apiVersion: PLUGIN_API_VERSION + ".0.0",
          permissions: { tier: "trusted" },
-         capabilities: {},
-         async setup(ctx) { ctx.registerService(token, { hi: () => "hi" }); },
+         services: {},
+         async setup(ctx) {
+           ctx.defineService("probe-plugin:svc", { description: "probe" });
+           ctx.provideService("probe-plugin:svc", { hi: () => "hi" });
+         },
        };
-       export default plugin;
-       export { token };`,
+       export default plugin;`,
     );
   });
 
@@ -49,10 +50,8 @@ describe("host-api virtual module — plugin load from foreign dir", () => {
   it("resolves kaizen/types when loading a plugin from an isolated tmp dir", async () => {
     const mod = (await import(join(pluginDir, "index.ts"))) as {
       default: { name: string; apiVersion: string };
-      token: unknown;
     };
     expect(mod.default.name).toBe("probe-plugin");
     expect(mod.default.apiVersion).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(mod.token).toBeDefined();
   });
 });

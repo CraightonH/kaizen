@@ -19,16 +19,16 @@ Default to TRUSTED. Escalate only when you hit a real need.
 ## Declare permissions
 
 Permissions live on the plugin's default export, alongside (but orthogonal to)
-the plugin's `capabilities` declaration — see
-[Plugin Model](../concepts/plugin-model.md#capabilities)
-for the capability model.
+the plugin's `services` declaration — see
+[Plugin Model](../concepts/plugin-model.md#services)
+for the service model.
 
 ```typescript
 const plugin: KaizenPlugin = {
   name: "my-plugin",
   apiVersion: "2.0.0",
-  capabilities: { consumes: ["core-events:service"] },  // what this plugin wires into
-  permissions: { tier: "trusted" },                     // what external I/O it's allowed
+  services: { consumes: ["core-events:service"] },  // what this plugin wires into
+  permissions: { tier: "trusted" },                 // what external I/O it's allowed
   async setup(ctx) { /* ... */ },
 };
 ```
@@ -150,5 +150,5 @@ so post-consent code swaps that keep the same manifest are not detected.
 ## Further reading
 
 - [Plugin API](../reference/plugin-api.md) — full plugin API reference
-- [Plugin Model](../concepts/plugin-model.md#capabilities) — capability model and dependency declarations
+- [Plugin Model](../concepts/plugin-model.md#services) — service model and dependency declarations
 - [Plugin Model](../concepts/plugin-model.md) — load order, lifecycle, dependency resolution

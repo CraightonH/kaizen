@@ -40,12 +40,12 @@ This document is the canonical reference for kaizen plugin authors. Every rule i
 - [required] **`name`** in the KaizenPlugin: kebab-case, matches the package.json name (minus the `kaizen-plugin-` prefix) and the config key in `kaizen.json`
 - [required] **`apiVersion`** set to `"2.0.0"` or appropriate major.minor.patch; core warns but loads if major version differs from PLUGIN_API_VERSION
 - [required] **`permissions.tier`** explicitly declared (choose one: `"trusted"`, `"scoped"`, `"unscoped"`); defaults to `"trusted"` if omitted, but explicit declaration is required
-- [required] **`capabilities`** field present in the manifest (may be empty object `{}` if the plugin declares no capabilities)
+- [required] **`services`** field present in the manifest (may be empty object `{}` if the plugin declares no services)
 
 ### Optional fields
 
 - [guideline] **`config.schema`** — if your plugin is configurable, declare a JSON schema describing configuration keys
-- [guideline] **`capabilities.consumes` includes `"core-secrets:provider"`** — if your plugin declares `config.secrets`, explicitly list this capability in `capabilities.consumes` to aid discoverability (it is implicitly required, but listing it makes the dependency explicit)
+- [guideline] **`services.consumes` includes `"core-secrets:provider"`** — if your plugin declares `config.secrets`, explicitly list this service in `services.consumes` to aid discoverability (it is implicitly required, but listing it makes the dependency explicit)
 
 ### Example manifest
 
@@ -53,7 +53,7 @@ This document is the canonical reference for kaizen plugin authors. Every rule i
 const plugin: KaizenPlugin = {
   name: "my-tool",
   apiVersion: "2.0.0",
-  capabilities: {
+  services: {
     provides: ["my-tool:handler"],
     consumes: ["core-secrets:provider"]
   },
@@ -107,22 +107,22 @@ permissions: {
 
 ### Format and conventions
 
-- [required] Capability names follow the format `<owner-plugin>:<local-name>`
+- [required] Service names follow the format `<owner-plugin>:<local-name>`
 - [required] `<owner-plugin>` is the kebab-case plugin name (e.g., `my-tool`, `core-driver`)
 - [required] `<local-name>` uses dot-separated kebab-case for nested concepts (e.g., `tool.handler`, `events.before-turn`)
-- [required] Use existing capabilities from core or other plugins when available; do not duplicate
-- [guideline] Document each provided capability with a `defineCapability()` call that includes a human-readable description
+- [required] Use existing services from core or other plugins when available; do not duplicate
+- [guideline] Document each provided service with a `defineService()` call that includes a human-readable description
 
 ### Example
 
 ```typescript
 async setup(ctx) {
-  ctx.defineCapability("my-tool:event-handler", {
-    cardinality: "many",
+  ctx.defineService("my-tool:event-handler", {
     description: "Allows other plugins to hook into my-tool's event lifecycle"
   });
 
-  // Consuming a capability
+  // Declare consumption intent
+  ctx.consumeService("core-events:service");
 }
 ```
 
@@ -197,9 +197,10 @@ function makeCtx() {
     config: {},
     log: (msg: string) => console.log(`[test] ${msg}`),
     secrets: { get: async () => undefined },
-    registerService: () => {},
-    getService: () => { throw new Error("not registered"); },
-    defineCapability: () => {},
+    defineService: () => {},
+    provideService: () => {},
+    consumeService: () => {},
+    useService: () => { throw new Error("not provided"); },
     defineEvent: () => {},
     on: () => {},
     emit: async () => [],
@@ -302,7 +303,7 @@ permissions: {
   - Installation instructions (how to add to `kaizen.json`)
   - Configuration section (all schema keys, all secrets)
   - Permissions section (list permission tier and any scoped grants)
-  - Any required capabilities and what they do
+  - Any required services and what they do
 - [required] Pin or document the **minimum kaizen version** (e.g., "Requires kaizen >= 2.0.0") in README or `package.json` (`minKaizenVersion` field if available)
 - [guideline] Version your plugin following semver; document breaking changes in `CHANGELOG.md`
 

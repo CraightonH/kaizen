@@ -12,7 +12,7 @@ If you're building a plugin or marketplace, work through these in order:
 2. [How do I scaffold a new plugin?](guides/plugin-authoring.md#scaffold)
 3. [How do I register tools?](guides/plugin-authoring.md#tools)
 4. [How do I use the host API (secrets, config, events)?](reference/host-api.md)
-5. [How do I declare capabilities and dependencies?](concepts/plugin-model.md#capabilities)
+5. [How do I declare services and dependencies?](concepts/plugin-model.md#services)
 6. [How do I test my plugin locally?](guides/plugin-authoring.md#testing)
 7. [How do I validate it?](guides/plugin-authoring.md#validate)
 8. [How do I publish to a marketplace?](guides/marketplace-authoring.md)

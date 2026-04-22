@@ -35,10 +35,10 @@ else — the session loop, terminal UI, CLI tools, and the LLM itself — is a p
    dependencies, call `setup(ctx)` on each plugin.
 2. **Event bus.** `defineEvent`, `on`, `emit`. Core defines no events —
    plugins do.
-3. **Service and capability registries.** `registerService` / `getService` for
-   typed DI; `defineCapability` for named provider declarations with cardinality
-   rules. Core has no session loop of its own; after initialization it hands
-   control to the single plugin that declared `driver: true`.
+3. **Service registry.** `defineService` / `provideService` / `consumeService`
+   during `setup()`; `useService` during `RUNNING`. String-keyed, cardinality-one.
+   Core has no session loop of its own; after initialization it hands control to
+   the single plugin that declared `driver: true`.
 
 ## Startup sequence
 
@@ -49,8 +49,8 @@ kaizen run
   │   ├─ parse kaizen.json
   │   ├─ resolve + topo-sort plugins by depends[]
   │   ├─ for each plugin: setup(ctx)
-  │   │   └─ registerService / defineCapability / defineEvent / on
-  │   └─ capability validation (cardinality, exactly-one-driver check)
+  │   │   └─ defineService / provideService / consumeService / defineEvent / on
+  │   └─ service validation (exactly-one-provider check, exactly-one-driver check)
   │
   ├─ READY → core calls driver.start(ctx)
   │
@@ -74,8 +74,8 @@ Exactly one loaded plugin must declare `driver: true` on its default
 export. After `bootstrap()` returns, core calls `start()` on that plugin.
 Zero or more than one driver is a fatal startup error. This is the sole
 plugin-to-core contract; everything else (executor implementations, UI
-providers, tool dispatch) is plugin-to-plugin and modeled via the capability
-and service registries.
+providers, tool dispatch) is plugin-to-plugin and modeled via the service
+registry.
 
 ## State machine
 
@@ -83,9 +83,9 @@ and service registries.
 INITIALIZING → READY → RUNNING → CLOSED
 ```
 
-`registerService`, `defineCapability`, `defineEvent`, and `on` are only valid
-during `INITIALIZING` (inside `setup()`). Calling them after `setup()` returns
-throws.
+`defineService`, `provideService`, `consumeService`, `defineEvent`, and `on`
+are only valid during `INITIALIZING` (inside `setup()`). `useService` is only
+valid during `RUNNING`. Calling them outside their allowed state throws.
 
 ## Plugin initialization order
 

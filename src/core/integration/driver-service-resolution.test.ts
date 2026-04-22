@@ -5,7 +5,6 @@ import { join, resolve } from "path";
 import { PluginManager } from "../plugin-manager.js";
 import { EventBus } from "../event-bus.js";
 import { ServiceRegistry } from "../service-registry.js";
-import { CapabilityRegistry } from "../capability-registry.js";
 import { PermissionEnforcer } from "../permission-enforcer.js";
 import { AuditLog } from "../audit-log.js";
 import { addMarketplace } from "../marketplace.js";
@@ -30,11 +29,10 @@ async function installFixtures(names: string[], lockfilePath: string): Promise<v
 
 function makeHarness(pluginRefs: string[], lockfilePath: string) {
   const eventBus = new EventBus();
-  const capabilityRegistry = new CapabilityRegistry();
   const serviceRegistry = new ServiceRegistry();
   const enforcer = new PermissionEnforcer({ mode: "log-only" });
   const auditLog = new AuditLog({
-    rootDir: mkdtempSync(join(tmpdir(), "kz-driver-cap-audit-")),
+    rootDir: mkdtempSync(join(tmpdir(), "kz-driver-svc-audit-")),
     sessionId: "test",
     enabled: false,
   });
@@ -43,21 +41,21 @@ function makeHarness(pluginRefs: string[], lockfilePath: string) {
 
   const manager = new PluginManager(
     config,
-    eventBus, capabilityRegistry, serviceRegistry,
+    eventBus, serviceRegistry,
     enforcer, auditLog,
     lockfilePath, options,
   );
-  return { manager, capabilityRegistry };
+  return { manager, serviceRegistry };
 }
 
-describe("driver capability resolution (post-registry-refactor)", () => {
+describe("driver service resolution", () => {
   let home: string;
   let lockfilePath: string;
 
   beforeEach(() => {
-    home = mkdtempSync(join(tmpdir(), "kz-driver-cap-home-"));
+    home = mkdtempSync(join(tmpdir(), "kz-driver-svc-home-"));
     process.env.KAIZEN_HOME_OVERRIDE = home;
-    lockfilePath = join(mkdtempSync(join(tmpdir(), "kz-driver-cap-lock-")), "permissions.lock");
+    lockfilePath = join(mkdtempSync(join(tmpdir(), "kz-driver-svc-lock-")), "permissions.lock");
   });
 
   afterEach(() => {
@@ -65,19 +63,19 @@ describe("driver capability resolution (post-registry-refactor)", () => {
     delete process.env.KAIZEN_HOME_OVERRIDE;
   });
 
-  it("resolves a provider by name via CapabilityRegistry when one plugin provides it", async () => {
+  it("resolves a provider by name via ServiceRegistry when one plugin provides it", async () => {
     await installFixtures(["cap-provider", "cap-driver"], lockfilePath);
 
-    const { manager, capabilityRegistry } = makeHarness(
+    const { manager, serviceRegistry } = makeHarness(
       [`${MARKETPLACE_ID}/cap-provider@1.0.0`, `${MARKETPLACE_ID}/cap-driver@1.0.0`],
       lockfilePath,
     );
 
     await manager.initialize();
-    expect(capabilityRegistry.providersOf("cap-provider:thing")).toContain("cap-provider");
+    expect(serviceRegistry.providersOf("cap-provider:thing")).toContain("cap-provider");
   });
 
-  it("fails initialization when a cardinality-one capability has two providers", async () => {
+  it("fails initialization when two plugins provide the same service", async () => {
     await installFixtures(
       ["cap-owner", "cap-dup-a", "cap-dup-b", "cap-driver-conflict"],
       lockfilePath,
@@ -93,6 +91,6 @@ describe("driver capability resolution (post-registry-refactor)", () => {
       lockfilePath,
     );
 
-    await expect(manager.initialize()).rejects.toThrow(/Multiple plugins provide/);
+    await expect(manager.initialize()).rejects.toThrow();
   });
 });

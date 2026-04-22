@@ -5,14 +5,14 @@ import type { KaizenPlugin, KaizenConfig, KaizenGlobalConfig, PluginEntry, Plugi
 import { PLUGIN_API_VERSION } from "../types/plugin.js";
 import { mergePluginConfig, separateSecrets, applyEnvOverrides } from "./config-merge.js";
 import { validateConfig, validateSchemaItself } from "./config-validator.js";
-import { SecretsRegistry, createSecretsContext, SecretsProviderToken } from "./secrets.js";
+import { SecretsRegistry, createSecretsContext, SECRETS_PROVIDER_SERVICE } from "./secrets.js";
 import { fatal, warn, debug } from "./errors.js";
 import { RESERVED_KEYS } from "./config.js";
 import { pluginInstallDir } from "./kaizen-config.js";
 import { parseRef } from "./ref-resolver.js";
 import type { EventBus } from "./event-bus.js";
 import type { ServiceRegistry } from "./service-registry.js";
-import type { CapabilityRegistry } from "./capability-registry.js";
+import type { SecretProvider } from "./secret-providers/types.js";
 import { createPluginContext } from "./context.js";
 import type { CoreState } from "./context.js";
 import type { PermissionEnforcer } from "./permission-enforcer.js";
@@ -164,32 +164,66 @@ async function resolvePlugin(name: string): Promise<LoadedPlugin | null> {
 }
 
 // ---------------------------------------------------------------------------
-// Topological sort (Kahn's algorithm) — driven by capability provides/consumes
+// Topological sort (Kahn's algorithm) — driven by service provides/consumes
 // ---------------------------------------------------------------------------
 
 function resolveCapName(name: string, aliases: Record<string, string>): string {
   return aliases[name] ?? name;
 }
 
-function isCritical(plugin: KaizenPlugin, reg: CapabilityRegistry): boolean {
+function isCritical(plugin: KaizenPlugin, reg: ServiceRegistry): boolean {
   if (plugin.driver === true) return true;
   const aliases = plugin.aliases ?? {};
-  for (const raw of plugin.capabilities?.provides ?? []) {
+  for (const raw of plugin.services?.provides ?? []) {
     const cap = resolveCapName(raw, aliases);
-    const spec = reg.getSpec(cap);
-    if (spec?.cardinality === "one" && reg.consumersOf(cap).length > 0) return true;
+    // A service is critical when it has any consumers — cardinality is one.
+    if (reg.consumersOf(cap).length > 0) return true;
   }
   return false;
+}
+
+/**
+ * Add provider→owner edges so that defineService always runs before provideService.
+ *
+ * When plugin P provides '<owner>:<symbol>' and owner ≠ P, the owner plugin must
+ * complete its setup (calling defineService) before P calls provideService.
+ * If the owner is not in pluginNames it is not loaded in this session; that case
+ * is caught at runtime by ServiceRegistry with a proper error, so we skip it here.
+ */
+function addDefineBeforeProvideEdges(
+  plugins: KaizenPlugin[],
+  pluginNames: Set<string>,
+  edges: Map<string, string[]>,
+  inDegree: Map<string, number>,
+): void {
+  for (const p of plugins) {
+    const aliases = p.aliases ?? {};
+    const seen = new Set<string>();
+    for (const raw of p.services?.provides ?? []) {
+      const cap = resolveCapName(raw, aliases);
+      const colon = cap.indexOf(":");
+      if (colon < 0) continue;
+      const owner = cap.slice(0, colon);
+      if (owner === p.name) continue;
+      if (!pluginNames.has(owner)) continue; // absent owner: runtime error handles it
+      if (seen.has(owner)) continue;
+      seen.add(owner);
+      const existing = edges.get(owner) ?? [];
+      existing.push(p.name);
+      edges.set(owner, existing);
+      inDegree.set(p.name, (inDegree.get(p.name) ?? 0) + 1);
+    }
+  }
 }
 
 function topoSort(plugins: KaizenPlugin[]): KaizenPlugin[] {
   const nameToPlugin = new Map(plugins.map((p) => [p.name, p]));
 
-  // Map canonical capability name → list of plugins that provide it.
+  // Map canonical service name → list of plugins that provide it.
   const capToProviders = new Map<string, string[]>();
   for (const p of plugins) {
     const aliases = p.aliases ?? {};
-    for (const raw of p.capabilities?.provides ?? []) {
+    for (const raw of p.services?.provides ?? []) {
       const cap = resolveCapName(raw, aliases);
       const existing = capToProviders.get(cap) ?? [];
       existing.push(p.name);
@@ -200,10 +234,13 @@ function topoSort(plugins: KaizenPlugin[]): KaizenPlugin[] {
   const inDegree = new Map(plugins.map((p) => [p.name, 0]));
   const edges = new Map<string, string[]>();
 
+  const pluginNames = new Set(plugins.map((p) => p.name));
+
+  // consume→provider edges: a consumer must initialize after its providers.
   for (const p of plugins) {
     const aliases = p.aliases ?? {};
     const seen = new Set<string>();
-    for (const raw of p.capabilities?.consumes ?? []) {
+    for (const raw of p.services?.consumes ?? []) {
       const cap = resolveCapName(raw, aliases);
       for (const providerName of capToProviders.get(cap) ?? []) {
         if (providerName === p.name) continue;
@@ -216,6 +253,9 @@ function topoSort(plugins: KaizenPlugin[]): KaizenPlugin[] {
       }
     }
   }
+
+  // provider→owner edges (so defineService runs before provideService).
+  addDefineBeforeProvideEdges(plugins, pluginNames, edges, inDegree);
 
   const queue = plugins.filter((p) => (inDegree.get(p.name) ?? 0) === 0);
   const sorted: KaizenPlugin[] = [];
@@ -256,7 +296,6 @@ export class PluginManager {
   constructor(
     private readonly config: KaizenConfig,
     private readonly eventBus: EventBus,
-    private readonly capabilityRegistry: CapabilityRegistry,
     private readonly serviceRegistry: ServiceRegistry,
     private readonly enforcer: PermissionEnforcer,
     private readonly auditLog: AuditLog,
@@ -346,14 +385,13 @@ export class PluginManager {
     // Map plugin name → resolvedPath for import scan below.
     const resolvedPathMap = new Map(resolvedPlugins.map((r) => [r.plugin.name, r.resolvedPath]));
 
-    // PASS 1: register provide/consume metadata so criticality + validateAll see full graph
+    // PASS 1: record consumer metadata so isCritical + validateAll see full graph.
+    // Providers register via ctx.provideService inside setup(); the declarative
+    // `services.provides` array is informational/critical-check only.
     for (const plugin of sorted) {
       const aliases = plugin.aliases ?? {};
-      for (const raw of plugin.capabilities?.provides ?? []) {
-        this.capabilityRegistry.addProvider(resolveCapName(raw, aliases), plugin.name);
-      }
-      for (const raw of plugin.capabilities?.consumes ?? []) {
-        this.capabilityRegistry.addConsumer(resolveCapName(raw, aliases), plugin.name);
+      for (const raw of plugin.services?.consumes ?? []) {
+        this.serviceRegistry.consume(resolveCapName(raw, aliases), plugin.name);
       }
     }
 
@@ -364,7 +402,7 @@ export class PluginManager {
       if (pluginMajor !== PLUGIN_API_VERSION) {
         warn(`Plugin '${plugin.name}' apiVersion ${plugin.apiVersion}, core expects ${PLUGIN_API_VERSION}.x. Loading anyway.`);
       }
-      const critical = isCritical(plugin, this.capabilityRegistry);
+      const critical = isCritical(plugin, this.serviceRegistry);
       const rPath = resolvedPathMap.get(plugin.name) ?? null;
       try {
         await this.setupPlugin(plugin, rPath);
@@ -374,14 +412,14 @@ export class PluginManager {
           entry: {
             name: plugin.name,
             apiVersion: plugin.apiVersion,
-            capabilities: plugin.capabilities ?? {},
+            services: plugin.services ?? {},
             status: "loaded",
           },
         });
         debug(`Plugin '${plugin.name}' initialized.`);
       } catch (err) {
         if (critical) {
-          fatal(`${plugin.name} (provides critical capability) failed to initialize: ${err instanceof Error ? err.message : String(err)}`);
+          fatal(`${plugin.name} (provides critical service) failed to initialize: ${err instanceof Error ? err.message : String(err)}`);
         }
         if (err instanceof Error && err.stack) debug(err.stack);
         console.error(`[kaizen] error: plugin '${plugin.name}' failed to initialize:`, err instanceof Error ? err.message : err);
@@ -390,16 +428,16 @@ export class PluginManager {
           entry: {
             name: plugin.name,
             apiVersion: plugin.apiVersion,
-            capabilities: plugin.capabilities ?? {},
+            services: plugin.services ?? {},
             status: "failed",
           },
         });
       }
     }
 
-    // PASS 3: validate capability cardinalities + referenced-but-undefined
+    // PASS 3: validate service graph + referenced-but-undefined
     try {
-      this.capabilityRegistry.validateAll();
+      this.serviceRegistry.validateAll();
     } catch (err) {
       fatal(err instanceof Error ? err.message : String(err));
     }
@@ -459,7 +497,7 @@ export class PluginManager {
         entry: {
           name: plugin.name,
           apiVersion: plugin.apiVersion,
-          capabilities: plugin.capabilities ?? {},
+          services: plugin.services ?? {},
           status: "failed",
         },
       });
@@ -467,11 +505,8 @@ export class PluginManager {
       return;
     }
     const aliases = plugin.aliases ?? {};
-    for (const raw of plugin.capabilities?.provides ?? []) {
-      this.capabilityRegistry.addProvider(resolveCapName(raw, aliases), plugin.name);
-    }
-    for (const raw of plugin.capabilities?.consumes ?? []) {
-      this.capabilityRegistry.addConsumer(resolveCapName(raw, aliases), plugin.name);
+    for (const raw of plugin.services?.consumes ?? []) {
+      this.serviceRegistry.consume(resolveCapName(raw, aliases), plugin.name);
     }
     try {
       await this.setupPlugin(plugin, resolvedPath);
@@ -480,14 +515,14 @@ export class PluginManager {
         entry: {
           name: plugin.name,
           apiVersion: plugin.apiVersion,
-          capabilities: plugin.capabilities ?? {},
+          services: plugin.services ?? {},
           status: "loaded",
         },
       });
       try {
-        this.capabilityRegistry.validateAll();
+        this.serviceRegistry.validateAll();
       } catch (err) {
-        warn(`Capability validation after loading '${name}': ${err instanceof Error ? err.message : String(err)}`);
+        warn(`Service validation after loading '${name}': ${err instanceof Error ? err.message : String(err)}`);
       }
       debug(`Plugin '${name}' loaded.`);
     } catch (err) {
@@ -496,14 +531,14 @@ export class PluginManager {
         entry: {
           name: plugin.name,
           apiVersion: plugin.apiVersion,
-          capabilities: plugin.capabilities ?? {},
+          services: plugin.services ?? {},
           status: "failed",
         },
       });
       const msg = err instanceof Error ? err.message : String(err);
       warn(`Plugin '${name}' failed to load: ${msg}`);
-      const provList = (plugin.capabilities?.provides ?? []).join(", ");
-      if (provList) warn(`Plugin '${name}' provides [${provList}] but failed — capability may be unavailable.`);
+      const provList = (plugin.services?.provides ?? []).join(", ");
+      if (provList) warn(`Plugin '${name}' provides [${provList}] but failed — service may be unavailable.`);
     }
   }
 
@@ -516,7 +551,6 @@ export class PluginManager {
     this.eventBus.deregisterByPlugin(name);
     this.serviceRegistry.deregisterByPlugin(name);
     this.enforcer.deregister(name);
-    this.capabilityRegistry.deregisterByPlugin(name);
     record.entry.status = "unloaded";
     this.plugins.delete(name);
     debug(`Plugin '${name}' unloaded.`);
@@ -623,7 +657,6 @@ export class PluginManager {
       pluginConfig,
       secretsCtx,
       this.eventBus,
-      this.capabilityRegistry,
       this.serviceRegistry,
       this.enforcer,
       () => pluginState,
@@ -634,9 +667,9 @@ export class PluginManager {
     pluginState = "READY";
 
     // After setup, check if this plugin provided a secret provider
-    // (core-secrets calls ctx.registerService(SecretsProviderToken, provider))
+    // (core-secrets calls ctx.provideService(SECRETS_PROVIDER_SERVICE, provider))
     try {
-      const provider = this.serviceRegistry.get(SecretsProviderToken);
+      const provider = this.serviceRegistry.use<SecretProvider>(SECRETS_PROVIDER_SERVICE);
       this.secretsRegistry.register(provider);
     } catch {
       // Plugin didn't register a secret provider — that's fine

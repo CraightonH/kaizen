@@ -68,11 +68,10 @@ Omit if not needed. Core falls back to individual `get()` calls.
 
 ## Declaring a secret provider
 
-In your plugin, declare `provides: [{ kind: "core-secrets:provider", name: "your-name" }]`:
+In your plugin, declare `services: { provides: ["core-secrets:provider"] }`:
 
 ```typescript
-import type { KaizenPlugin } from "kaizen/types";
-import { SecretsProviderToken, type SecretProvider } from "kaizen/core-secrets";
+import type { KaizenPlugin, SecretProvider } from "kaizen/types";
 
 const myProvider: SecretProvider = {
   name: "doppler",
@@ -100,14 +99,10 @@ const myProvider: SecretProvider = {
 const plugin: KaizenPlugin = {
   name: "core-secrets-doppler",
   apiVersion: "1.0.0",
-  
-  provides: [
-    { kind: "core-secrets:provider", name: "doppler" }
-  ],
-  depends: [],
-  
+  services: { provides: ["core-secrets:provider"] },
   async setup(ctx) {
-    ctx.registerService(SecretsProviderToken, myProvider);
+    ctx.defineService("core-secrets:provider", { description: "Doppler secrets provider" });
+    ctx.provideService("core-secrets:provider", myProvider);
     ctx.log("Doppler secrets provider loaded");
   },
 };
@@ -140,7 +135,7 @@ Here's a complete in-memory secret provider for testing:
 
 ```typescript
 import type { KaizenPlugin } from "kaizen/types";
-import { SecretsProviderToken, type SecretProvider } from "kaizen/core-secrets";
+import type { SecretProvider } from "kaizen/core-secrets";
 
 const testProvider: SecretProvider = {
   name: "test",
@@ -176,10 +171,10 @@ const testProvider: SecretProvider = {
 const plugin: KaizenPlugin = {
   name: "core-secrets-test",
   apiVersion: "1.0.0",
-  provides: [{ kind: "core-secrets:provider", name: "test" }],
-  depends: [],
+  services: { provides: ["core-secrets:provider"] },
   async setup(ctx) {
-    ctx.registerService(SecretsProviderToken, testProvider);
+    ctx.defineService("core-secrets:provider", { description: "test secrets provider" });
+    ctx.provideService("core-secrets:provider", testProvider);
   },
 };
 

@@ -80,7 +80,7 @@ them is out of scope.
 - **Exactly one session driver.** Exactly one loaded plugin must declare
   `driver: true`. Zero or more than one is a fatal startup error. This is
   the sole plugin-to-core contract; everything else is plugin-to-plugin and
-  modeled as capabilities.
+  modeled as services.
 - **Security:** destructive command guards and similar policy belong in
   plugins. Core has no opinion on tool safety.
 - **Backward compatibility:** the Phase 1 `kaizen add <cli>` / `kaizen run`

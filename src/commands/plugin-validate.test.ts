@@ -35,7 +35,7 @@ function writeValidPlugin(dir: string, overrides: Record<string, unknown> = {}):
     name: "my-plugin",
     apiVersion: "2.0.0",
     permissions: { tier: "trusted" },
-    capabilities: {},
+    services: {},
     setup: async () => {},
     ...overrides,
   };
@@ -149,12 +149,12 @@ describe("checkManifest", () => {
     expect(results.some((r) => r.rule.includes("scoped") && r.status === "fail")).toBe(false);
   });
 
-  it("fails when plugin.capabilities is missing", async () => {
+  it("fails when plugin.services is missing", async () => {
     const dir = makeTmpDir();
     const pkg = { name: "my-plugin", exports: { ".": "./index.ts" } };
-    writeValidPlugin(dir, { capabilities: undefined });
+    writeValidPlugin(dir, { services: undefined });
     const results = await checkManifest(dir, pkg);
-    expect(results.some((r) => r.rule.includes("capabilities") && r.status === "fail")).toBe(true);
+    expect(results.some((r) => r.rule.includes("services") && r.status === "fail")).toBe(true);
   });
 
   it("passes for fully valid plugin", async () => {
@@ -206,7 +206,7 @@ describe("checkConfigSchema", () => {
     const plugin = {
       name: "my-plugin",
       apiVersion: "2.0.0",
-      capabilities: { consumes: [] },
+      services: { consumes: [] },
       config: {
         schema: { type: "object", properties: { api_key: { type: "string" } } },
         secrets: ["api_key"],
@@ -220,7 +220,7 @@ describe("checkConfigSchema", () => {
     const plugin = {
       name: "my-plugin",
       apiVersion: "2.0.0",
-      capabilities: { consumes: ["core-secrets:provider"] },
+      services: { consumes: ["core-secrets:provider"] },
       config: {
         schema: { type: "object", properties: { api_key: { type: "string" } } },
         secrets: ["api_key"],
@@ -236,7 +236,7 @@ describe("checkConfigSchema", () => {
       name: "my-plugin",
       apiVersion: "2.0.0",
       permissions: { tier: "scoped", fs: { read: ["./data"] } },
-      capabilities: { consumes: ["core-secrets:provider"] },
+      services: { consumes: ["core-secrets:provider"] },
       config: {
         schema: { type: "object", properties: { api_key: { type: "string" } } },
         secrets: ["api_key"],

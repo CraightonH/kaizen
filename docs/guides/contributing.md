@@ -111,9 +111,10 @@ through there.
 - **Imports.** Inside kaizen core, import from relative paths. Plugins
   (including anything under `tests/fixtures`) must import from
   `"kaizen/types"`, never via a relative path into `src/`.
-- **Registration timing.** `registerService` and `defineCapability` are only
-  valid during `INITIALIZING` (i.e. inside a plugin's `setup()`). Anything that
-  relaxes this needs design review.
+- **Registration timing.** `defineService`, `provideService`, and `consumeService`
+  are only valid during `INITIALIZING` (i.e. inside a plugin's `setup()`).
+  `useService` is only valid during `RUNNING`. Anything that relaxes these
+  state gates needs design review.
 - **Tests over asserts.** Fail loud in tests, not in library code. Core
   helpers should throw typed, named errors — see existing `NamedError`
   usages.

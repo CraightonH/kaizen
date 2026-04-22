@@ -30,7 +30,7 @@ kaizen plugin create <target-dir>
 
 Interactive prompts cover: plugin name, description, permission tier
 (`trusted` / `scoped` / `unscoped`), scoped grants (`fs`, `net`, `env`, `exec`,
-`events`), `provides` / `consumes` capabilities, and optional config keys
+`events`), `provides` / `consumes` services, and optional config keys
 (including which are secrets).
 
 Add `--defaults` to skip prompts and scaffold a minimal `trusted` plugin:
@@ -46,6 +46,7 @@ The generator writes:
   package.json       # name, version, type:module, exports["."], keywords:["kaizen-plugin"]
   tsconfig.json
   index.ts           # KaizenPlugin default export
+  public.d.ts        # exported types for consumers (import type)
   index.test.ts      # bun:test skeleton calling setup() with a stub ctx
   README.md
   .kaizen/.gitkeep
@@ -72,13 +73,13 @@ const plugin: KaizenPlugin = {
   name: "my-plugin",            // kebab-case; matches config namespace in kaizen.json
   apiVersion: "2.0.0",          // semver; core warns on major mismatch with PLUGIN_API_VERSION
   permissions: { tier: "trusted" },
-  capabilities: { provides: [], consumes: [] },
+  services: { provides: [], consumes: [] },
 
   async setup(ctx) {
-    // Register services (ctx.registerService), declare capabilities
-    // (ctx.defineCapability), and subscribe to events (ctx.on) here.
-    // setup() runs once during INITIALIZING. Registration calls are only
-    // valid from inside setup().
+    // Define and provide services (ctx.defineService, ctx.provideService),
+    // declare consumption intent (ctx.consumeService), and subscribe to
+    // events (ctx.on) here. setup() runs once during INITIALIZING.
+    // Registration calls are only valid from inside setup().
   },
 };
 
@@ -86,7 +87,7 @@ export default plugin;
 ```
 
 Required fields: `name`, `apiVersion`, `setup`. Optional: `driver`,
-`capabilities`, `aliases`, `permissions` (defaults to `{ tier: "trusted" }`),
+`services`, `aliases`, `permissions` (defaults to `{ tier: "trusted" }`),
 `config`, `start` (only if `driver: true`). Full field table in
 [`reference/plugin-api.md`](../reference/plugin-api.md#kaizenplugin-manifest).
 
@@ -94,20 +95,21 @@ Required fields: `name`, `apiVersion`, `setup`. Optional: `driver`,
 
 LLM tool-calling is not yet wired into core. A future `core-tools` broker
 plugin will own tool registration and dispatch; when it lands it will define
-the capability name and `ServiceToken` that tool-providing plugins use.
+the service name that tool-providing plugins use.
 
 For now, `ToolDefinition` and `ToolResult` types exist in the API (they are
 used by the `Executor` interface for the LLM round-trip), but there is no
 `ctx.registerTool()` method and no core-managed tool registry.
 
-<!-- TODO: expand this section once core-tools publishes its tokens and capability names -->
+<!-- TODO: expand this section once core-tools publishes its service names -->
 
 ## Using the host API
 
 The `ctx` object is your entire surface onto kaizen. It exposes:
-`registerService` / `getService`, `defineCapability`, `defineEvent` / `on` /
-`emit`, `config`, `log`, permission-gated `fs` / `net` / `secrets` / `exec`,
-and `runtime.pluginManager` for hot-reload support.
+`defineService` / `provideService` / `consumeService` / `useService`,
+`defineEvent` / `on` / `emit`, `config`, `log`, permission-gated
+`fs` / `net` / `secrets` / `exec`, and `runtime.pluginManager` for hot-reload
+support.
 
 Example — read a secret during `setup()`:
 
@@ -123,8 +125,93 @@ async setup(ctx) {
 ```
 
 For the full surface — `SecretsContext`, `CtxFs`, `CtxNet`, `CtxExec`,
-`createLLMRuntime`, `ServiceToken`, `SecretsProviderToken`, event semantics —
-see [`reference/host-api.md`](../reference/host-api.md).
+`createLLMRuntime`, event semantics — see
+[`reference/host-api.md`](../reference/host-api.md).
+
+## Publishing types {#publishing-types}
+
+When your plugin provides a service, consumers need your types at compile time
+but must not import your runtime code. The `public.d.ts` pattern handles this.
+
+**Provider side** — ship a `public.d.ts` alongside your plugin:
+
+```ts
+// public.d.ts — shipped alongside the plugin
+export interface PathHelpers {
+  resolveHome(): string;
+  joinSafe(...segs: string[]): string;
+}
+```
+
+Reference it in your own code via `import type`:
+
+```ts
+// index.ts
+import type { PathHelpers } from "./public";
+
+const plugin: KaizenPlugin = {
+  name: "utils",
+  setup(ctx) {
+    ctx.defineService("utils:paths", { description: "path helpers" });
+    ctx.provideService<PathHelpers>("utils:paths", {
+      resolveHome: () => process.env.HOME ?? "/",
+      joinSafe: (...segs) => join(...segs),
+    });
+  },
+};
+```
+
+**Consumer side** — use `import type` against the marketplace path (erased at
+build; no runtime coupling):
+
+```ts
+import type { PathHelpers } from "official/utils/public";
+
+const plugin: KaizenPlugin = {
+  name: "github",
+  setup(ctx) {
+    ctx.consumeService("utils:paths");
+  },
+  start(ctx) {
+    const paths = ctx.useService<PathHelpers>("utils:paths");
+    paths.resolveHome();  // fully typed
+  },
+};
+```
+
+Keep `public.d.ts` in sync with your runtime implementation. A future
+`kaizen plugin types` tool may auto-generate it; until then, update it
+manually when service interfaces change.
+
+## Consumer TypeScript setup {#consumer-typescript-setup}
+
+`import type { X } from "official/utils/public"` is a bare specifier without
+a real package in `node_modules`. TypeScript needs help resolving it.
+
+**Recommended — `tsconfig.json` `paths`** pointing at the installed plugin's
+exact version directory:
+
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "official/utils/*": ["/Users/you/.kaizen/marketplaces/official/plugins/utils@0.1.0/*"]
+    }
+  }
+}
+```
+
+Paths are concrete (pinned to a specific version directory) because
+TypeScript's `paths` mechanism does string substitution, not filesystem
+globbing. `kaizen plugin create` scaffolds this with concrete version
+directories for whichever plugins are installed at scaffold time. Re-run the
+scaffolder (or manually update `paths`) after marketplace updates until
+auto-sync lands.
+
+**Fallback** — a declaration shim in `node_modules/@types/` for authors whose
+build tool ignores `paths`. More invasive; opt-in only.
+
+Runtime touches neither path — they are TypeScript-only.
 
 ## Testing {#testing}
 
@@ -141,9 +228,10 @@ function makeCtx() {
   return {
     log: mock(() => {}),
     config: {},
-    registerService: mock(() => {}),
-    getService: mock(() => { throw new Error("not registered"); }),
-    defineCapability: mock(() => {}),
+    defineService: mock(() => {}),
+    provideService: mock(() => {}),
+    consumeService: mock(() => {}),
+    useService: mock(() => { throw new Error("not provided"); }),
     on: mock(() => {}),
     defineEvent: mock(() => {}),
     emit: mock(async () => []),
@@ -170,7 +258,7 @@ describe("my-plugin", () => {
 Run with `bun test`. Cast to `any` keeps the stub minimal — only stub what
 your `setup()` actually touches. If your plugin subscribes to events, capture
 the `on` handlers and invoke them directly. If it consumes a service, stub
-`getService` to return a test double.
+`useService` to return a test double.
 
 `plugin-standards.md` requires at least one `*.test.ts` that exercises
 metadata plus `setup()`; `kaizen plugin validate` checks for the file's
@@ -191,11 +279,11 @@ Checks (see `src/commands/plugin-validate.ts` for the full list):
 - `plugin.apiVersion` present and semver.
 - `plugin.permissions` present; `tier` is `trusted` / `scoped` / `unscoped`;
   `scoped` tier has at least one grant populated.
-- `plugin.capabilities` present (may be `{}`).
+- `plugin.services` present (may be `{}`).
 - `plugin.config.schema` is a valid JSON Schema; every `config.secrets` key
   appears in `config.schema.properties`.
 - Warns if `config.secrets` is non-empty and `core-secrets:provider` is not in
-  `capabilities.consumes`.
+  `services.consumes`.
 - Warns on imports of `node:fs`, `node:child_process`, `node:worker_threads`,
   `bun:ffi`, and their unprefixed forms — the runtime enforcer blocks these
   regardless.
@@ -212,7 +300,7 @@ fixes:
 | `plugin.name does not match package.json name` | Align the two. |
 | `tier is "scoped" but no grant keys populated` | Add at least one of `fs` / `net` / `env` / `exec` / `events`, or drop to `trusted`. |
 | `config secrets key "..." not declared in config.schema.properties` | Add the key to `config.schema.properties`. |
-| `core-secrets:provider dependency is implicit` (warn) | List it in `capabilities.consumes` for discoverability. |
+| `core-secrets:provider dependency is implicit` (warn) | List it in `services.consumes` for discoverability. |
 
 ## Next steps
 

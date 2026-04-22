@@ -4,7 +4,7 @@
 
 Authoritative source: [`src/types/plugin.ts`](../../src/types/plugin.ts). This
 file is the reference layer — exact shapes and method signatures. For the
-conceptual layer (plugin model, lifecycle, capability semantics), see
+conceptual layer (plugin model, lifecycle, service semantics), see
 [`docs/concepts/plugin-model.md`](../concepts/plugin-model.md).
 
 Current API version: `PLUGIN_API_VERSION = "2"`.
@@ -21,7 +21,7 @@ export interface KaizenPlugin {
   name: string;
   apiVersion: string;
   driver?: boolean;
-  capabilities?: PluginCapabilities;
+  services?: PluginServices;
   aliases?: Record<string, string>;
   permissions?: PluginPermissions;
   config?: PluginConfigDeclaration;
@@ -35,36 +35,36 @@ export interface KaizenPlugin {
 | `name` | `string` | yes | kebab-case. Must match the config namespace key in `kaizen.json`. |
 | `apiVersion` | `string` | yes | semver. Core warns if major differs from `PLUGIN_API_VERSION`. |
 | `driver` | `boolean` | no | If true, this plugin drives the session loop. Core calls `start()` on the one plugin with `driver=true` after bootstrap. Exactly one loaded plugin must declare this — zero or two+ is a fatal startup error. |
-| `capabilities` | `PluginCapabilities` | no | `{ provides?: string[]; consumes?: string[] }`. Declares what this plugin provides and consumes in the capability registry. |
-| `aliases` | `Record<string, string>` | no | Map short or alternative capability names to canonical owner-qualified names. e.g. `{ "ui.input": "core-driver:ui.input" }`. |
+| `services` | `PluginServices` | no | `{ provides?: string[]; consumes?: string[] }`. Declares what this plugin provides and consumes in the service registry. |
+| `aliases` | `Record<string, string>` | no | Map short or alternative service names to canonical owner-qualified names. e.g. `{ "ui.input": "core-driver:ui.input" }`. |
 | `permissions` | `PluginPermissions` | no | Permission manifest. Defaults to `{ tier: "trusted" }`. See Permissions below. |
 | `config` | `PluginConfigDeclaration` | no | Declares config schema, defaults, and which keys are secrets. |
-| `setup` | `(ctx: PluginContext) => Promise<void>` | yes | Called once during `INITIALIZING`. Register services, declare capabilities, and subscribe to events here. |
+| `setup` | `(ctx: PluginContext) => Promise<void>` | yes | Called once during `INITIALIZING`. Define and provide services, declare consumption intent, and subscribe to events here. |
 | `start` | `(ctx: PluginContext) => Promise<void>` | no | Only implement if `driver=true`. Core calls this after all plugins initialize. |
 
-### PluginCapabilities
+### PluginServices
 
 ```ts
-export interface PluginCapabilities {
+export interface PluginServices {
   provides?: string[];
   consumes?: string[];
 }
 ```
 
-### CapabilitySpec
+### ServiceSpec
 
-Plugins can declare new capabilities (typically during `setup()`):
+Plugins can declare new services (during `setup()` via `ctx.defineService`):
 
 ```ts
-export type Cardinality = "one" | "many";
-
-export interface CapabilitySpec {
-  cardinality: Cardinality;   // "one": exactly one provider required when consumed
-  schema?: JsonSchema;         // optional JSON Schema validated against providers
-  version?: string;            // informational only
-  description: string;         // shown by `kaizen capability show`
+export interface ServiceSpec {
+  description?: string;
+  schema?: JsonSchema;   // optional; informational in v1
+  version?: string;      // optional; informational in v1
 }
 ```
+
+Every service is cardinality "one": exactly one provider permitted. A second
+`provideService` call for the same name is a fatal error.
 
 ### PluginConfigDeclaration
 
@@ -117,21 +117,20 @@ The `ctx` object passed to `setup()` (and to `start()` for driver plugins).
 ```ts
 export interface PluginContext {
   // --- Service registry ---
-  registerService<T>(token: ServiceToken<T>, impl: T): void;  // INITIALIZING only
-  getService<T>(token: ServiceToken<T>): T;                    // any state
-
-  // --- Capability registry (INITIALIZING only) ---
-  defineCapability(name: string, spec: CapabilitySpec): void;  // name must be plugin-prefixed
+  defineService(name: string, spec: ServiceSpec): void;   // INITIALIZING only
+  provideService<T>(name: string, impl: T): void;         // INITIALIZING only
+  consumeService(name: string): void;                     // INITIALIZING only
+  useService<T>(name: string): T;                         // RUNNING only
 
   // --- Event bus ---
-  defineEvent(name: string): void;                             // advisory
-  on(event: string, handler: EventHandler): void;
+  defineEvent(name: string): void;                        // INITIALIZING only; advisory
+  on(event: string, handler: EventHandler): void;         // INITIALIZING only
   emit(event: string, payload?: unknown): Promise<unknown[]>;  // serial, error-isolated
 
   // --- Config and logging ---
-  config: Record<string, unknown>;                              // merged, non-secret
-  log(msg: string): void;                                       // prefixed with plugin name
-  pluginManager: PluginManagerPublicApi;                        // runtime load/unload
+  config: Record<string, unknown>;                        // merged, non-secret
+  log(msg: string): void;                                 // prefixed with plugin name
+  pluginManager: PluginManagerPublicApi;                  // runtime load/unload
 
   // --- Permission-gated I/O surface ---
   fs: CtxFs;
@@ -141,17 +140,26 @@ export interface PluginContext {
 
   // --- Runtime primitives ---
   runtime: {
-    pluginManager: PluginManagerLifecycleApi;                   // drainPendingReloads()
+    pluginManager: PluginManagerLifecycleApi;             // drainPendingReloads()
   };
 }
 ```
 
 Method semantics:
 
-- `registerService` and `defineCapability` are valid only during `INITIALIZING`
-  (inside `setup()`). Calling them from an event handler throws.
-- `getService` is valid at any lifecycle state and throws with a named error
-  when the token has no provider.
+- `defineService` — declares a new service owned by this plugin. Name must be
+  `<this-plugin>:<symbol>`; calling with another plugin's prefix throws.
+  Valid only during `INITIALIZING`.
+- `provideService` — registers the implementation for a previously defined
+  service. Throws if the service was not defined first, or if a provider is
+  already registered (cardinality-one enforcement). Valid only during
+  `INITIALIZING`.
+- `consumeService` — records this plugin as a consumer of the named service.
+  Required for topo-sort and post-init validation. Valid only during
+  `INITIALIZING`.
+- `useService` — returns the registered implementation by reference. Throws
+  if the service has no provider. Valid only during `RUNNING` (not inside
+  `setup()`; providers may not have registered yet).
 - `emit` calls all handlers serially in initialization order, returns every
   handler's return value (including `undefined`), and logs-and-continues on
   handler throw. Emitting an undefined event warns but never blocks.
@@ -162,7 +170,7 @@ Method semantics:
 export interface PluginEntry {
   name: string;
   apiVersion: string;
-  capabilities: PluginCapabilities;
+  services: PluginServices;
   status: "loaded" | "unloaded" | "failed";
 }
 
@@ -236,13 +244,12 @@ export type JsonSchema = {
 ## Executor and UI types
 
 These types are part of the plugin API surface. Executor and UI plugins use
-`ctx.registerService(Token, impl)` plus `ctx.defineCapability(...)` to expose
+`ctx.provideService(name, impl)` plus `ctx.defineService(...)` to expose
 their implementations. The driver plugin (e.g. `core-driver`) defines the
-capability names and `ServiceToken` values it expects and documents them in its
-own README. Core does not enshrine `kaizen.executor`, `kaizen.ui`, or any other
-well-known name.
+service names it expects and documents them in its own README. Core does not
+enshrine `kaizen.executor`, `kaizen.ui`, or any other well-known name.
 
-<!-- TODO: expand once core-driver publishes its tokens and capability names -->
+<!-- TODO: expand once core-driver publishes its service names -->
 
 ### Executor
 
@@ -312,8 +319,8 @@ export type EventHandler = (payload?: unknown) => Promise<unknown | void>;
 
 kaizen core itself defines no event names — the event vocabulary is owned by
 plugins. In practice, the `core-events` plugin exports the canonical event
-names and payload types and registers a `CoreEventsServiceToken` that exposes
-them. Import event names and payload types from `core-events`:
+names and payload types and registers a service that exposes them. Import
+event names and payload types from `core-events`:
 
 ```ts
 import { EVENTS } from "core-events";
