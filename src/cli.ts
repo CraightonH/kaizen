@@ -66,7 +66,7 @@ const DEFAULT_PLUGINS = {
     "official/core-executor-anthropic@0.1.0",
     "official/core-ui-terminal@0.1.0",
     "official/core-cli@0.1.0",
-    "official/core-lifecycle@0.1.0",
+    "official/core-driver@0.1.0",
   ],
   "core-executor-anthropic": {
     model: "claude-opus-4-6",
