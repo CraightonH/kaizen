@@ -73,7 +73,7 @@ afterEach(() => {
 interface PluginSpec {
   name: string;
   apiVersion?: string;
-  lifecycle?: boolean;
+  driver?: boolean;
   capabilities?: { provides?: string[]; consumes?: string[] };
   aliases?: Record<string, string>;
   permissions?: unknown;
@@ -93,7 +93,7 @@ function writePlugin(spec: PluginSpec): string {
   parts.push(`export default {`);
   parts.push(`  name: ${JSON.stringify(spec.name)},`);
   parts.push(`  apiVersion: ${JSON.stringify(spec.apiVersion ?? "2")},`);
-  if (spec.lifecycle) parts.push(`  lifecycle: true,`);
+  if (spec.driver) parts.push(`  driver: true,`);
   if (spec.capabilities) parts.push(`  capabilities: ${JSON.stringify(spec.capabilities)},`);
   if (spec.aliases) parts.push(`  aliases: ${JSON.stringify(spec.aliases)},`);
   if (spec.permissions !== undefined) parts.push(`  permissions: ${JSON.stringify(spec.permissions)},`);
@@ -107,14 +107,14 @@ function writePlugin(spec: PluginSpec): string {
 }
 
 describe("PluginManager.initialize", () => {
-  test("calls setup on all plugins and returns lifecycle provider", async () => {
+  test("calls setup on all plugins and returns driver", async () => {
     const bridgeKey = `__kz_test_${Date.now()}_${Math.random()}__`;
     (globalThis as Record<string, unknown>)[bridgeKey] = { calls: [] as string[] };
     const lifeDir = writePlugin({
-      name: "core-lifecycle",
-      lifecycle: true,
+      name: "core-driver",
+      driver: true,
       hasStart: true,
-      setupBody: `globalThis[${JSON.stringify(bridgeKey)}].calls.push("core-lifecycle");`,
+      setupBody: `globalThis[${JSON.stringify(bridgeKey)}].calls.push("core-driver");`,
     });
 
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
@@ -128,16 +128,16 @@ describe("PluginManager.initialize", () => {
     );
     const { driver } = await manager.initialize();
     const bridge = (globalThis as unknown as Record<string, { calls: string[] }>)[bridgeKey]!;
-    expect(bridge.calls).toEqual(["core-lifecycle"]);
-    expect(driver.name).toBe("core-lifecycle");
+    expect(bridge.calls).toEqual(["core-driver"]);
+    expect(driver.name).toBe("core-driver");
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
 
-  test("plugin with lifecycle:true is treated as critical — setup throws are fatal", async () => {
+  test("plugin with driver:true is treated as critical — setup throws are fatal", async () => {
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
     const lifeDir = writePlugin({
-      name: "core-lifecycle",
-      lifecycle: true,
+      name: "core-driver",
+      driver: true,
       hasStart: true,
       setupBody: `throw new Error("boom");`,
     });
@@ -151,11 +151,11 @@ describe("PluginManager.initialize", () => {
     await expect(manager.initialize()).rejects.toThrow(/provides critical capability.*boom/i);
   });
 
-  test("finds session driver via lifecycle:true flag — no capability required", async () => {
+  test("finds session driver via driver:true flag — no capability required", async () => {
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
     const driverDir = writePlugin({
-      name: "fixture-lifecycle",
-      lifecycle: true,
+      name: "fixture-driver",
+      driver: true,
       hasStart: true,
     });
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
@@ -166,10 +166,10 @@ describe("PluginManager.initialize", () => {
       lockfilePath, options,
     );
     const { driver } = await manager.initialize();
-    expect(driver.name).toBe("fixture-lifecycle");
+    expect(driver.name).toBe("fixture-driver");
   });
 
-  test("fatals when no plugin declares lifecycle:true", async () => {
+  test("fatals when no plugin declares driver:true", async () => {
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
     const dir = writePlugin({ name: "tool-only" });
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
@@ -179,13 +179,13 @@ describe("PluginManager.initialize", () => {
       enforcer, auditLog,
       lockfilePath, options,
     );
-    await expect(manager.initialize()).rejects.toThrow(/No lifecycle plugin found.*lifecycle: true/);
+    await expect(manager.initialize()).rejects.toThrow(/No driver plugin found.*driver: true/);
   });
 
-  test("fatals with names listed when two plugins declare lifecycle:true", async () => {
+  test("fatals with names listed when two plugins declare driver:true", async () => {
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
-    const a = writePlugin({ name: "a-life", lifecycle: true, hasStart: true });
-    const b = writePlugin({ name: "b-life", lifecycle: true, hasStart: true });
+    const a = writePlugin({ name: "a-driver", driver: true, hasStart: true });
+    const b = writePlugin({ name: "b-driver", driver: true, hasStart: true });
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: [a, b] },
@@ -194,14 +194,14 @@ describe("PluginManager.initialize", () => {
       lockfilePath, options,
     );
     await expect(manager.initialize()).rejects.toThrow(
-      /Multiple lifecycle plugins loaded: 'a-life', 'b-life'.*exactly one/,
+      /Multiple driver plugins loaded: 'a-driver', 'b-driver'.*exactly one/,
     );
   });
 
-  test("fatals when lifecycle plugin has no start() function", async () => {
+  test("fatals when driver plugin has no start() function", async () => {
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
     // Deliberately omit start().
-    const brokenDir = writePlugin({ name: "broken-life", lifecycle: true });
+    const brokenDir = writePlugin({ name: "broken-driver", driver: true });
     const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
     const manager = new PluginManager(
       { plugins: [brokenDir] },
@@ -210,7 +210,7 @@ describe("PluginManager.initialize", () => {
       lockfilePath, options,
     );
     await expect(manager.initialize()).rejects.toThrow(
-      /'broken-life' declares 'lifecycle: true' but does not export a start\(\) function/,
+      /'broken-driver' declares 'driver: true' but does not export a start\(\) function/,
     );
   });
 });
@@ -298,7 +298,7 @@ describe("PluginManager runtime accept-and-record (item 2)", () => {
       "};",
     ].join("\n"));
 
-    const lifeDir = writePlugin({ name: "core-lifecycle", lifecycle: true, hasStart: true });
+    const lifeDir = writePlugin({ name: "core-driver", driver: true, hasStart: true });
 
     const { eventBus, capabilityRegistry, serviceRegistry } = makeRegistries();
     const enforcer = new PermissionEnforcer({ mode: "log-only" });
@@ -407,7 +407,7 @@ describe("PluginManager capability validation", () => {
       setupBody: `ctx.defineCapability("owner:bag", { cardinality: "many", description: "" });`,
     });
     const consumerDir = writePlugin({ name: "consumer", capabilities: { consumes: ["owner:bag"] } });
-    const lifeDir = writePlugin({ name: "core-lifecycle", lifecycle: true, hasStart: true });
+    const lifeDir = writePlugin({ name: "core-driver", driver: true, hasStart: true });
     const manager = new PluginManager(
       { plugins: [ownerDir, consumerDir, lifeDir] },
       regs.eventBus, regs.capabilityRegistry, regs.serviceRegistry,
@@ -443,15 +443,15 @@ describe("PluginManager capability validation", () => {
     const bridgeKey = `__kz_alias_${Date.now()}_${Math.random()}__`;
     (globalThis as Record<string, unknown>)[bridgeKey] = { ran: false };
     const lifeDir = writePlugin({
-      name: "core-lifecycle",
-      lifecycle: true,
+      name: "core-driver",
+      driver: true,
       hasStart: true,
-      capabilities: { provides: ["core-lifecycle:executor.send"] },
-      setupBody: `ctx.defineCapability("core-lifecycle:executor.send", { cardinality: "many", description: "" });`,
+      capabilities: { provides: ["core-driver:executor.send"] },
+      setupBody: `ctx.defineCapability("core-driver:executor.send", { cardinality: "many", description: "" });`,
     });
     const consumerDir = writePlugin({
       name: "consumer",
-      aliases: { "executor": "core-lifecycle:executor.send" },
+      aliases: { "executor": "core-driver:executor.send" },
       capabilities: { consumes: ["executor"] },
       setupBody: `globalThis[${JSON.stringify(bridgeKey)}].ran = true;`,
     });
@@ -469,7 +469,7 @@ describe("PluginManager capability validation", () => {
 
   test("owner-prefix mismatch throws during setup (plugin flagged as failed when not critical)", async () => {
     const regs = baseRegistries();
-    const lifeDir = writePlugin({ name: "core-lifecycle", lifecycle: true, hasStart: true });
+    const lifeDir = writePlugin({ name: "core-driver", driver: true, hasStart: true });
     const badDir = writePlugin({
       name: "bad",
       capabilities: { provides: [] },
