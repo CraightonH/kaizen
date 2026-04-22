@@ -3,9 +3,28 @@
 *Read when: you want to understand what a plugin is before building one.*
 
 This document explains plugins conceptually — what they are, how they load,
-how they declare capabilities, and the permission tiers they can pick. For
+how they declare services, and the permission tiers they can pick. For
 exact type signatures and field-level reference, see
 [`../reference/plugin-api.md`](../reference/plugin-api.md).
+
+## Authoring decision matrix {#decision-matrix}
+
+Four mechanisms, four decision points:
+
+| If you need… | Use | Permission |
+|---|---|---|
+| A type, class, constant, or helper the platform itself provides | `import from "kaizen/types"` (host API) | n/a — platform surface |
+| A type, class, or constant from another plugin's public contract | `import type { X } from "<marketplace>/<plugin>/public"` — types only, erased at build | n/a — no runtime coupling |
+| Another plugin to do work and return a result | `ctx.provideService("name", impl)` / `ctx.useService<T>("name")` | None. Risk lives with the provider |
+| To announce that something happened and let others react or transform it | `ctx.defineEvent("name")` / `ctx.emit(...)` / `ctx.on("other:name", handler)` | Subscribing requires declared `events.subscribe` grant |
+
+Rules of thumb:
+
+- **Services are for pull** ("give me X"); **events are for push** ("X happened").
+- A plugin that emits events doesn't know or care who subscribes.
+- A plugin that provides a service expects consumers to know it exists.
+- Types always come from static `import type`. A consumer can use a service without seeing its types (at the cost of `unknown`).
+- Host API is for things **every** plugin would want. When two plugins share something, it's a service, not a host-API addition.
 
 ## What is a plugin
 
@@ -20,12 +39,12 @@ itself:
 - **`permissions`** — the security tier (`trusted`, `scoped`, `unscoped`)
   and, if SCOPED, the enumerated grants the plugin needs (filesystem paths,
   hosts, env vars, event subscriptions). See [Permission tiers](#permission-tiers).
-- **`capabilities`** — what this plugin provides and consumes in the
-  capability registry. See [Capabilities and dependencies](#capabilities).
-- **`setup(ctx)`** — the one method core calls. Plugins register services
-  (`ctx.registerService`), declare capabilities (`ctx.defineCapability`),
-  and subscribe to events — all during `setup()`. Anything registered after
-  `setup()` returns will throw.
+- **`services`** — what this plugin provides and consumes in the
+  service registry. See [Services and dependencies](#services).
+- **`setup(ctx)`** — the one method core calls. Plugins define and provide
+  services (`ctx.defineService`, `ctx.provideService`), declare consumption
+  intent (`ctx.consumeService`), and subscribe to events — all during
+  `setup()`. Anything registered after `setup()` returns will throw.
 
 A plugin may additionally declare `driver: true` to become the session
 driver (see below), and may provide a `config` section describing the config
@@ -52,49 +71,54 @@ The high-level sequence when you run `kaizen --harness <something>`:
    persist in the harness's `permissions.lock` (see `docs/concepts/harnesses.md`).
 4. **Setup.** Plugins are topologically sorted by their declared dependencies
    and each `setup(ctx)` runs in order. After all `setup()` calls complete,
-   core validates capability cardinality and then calls `start(ctx)` on the
-   single session driver.
+   core validates that every consumed service has a provider, then calls
+   `start(ctx)` on the single session driver.
 
 Exact loader mechanics — the compiled-binary `createRequire` anchor, package
 shape requirements, the dep-resolution walk for plugin-internal imports —
 live in [`core-internals.md`](../core-internals.md).
 
-## Capabilities and dependencies {#capabilities}
+## Services and dependencies {#services}
 
 Plugins don't reach into each other directly. They interact through the
-**capability registry**: named, typed interfaces that plugins own, provide,
+**service registry**: named, typed interfaces that plugins define, provide,
 and consume.
 
 ### Owner-qualified names
 
-Every capability name is qualified by the plugin that defined it:
+Every service name is qualified by the plugin that defined it:
 `<owner-plugin>:<name>`. For example, `core-events:service` is owned by
-`core-events`; only `core-events` may register a provider for it. This rule
-prevents namespace hijacking — one plugin cannot declare itself the provider
-of another plugin's capability.
+`core-events`; only `core-events` may provide an implementation for it. This
+rule prevents namespace hijacking — one plugin cannot declare itself the
+provider of another plugin's service.
 
-### Cardinality
+### One provider per service
 
-Each capability is either `one` (exactly one provider must be loaded when
-any plugin consumes it) or `many` (any number of providers, consumers
-receive all of them). Core enforces cardinality after all `setup()` calls:
-missing or over-subscribed `one` capabilities are fatal startup errors.
+Every service is **cardinality "one"**: exactly one provider permitted. A
+second `provideService` call for the same name is a fatal startup error.
+Multiple distinct services with different names (`core-terminal-ui:ui`,
+`core-web-ui:ui`) let multiple implementations coexist; consumers pick
+the specific name they need. Consumers are unlimited — any number of plugins
+may call `useService` for the same name.
+
+Core enforces after all `setup()` calls: missing providers and consumed-but-
+undefined services are fatal.
 
 ### Declaring dependencies
 
-A plugin declares what it wires into via `capabilities.consumes` and what it
-offers via `capabilities.provides`. Topo-sort uses these declarations to
+A plugin declares what it wires into via `services.consumes` and what it
+offers via `services.provides`. Topo-sort uses these declarations to
 guarantee that providers initialize before consumers, so a consumer can call
-`ctx.getService(...)` inside its own `setup()`.
+`ctx.consumeService(...)` inside its own `setup()` safely.
 
 ```ts
-capabilities: {
+services: {
   provides: ["my-plugin:thing"],
   consumes: ["core-events:service"],
 }
 ```
 
-Consumers should declare every capability they actually read; undeclared
+Consumers should declare every service they actually use; undeclared
 consumption works today by coincidence of load order and will break the
 moment the order changes.
 
@@ -103,8 +127,9 @@ moment the order changes.
 Three moments matter for a plugin author:
 
 - **`setup(ctx)`** — runs once during `INITIALIZING`. The only time you can
-  call `registerService`, `defineCapability`, `defineEvent`, or `on`. Do all
-  wiring here; subscribe to events for everything that needs to react later.
+  call `defineService`, `provideService`, `consumeService`, `defineEvent`, or
+  `on`. Do all wiring here; subscribe to events for everything that needs to
+  react later.
 - **Event handlers** — registered via `ctx.on(name, handler)` during
   `setup()`. Core invokes them serially during `RUNNING`. Handler order
   follows initialization order (so a consumer's handler runs after its

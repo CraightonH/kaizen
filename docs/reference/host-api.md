@@ -11,10 +11,8 @@ between kaizen and all plugins."
 ```ts
 import {
   // Runtime values
-  ServiceToken,
   createLLMRuntime,
   readStdinLine,
-  SecretsProviderToken,
   PLUGIN_API_VERSION,
   // Types (erased at runtime)
   type KaizenPlugin,
@@ -28,48 +26,6 @@ import {
 ## Runtime values
 
 These are real values — callable classes, constants, and functions.
-
-### `ServiceToken`
-
-```ts
-class ServiceToken<T> {
-  readonly label: string;
-  constructor(label: string);
-}
-```
-
-An unforgeable, typed key used with the plugin service registry. Each
-`new ServiceToken(label)` produces a distinct key even if two tokens share the
-same label string (tokens use internal `Symbol` identity).
-
-Use it to expose one plugin's API to another. Convention: the token label
-matches the service's TypeScript interface name.
-
-```ts
-export interface MyService { greet(name: string): string }
-export const MyServiceToken = new ServiceToken<MyService>("MyService");
-```
-
-Paired with `ctx.registerService(token, impl)` in the provider and
-`ctx.getService(token)` in the consumer. Consumers must list the provider in
-`depends[]`/`consumes[]` so initialization order is enforced. See
-[`src/core/service-registry.ts`](../../src/core/service-registry.ts).
-
-### `SecretsProviderToken`
-
-```ts
-const SecretsProviderToken: ServiceToken<SecretProvider>;
-```
-
-The canonical token harness-authored secret providers register under. A
-harness that adds a custom secret provider calls:
-
-```ts
-ctx.registerService(SecretsProviderToken, myProvider);
-```
-
-Defined in [`src/core/secrets.ts`](../../src/core/secrets.ts) as
-`new ServiceToken<SecretProvider>("core-secrets:provider")`.
 
 ### `createLLMRuntime`
 
@@ -240,9 +196,8 @@ for type annotations in your plugin source. Full shapes are in
 - `PluginPermissions` — permission manifest
 - `PermissionTier` — `"trusted" | "scoped" | "unscoped"`
 - `PermissionOp` — tagged union passed to `PermissionEnforcer.check()`
-- `PluginCapabilities` — `{ provides?; consumes? }`
-- `CapabilitySpec` — capability declaration shape
-- `Cardinality` — `"one" | "many"`
+- `PluginServices` — `{ provides?; consumes? }`
+- `ServiceSpec` — service declaration shape
 - `PluginConfigDeclaration` — `{ schema?; defaults?; secrets? }`
 - `SecretRef` / `StructuredSecretRef` — `kaizen.json` secret ref shapes
 - `SecretsContext` — `ctx.secrets` full-featured surface (`get`, `refresh`)

@@ -107,22 +107,22 @@ permissions: {
 
 ### Format and conventions
 
-- [required] Capability names follow the format `<owner-plugin>:<local-name>`
+- [required] Service names follow the format `<owner-plugin>:<local-name>`
 - [required] `<owner-plugin>` is the kebab-case plugin name (e.g., `my-tool`, `core-driver`)
 - [required] `<local-name>` uses dot-separated kebab-case for nested concepts (e.g., `tool.handler`, `events.before-turn`)
-- [required] Use existing capabilities from core or other plugins when available; do not duplicate
-- [guideline] Document each provided capability with a `defineCapability()` call that includes a human-readable description
+- [required] Use existing services from core or other plugins when available; do not duplicate
+- [guideline] Document each provided service with a `defineService()` call that includes a human-readable description
 
 ### Example
 
 ```typescript
 async setup(ctx) {
-  ctx.defineCapability("my-tool:event-handler", {
-    cardinality: "many",
+  ctx.defineService("my-tool:event-handler", {
     description: "Allows other plugins to hook into my-tool's event lifecycle"
   });
 
-  // Consuming a capability
+  // Declare consumption intent
+  ctx.consumeService("core-events:service");
 }
 ```
 
@@ -197,9 +197,10 @@ function makeCtx() {
     config: {},
     log: (msg: string) => console.log(`[test] ${msg}`),
     secrets: { get: async () => undefined },
-    registerService: () => {},
-    getService: () => { throw new Error("not registered"); },
-    defineCapability: () => {},
+    defineService: () => {},
+    provideService: () => {},
+    consumeService: () => {},
+    useService: () => { throw new Error("not provided"); },
     defineEvent: () => {},
     on: () => {},
     emit: async () => [],
