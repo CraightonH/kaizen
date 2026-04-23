@@ -40,6 +40,13 @@ export async function ensureKaizenHome(): Promise<void> {
   mkdirSync(marketplacesDir(), { recursive: true });
 }
 
+const ALLOWED_TOP_LEVEL_KEYS = new Set([
+  "defaults",
+  "marketplaces",
+  "marketplaceUpdateTTL",
+]);
+const ALLOWED_DEFAULTS_KEYS = new Set(["harness", "plugin_config"]);
+
 export async function loadKaizenGlobalConfig(): Promise<KaizenGlobalConfig> {
   const path = kaizenHomeConfigPath();
   if (!existsSync(path)) return {};
@@ -48,7 +55,67 @@ export async function loadKaizenGlobalConfig(): Promise<KaizenGlobalConfig> {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error(`${path}: expected a JSON object.`);
   }
-  return parsed as KaizenGlobalConfig;
+  const obj = parsed as Record<string, unknown>;
+
+  if ("plugins" in obj) {
+    throw new Error(
+      `${path}: top-level 'plugins' key is not allowed. The plugin set is defined by the harness; ` +
+      `user config cannot add, remove, or replace plugins. Remove the 'plugins' key. See docs/concepts/configuration.md.`,
+    );
+  }
+  if ("extends" in obj) {
+    throw new Error(
+      `${path}: top-level 'extends' has been replaced by 'defaults.harness'. ` +
+      `Move the value under \`defaults\` and try again.`,
+    );
+  }
+  if ("default_harness" in obj) {
+    throw new Error(
+      `${path}: top-level 'default_harness' is not allowed — nest it as 'defaults.harness'.`,
+    );
+  }
+  if ("plugin_config" in obj) {
+    throw new Error(
+      `${path}: top-level 'plugin_config' is not allowed — nest it as 'defaults.plugin_config'.`,
+    );
+  }
+  const unknownKeys = Object.keys(obj).filter((k) => !ALLOWED_TOP_LEVEL_KEYS.has(k));
+  if (unknownKeys.length > 0) {
+    throw new Error(
+      `${path}: unknown top-level keys: ${unknownKeys.join(", ")}. ` +
+      `Allowed keys: ${[...ALLOWED_TOP_LEVEL_KEYS].join(", ")}.`,
+    );
+  }
+
+  if (obj.defaults !== undefined) {
+    if (typeof obj.defaults !== "object" || obj.defaults === null || Array.isArray(obj.defaults)) {
+      throw new Error(`${path}: 'defaults' must be an object.`);
+    }
+    const defaults = obj.defaults as Record<string, unknown>;
+    const unknownDefaultsKeys = Object.keys(defaults).filter((k) => !ALLOWED_DEFAULTS_KEYS.has(k));
+    if (unknownDefaultsKeys.length > 0) {
+      throw new Error(
+        `${path}: unknown keys under 'defaults': ${unknownDefaultsKeys.join(", ")}. ` +
+        `Allowed: ${[...ALLOWED_DEFAULTS_KEYS].join(", ")}. ` +
+        `If these are plugin names, move them under 'defaults.plugin_config'.`,
+      );
+    }
+    if (defaults.harness !== undefined && typeof defaults.harness !== "string") {
+      throw new Error(`${path}: 'defaults.harness' must be a string.`);
+    }
+    if (defaults.plugin_config !== undefined) {
+      if (typeof defaults.plugin_config !== "object" || defaults.plugin_config === null || Array.isArray(defaults.plugin_config)) {
+        throw new Error(`${path}: 'defaults.plugin_config' must be an object.`);
+      }
+      for (const [name, value] of Object.entries(defaults.plugin_config)) {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) {
+          throw new Error(`${path}: 'defaults.plugin_config.${name}' must be an object.`);
+        }
+      }
+    }
+  }
+
+  return obj as KaizenGlobalConfig;
 }
 
 /**

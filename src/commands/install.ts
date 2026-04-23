@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, writeFileSync } from "fs";
+import { readFileSync } from "fs";
 import { join } from "path";
 import type { PluginPermissions, MarketplaceCatalog } from "../types/plugin.js";
 import { parseRef, resolveRef } from "../core/ref-resolver.js";
@@ -12,7 +12,6 @@ import { canonicalTierGrantHash } from "../core/plugin-hash.js";
 import { renderScopedUAC, renderUnscopedUAC } from "../core/uac-renderer.js";
 import { decideConsent } from "../core/consent-flow.js";
 import { readStdinLine } from "./cli-readline.js";
-import { PROJECT_CONFIG } from "../core/config.js";
 import { mergePluginConfig, separateSecrets } from "../core/config-merge.js";
 import { validateConfig, validateSchemaItself } from "../core/config-validator.js";
 
@@ -50,16 +49,7 @@ export async function runUnifiedInstall(args: UnifiedInstallArgs): Promise<numbe
       console.error(`plugin '${plugin.name}': config.schema is not valid JSON Schema`);
       return 1;
     }
-    const harnessConfig = (() => {
-      try {
-        if (existsSync(PROJECT_CONFIG)) {
-          const cfg = JSON.parse(readFileSync(PROJECT_CONFIG, "utf8")) as Record<string, unknown>;
-          return (cfg[plugin.name] as Record<string, unknown>) ?? {};
-        }
-      } catch { /* ignore */ }
-      return {};
-    })();
-    const merged = mergePluginConfig(plugin.config, {}, harnessConfig);
+    const merged = mergePluginConfig(plugin.config, {}, {});
     const { config: nonSecretConfig } = separateSecrets(merged, plugin.config.secrets ?? []);
     const errors = validateConfig(plugin.config.schema, nonSecretConfig);
     if (errors.length > 0) {
@@ -84,12 +74,10 @@ export async function runUnifiedInstall(args: UnifiedInstallArgs): Promise<numbe
   switch (decision.kind) {
     case "accept":
       console.log(`plugin '${resolved.entry.name}' already in lockfile (no changes).`);
-      await maybeAppendProjectPlugin(canonical);
       return 0;
 
     case "accept-and-record": {
       writeLockfile(args.lockfilePath, upsertPluginEntry(lockfile, resolved.entry.name, decision.entry));
-      await maybeAppendProjectPlugin(canonical);
       console.log(`plugin '${resolved.entry.name}' recorded (tier: ${decision.entry.tier}).`);
       return 0;
     }
@@ -100,7 +88,6 @@ export async function runUnifiedInstall(args: UnifiedInstallArgs): Promise<numbe
       const answer = (await readStdinLine()).trim().toLowerCase();
       if (answer === "a" || answer === "accept") {
         writeLockfile(args.lockfilePath, upsertPluginEntry(lockfile, resolved.entry.name, decision.entry));
-        await maybeAppendProjectPlugin(canonical);
         console.log(`plugin '${resolved.entry.name}' accepted and recorded.`);
         return 0;
       }
@@ -118,7 +105,6 @@ export async function runUnifiedInstall(args: UnifiedInstallArgs): Promise<numbe
       }
       const entry: LockfileEntry = { ...decision.entry, consentMode: "interactive" };
       writeLockfile(args.lockfilePath, upsertPluginEntry(lockfile, resolved.entry.name, entry));
-      await maybeAppendProjectPlugin(canonical);
       console.log(`plugin '${resolved.entry.name}' accepted as UNSCOPED and recorded.`);
       return 0;
     }
@@ -136,16 +122,6 @@ async function loadAllCatalogs(): Promise<Record<string, MarketplaceCatalog>> {
     try { out[ref.id] = await readCatalog(ref.id); } catch { /* skip bad */ }
   }
   return out;
-}
-
-async function maybeAppendProjectPlugin(canonicalRef: string): Promise<void> {
-  if (!existsSync(PROJECT_CONFIG)) return;
-  const cfg = JSON.parse(readFileSync(PROJECT_CONFIG, "utf8")) as { plugins?: string[] };
-  cfg.plugins ??= [];
-  if (!cfg.plugins.includes(canonicalRef)) {
-    cfg.plugins.push(canonicalRef);
-    writeFileSync(PROJECT_CONFIG, JSON.stringify(cfg, null, 2) + "\n", "utf8");
-  }
 }
 
 /** @deprecated use runUnifiedInstall. Retained for one release for cli.ts callers. */

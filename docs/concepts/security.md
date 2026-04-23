@@ -92,10 +92,8 @@ Review the proposed manifest, tighten globs by hand, paste into your plugin.
 
 Installing a SCOPED plugin prints a UAC showing all grants; the user accepts or
 rejects. Installing UNSCOPED requires typing the plugin name. Decisions persist
-to `permissions.lock` alongside each harness's `kaizen.json` (project:
-`.kaizen/harnesses/<name>/permissions.lock`; home: `~/.kaizen/harnesses/<name>/permissions.lock`;
-marketplace: `~/.kaizen/marketplaces/<id>/harnesses/<name>/permissions.lock`) — **commit
-project-scoped lockfiles**. Reviewers approve changes like code.
+to `permissions.lock` alongside each harness's `kaizen.json` (home: `~/.kaizen/harnesses/<name>/permissions.lock`;
+marketplace: `~/.kaizen/marketplaces/<id>/harnesses/<name>/permissions.lock`). Reviewers approve changes like code.
 
 Workflow:
 - `kaizen install <plugin>` — resolve, read manifest, run consent, write lockfile

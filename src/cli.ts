@@ -7,9 +7,10 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { bootstrap } from "./core/index.js";
-import { resolveConfig, findProjectConfig, resolveHarness, PROJECT_DIR, PROJECT_CONFIG, KAIZEN_HOME, KAIZEN_HOME_CONFIG } from "./core/config.js";
-import { readFileSync } from "fs";
-import { fatal } from "./core/errors.js";
+import { resolveHarnessOrFatal, KAIZEN_HOME, KAIZEN_HOME_CONFIG } from "./core/config.js";
+import { loadKaizenGlobalConfig, kaizenHome, kaizenHomeConfigPath } from "./core/kaizen-config.js";
+import { fatal, warn } from "./core/errors.js";
+import { warnStaleProjectConfig } from "./core/deprecation-warn.js";
 import { deriveLockfilePath } from "./core/lockfile-path.js";
 import {
   readLocalConfig,
@@ -48,52 +49,30 @@ const rawArgs = process.argv.slice(2);
 const subcommand = rawArgs[0];
 
 function getCliList(config: Record<string, unknown>): string[] {
-  const cliConfig = config["core-cli"] as Record<string, unknown> | undefined;
-  return (cliConfig?.["clis"] as string[] | undefined) ?? [];
+  const defaults = config["defaults"] as Record<string, unknown> | undefined;
+  const pluginConfig = defaults?.["plugin_config"] as Record<string, unknown> | undefined;
+  const coreCli = pluginConfig?.["core-cli"] as Record<string, unknown> | undefined;
+  return (coreCli?.["clis"] as string[] | undefined) ?? [];
 }
 
 function setCliList(config: Record<string, unknown>, clis: string[]): void {
-  if (typeof config["core-cli"] !== "object" || config["core-cli"] === null) {
-    config["core-cli"] = {};
+  if (typeof config["defaults"] !== "object" || config["defaults"] === null) {
+    config["defaults"] = {};
   }
-  (config["core-cli"] as Record<string, unknown>)["clis"] = clis;
+  const defaults = config["defaults"] as Record<string, unknown>;
+  if (typeof defaults["plugin_config"] !== "object" || defaults["plugin_config"] === null) {
+    defaults["plugin_config"] = {};
+  }
+  const pluginConfig = defaults["plugin_config"] as Record<string, unknown>;
+  if (typeof pluginConfig["core-cli"] !== "object" || pluginConfig["core-cli"] === null) {
+    pluginConfig["core-cli"] = {};
+  }
+  (pluginConfig["core-cli"] as Record<string, unknown>)["clis"] = clis;
 }
 
-function resolveHarnessJsonPath(opts: { harness?: string; extendsOverride?: string; configPath?: string }): string {
-  if (opts.harness) return resolveHarness(opts.harness).kaizenJsonPath;
-  if (opts.extendsOverride) return resolveHarness(opts.extendsOverride).kaizenJsonPath;
-  // Fallback: read extends out of the local (or global) config and resolve it.
-  const activePath = opts.configPath ?? findProjectConfig() ??
-    (existsSync(KAIZEN_HOME_CONFIG) ? KAIZEN_HOME_CONFIG : null);
-  if (activePath) {
-    try {
-      const raw = JSON.parse(readFileSync(activePath, "utf8")) as { extends?: unknown };
-      if (typeof raw.extends === "string") return resolveHarness(raw.extends).kaizenJsonPath;
-    } catch { /* resolveConfig will raise the right error */ }
-  }
-  return fatal(
-    `this command requires an active harness. Pass --harness <marketplace>/<name>@<version>, ` +
-    `or set 'extends' in kaizen.json. See docs/concepts/harnesses.md.`,
-  );
+function resolveHarnessJsonPath(opts: { harness?: string; extendsOverride?: string }): string {
+  return resolveHarnessOrFatal(opts).kaizenJsonPath;
 }
-
-const DEFAULT_PLUGINS = {
-  plugins: [
-    "official/core-events@0.1.0",
-    "official/core-executor-anthropic@0.1.0",
-    "official/core-ui-terminal@0.1.0",
-    "official/core-cli@0.1.0",
-    "official/core-driver@0.1.0",
-  ],
-  "core-executor-anthropic": {
-    model: "claude-opus-4-6",
-  },
-  "core-cli": {
-    clis: [] as string[],
-    allow_destructive: false,
-    subprocess_timeout_ms: 30000,
-  },
-};
 
 // ---------------------------------------------------------------------------
 // Subcommand: kaizen --help | -h | help
@@ -108,7 +87,7 @@ Usage:
   kaizen <subcommand> [args]
 
 Subcommands:
-  init [--global]                       scaffold kaizen.json (project or ~/.kaizen/)
+  init --global [--harness <ref>]       scaffold ~/.kaizen/kaizen.json
   install <ref> [--allow-unscoped]      install a plugin or harness
   uninstall <ref> [--purge]             uninstall a plugin
   update [<ref>]                        update plugins
@@ -119,7 +98,6 @@ Subcommands:
 
 Flags:
   --harness <ref>                       harness ref (marketplace/name@version)
-  --config <path>                       alternate kaizen.json path
   --trust-lockfile                      reuse existing lockfile; no prompts
   --non-interactive                     refuse any prompt-requiring consent
   --allow-unscoped                      permit non-interactive UNSCOPED consent
@@ -135,31 +113,49 @@ See docs/concepts/harnesses.md for harness configuration.`);
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: kaizen init [--global]
+// Deprecation check: warn if stale project-local config files are present.
+// Runs after --help so help output stays clean.
+// ---------------------------------------------------------------------------
+
+warnStaleProjectConfig({ warn });
+
+// ---------------------------------------------------------------------------
+// Subcommand: kaizen init --global [--harness <ref>]
 // ---------------------------------------------------------------------------
 
 if (subcommand === "init") {
   const isGlobal = rawArgs.includes("--global");
+  const harnessFlagIdx = rawArgs.findIndex((a) => a === "--harness");
+  const harnessRef = harnessFlagIdx >= 0 ? rawArgs[harnessFlagIdx + 1] : undefined;
 
-  if (isGlobal) {
-    if (existsSync(KAIZEN_HOME_CONFIG)) {
-      console.log(`~/.kaizen/kaizen.json already exists.`);
-      process.exit(0);
-    }
-    mkdirSync(KAIZEN_HOME, { recursive: true });
-    writeFileSync(KAIZEN_HOME_CONFIG, JSON.stringify(DEFAULT_PLUGINS, null, 2) + "\n", "utf8");
-    console.log(`Created ~/.kaizen/kaizen.json`);
-  } else {
-    if (existsSync(PROJECT_CONFIG)) {
-      console.log(`.kaizen/kaizen.json already exists.`);
-      process.exit(0);
-    }
-    mkdirSync(PROJECT_DIR, { recursive: true });
-    writeFileSync(PROJECT_CONFIG, JSON.stringify(DEFAULT_PLUGINS, null, 2) + "\n", "utf8");
-    console.log(`Created .kaizen/kaizen.json`);
+  if (!isGlobal) {
+    console.error(
+      `'kaizen init' now requires --global.\n` +
+      `Project-level kaizen config is no longer supported.\n` +
+      `Run: kaizen init --global [--harness <ref>]`,
+    );
+    process.exit(2);
   }
 
-  console.log(`Run 'kaizen add <cli>' to register CLI tools.`);
+  const homeConfigPath = kaizenHomeConfigPath();
+  if (existsSync(homeConfigPath)) {
+    console.log(`~/.kaizen/kaizen.json already exists.`);
+    process.exit(0);
+  }
+
+  mkdirSync(kaizenHome(), { recursive: true });
+  const initBody: Record<string, unknown> = {};
+  if (harnessRef) initBody.defaults = { harness: harnessRef };
+  writeFileSync(homeConfigPath, JSON.stringify(initBody, null, 2) + "\n", "utf8");
+
+  if (harnessRef) {
+    console.log(`Created ~/.kaizen/kaizen.json with defaults.harness=${harnessRef}`);
+  } else {
+    console.log(
+      `Created ~/.kaizen/kaizen.json.\n` +
+      `Pass --harness on each run, or add 'defaults.harness' to the file.`,
+    );
+  }
   process.exit(0);
 }
 
@@ -178,7 +174,7 @@ if (subcommand === "add") {
     clis.push(cliName);
     setCliList(config, clis);
     writeLocalConfig(config);
-    console.log(`Added '${cliName}' to core-cli.clis.`);
+    console.log(`Added '${cliName}' to defaults.plugin_config.core-cli.clis.`);
   }
   process.exit(0);
 }
@@ -198,7 +194,7 @@ if (subcommand === "remove") {
   } else {
     setCliList(config, filtered);
     writeLocalConfig(config);
-    console.log(`Removed '${cliName}' from core-cli.clis.`);
+    console.log(`Removed '${cliName}' from defaults.plugin_config.core-cli.clis.`);
   }
   process.exit(0);
 }
@@ -386,7 +382,6 @@ if (subcommand === "plugin") {
   if (pluginSub === "dev" && rest.includes("--observe")) {
     const { runPluginDevObserve } = await import("./commands/plugin-dev.js");
     const { readFileSync } = await import("fs");
-    const { resolveConfig: resolveConfigInner } = await import("./core/config.js");
     const nameArg = rest.find((a) => !a.startsWith("--"));
     if (!nameArg) {
       console.error("usage: kaizen plugin dev --observe <plugin-dir>");
@@ -400,8 +395,9 @@ if (subcommand === "plugin") {
     // Honor --harness flag if provided
     const harnessIdx = rest.indexOf("--harness");
     const devHarnessArg = harnessIdx !== -1 ? rest[harnessIdx + 1] : undefined;
-    const devConfig = resolveConfigInner(devHarnessArg !== undefined ? { harness: devHarnessArg } : {});
-    const devHarnessJsonPath = resolveHarnessJsonPath(devHarnessArg !== undefined ? { harness: devHarnessArg } : {});
+    const { kaizenJsonPath: devHarnessJsonPath, config: devConfig } = resolveHarnessOrFatal(
+      devHarnessArg !== undefined ? { harness: devHarnessArg } : {},
+    );
     const devLockfilePath = deriveLockfilePath(devHarnessJsonPath);
     const code = await runPluginDevObserve({ pluginName, pluginDir, outDir, kaizenConfig: devConfig, lockfilePath: devLockfilePath });
     process.exit(code);
@@ -508,9 +504,12 @@ if (subcommand === "plugin") {
   }
 
   switch (pluginSub) {
-    case "list":
-      cmdPluginList();
+    case "list": {
+      const harnessIdxForList = rawArgs.findIndex((a) => a === "--harness");
+      const harnessRefForList = harnessIdxForList >= 0 ? rawArgs[harnessIdxForList + 1] : undefined;
+      await cmdPluginList(harnessRefForList);
       break;
+    }
     case "install":
     case "remove":
       console.error(
@@ -535,9 +534,8 @@ if (subcommand === "service") {
   const sub = rawArgs[1];
   const { serviceList, serviceShow } = await import("./commands/service.js");
   const { initializePluginSystem } = await import("./core/index.js");
-  const harnessJsonPath = resolveHarnessJsonPath({});
+  const { kaizenJsonPath: harnessJsonPath, config: cfg } = resolveHarnessOrFatal({});
   const lockfilePath = deriveLockfilePath(harnessJsonPath);
-  const cfg = resolveConfig({});
   const { serviceRegistry } = await initializePluginSystem(cfg, { lockfilePath });
   if (sub === "list") {
     serviceList(serviceRegistry);
@@ -559,16 +557,14 @@ if (subcommand === "service") {
 // Subcommand: kaizen run [prompt]  (also: kaizen [flags])
 // ---------------------------------------------------------------------------
 
-const FLAGS_WITH_VALUE = new Set(["--harness", "--config"]);
+const FLAGS_WITH_VALUE = new Set(["--harness"]);
 
 function parseRunArgs(args: string[]): {
   harness?: string;
-  configPath?: string;
   allowDestructive: boolean;
   prompt?: string;
 } {
   let harness: string | undefined;
-  let configPath: string | undefined;
   let allowDestructive = false;
   const positional: string[] = [];
 
@@ -578,7 +574,6 @@ function parseRunArgs(args: string[]): {
     if (FLAGS_WITH_VALUE.has(arg)) {
       const val = args[i + 1] ?? "";
       if (arg === "--harness") harness = val;
-      if (arg === "--config") configPath = val;
       i += 2;
     } else if (arg === "--allow-destructive") {
       allowDestructive = true;
@@ -596,7 +591,6 @@ function parseRunArgs(args: string[]): {
 
   return {
     ...(harness !== undefined ? { harness } : {}),
-    ...(configPath !== undefined ? { configPath } : {}),
     allowDestructive,
     ...(prompt !== undefined ? { prompt } : {}),
   };
@@ -614,41 +608,22 @@ const allowUnscopedFlag = rawArgs.includes("--allow-unscoped");
 
 const { looksLikeHarnessRef, materializeHarnessRef } = await import("./core/kaizen-config.js");
 
-// Materialize a marketplace-ref --harness to a concrete path.
+// If no --harness on CLI, check ~/.kaizen/kaizen.json for defaults.harness.
 let harnessArg = parsed.harness;
+if (harnessArg === undefined) {
+  const globalCfgForHarness = await loadKaizenGlobalConfig();
+  harnessArg = globalCfgForHarness.defaults?.harness;
+}
+
+// Materialize a marketplace-ref --harness to a concrete path.
 if (harnessArg !== undefined && looksLikeHarnessRef(harnessArg)) {
   harnessArg = await materializeHarnessRef(harnessArg);
 }
 
-// Materialize a marketplace-ref `extends` in the local (or home) config,
-// so resolveConfig can stay sync.
-let extendsOverride: string | undefined;
-if (harnessArg === undefined) {
-  const activePath = parsed.configPath ?? findProjectConfig() ??
-    (existsSync(KAIZEN_HOME_CONFIG) ? KAIZEN_HOME_CONFIG : null);
-  if (activePath) {
-    try {
-      const raw = JSON.parse(readFileSync(activePath, "utf8")) as { extends?: unknown };
-      const ext = typeof raw.extends === "string" ? raw.extends : null;
-      if (ext && looksLikeHarnessRef(ext)) {
-        extendsOverride = await materializeHarnessRef(ext);
-      }
-    } catch { /* ignore; resolveConfig will surface parse errors */ }
-  }
-}
-
-const harnessJsonPath = resolveHarnessJsonPath({
-  ...(harnessArg !== undefined ? { harness: harnessArg } : {}),
-  ...(extendsOverride !== undefined ? { extendsOverride } : {}),
-  ...(parsed.configPath !== undefined ? { configPath: parsed.configPath } : {}),
-});
+const { kaizenJsonPath: harnessJsonPath, config: kaizenConfig } = resolveHarnessOrFatal(
+  harnessArg !== undefined ? { harness: harnessArg } : {},
+);
 const lockfilePath = deriveLockfilePath(harnessJsonPath);
-
-const kaizenConfig = resolveConfig({
-  ...(harnessArg !== undefined ? { harness: harnessArg } : {}),
-  ...(parsed.configPath !== undefined ? { configPath: parsed.configPath } : {}),
-  ...(extendsOverride !== undefined ? { extendsOverride } : {}),
-});
 
 // Bootstrap any missing marketplaces + plugins referenced by the harness.
 if ((kaizenConfig.marketplaces as unknown[])?.length || ((kaizenConfig.plugins as string[] | undefined) ?? []).some((p: string) => p.includes("/"))) {
@@ -674,9 +649,8 @@ if (parsed.prompt) {
 
 // Background marketplace refresh (non-blocking).
 {
-  const { loadKaizenGlobalConfig: loadGlobal2 } = await import("./core/kaizen-config.js");
   const { shouldRefresh, refreshInBackground } = await import("./core/marketplace.js");
-  const globalCfg = await loadGlobal2();
+  const globalCfg = await loadKaizenGlobalConfig();
   const ttl = globalCfg.marketplaceUpdateTTL ?? 900;
   for (const m of globalCfg.marketplaces ?? []) {
     if (shouldRefresh(m, ttl)) refreshInBackground(m.id);

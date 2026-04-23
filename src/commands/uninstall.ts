@@ -1,5 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, rmSync } from "fs";
-import { PROJECT_CONFIG } from "../core/config.js";
+import { rmSync } from "fs";
 import { readLockfile, writeLockfile, removePluginEntry } from "../core/lockfile.js";
 import { loadKaizenGlobalConfig } from "../core/kaizen-config.js";
 import { readCatalog } from "../core/marketplace.js";
@@ -31,18 +30,6 @@ export async function runUninstall(args: UninstallArgs): Promise<number> {
       rmSync(pluginInstallDir(r.marketplaceId, r.entry.name, r.version), { recursive: true, force: true });
     }
   } catch { /* uninstall still removes from harness + lockfile */ }
-
-  // Remove from project harness.
-  if (existsSync(PROJECT_CONFIG)) {
-    const h = JSON.parse(readFileSync(PROJECT_CONFIG, "utf8")) as { plugins?: string[] };
-    const before = h.plugins?.length ?? 0;
-    h.plugins = (h.plugins ?? []).filter((p) =>
-      p !== name && (canonicalPrefix ? !p.startsWith(canonicalPrefix) : true),
-    );
-    if ((h.plugins?.length ?? 0) !== before) {
-      writeFileSync(PROJECT_CONFIG, JSON.stringify(h, null, 2) + "\n", "utf8");
-    }
-  }
 
   // Remove from lockfile when --purge.
   if (args.purge) {

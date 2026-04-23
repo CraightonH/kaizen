@@ -2,6 +2,10 @@
 
 *Read when: you want to share a pre-configured kaizen setup, or use one someone shared.*
 
+> **See also:** [`docs/concepts/configuration.md`](./configuration.md) — how user config in
+> `~/.kaizen/kaizen.json` interacts with the active harness (default harness selection,
+> per-plugin config overrides, and merge order).
+
 A **harness** is a `kaizen.json` — a plugin list plus default config for each plugin.
 Harnesses are distributed through **marketplaces** alongside plugins. A harness
 entry in a marketplace catalog points at a versioned directory containing a
@@ -59,41 +63,6 @@ kaizen --harness https://example.com/kaizen.json   # ERROR
 
 Raw URL harnesses are rejected. Publish the harness in a marketplace and
 reference it by ref instead.
-
-### Extending in kaizen.json
-
-```json
-{
-  "extends": "official/core-anthropic@0.1.0",
-  "core-driver": {
-    "systemPrompt": "You are a coding assistant."
-  }
-}
-```
-
-`extends` accepts the same forms as `--harness`:
-
-- A marketplace ref (`<marketplace-id>/<name>@<version>`) — materialized into
-  `~/.kaizen/marketplaces/<id>/harnesses/<name>/` on first run.
-- A bare name present in `.kaizen/harnesses/<name>/` or
-  `~/.kaizen/harnesses/<name>/`.
-- A local path (`./path/to/kaizen.json` or `./path/to/harness-dir/`).
-
-Raw URLs are rejected.
-
-The harness provides the base plugin list and config; your local `kaizen.json`
-overlays it.
-
-## Config merge rules
-
-| Key | Behavior |
-|-----|----------|
-| `plugins` | Local replaces harness entirely (if present) |
-| Plugin config objects | Shallow merge — local wins on key conflicts |
-| `extends` | Consumed during resolution, stripped from final config |
-
-If local `kaizen.json` omits `plugins`, it inherits the harness plugin stack.
-Add `plugins` to replace the stack entirely.
 
 ## Authoring a harness
 
@@ -172,9 +141,9 @@ next run because the tier-grant hash no longer matches.
 independent consent records — consenting in one does not grant consent in the
 other.
 
-**A named harness is required.** `kaizen` without `--harness` and without an
-`extends` entry in `.kaizen/kaizen.json` is an error. Use one of the three
-entry-point forms above.
+**A named harness is required.** `kaizen` without `--harness` and without
+`defaults.harness` set in `~/.kaizen/kaizen.json` is an error. Use one of the
+entry-point forms above, or set a default in your user config.
 
 ## Discovery
 
@@ -234,20 +203,3 @@ you've added.
 `kaizen-plugin-autonomous` provides the `driver` capability and runs
 headless — no `core-ui-terminal` needed.
 
-### Extending an installed harness with local overrides
-
-```json
-{
-  "extends": "./base-harness/kaizen.json",
-  "core-driver": {
-    "systemPrompt": "Focus on the payments service."
-  },
-  "core-cli": {
-    "clis": ["stripe", "gh"]
-  }
-}
-```
-
-`extends` takes a local path or a bare name under `.kaizen/harnesses/` or
-`~/.kaizen/harnesses/`. For a marketplace harness, use `--harness
-<marketplace>/<name>@<version>` at the CLI.

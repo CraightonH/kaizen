@@ -12,7 +12,7 @@ src/core/
   event-bus.ts        EventBus implementation
   service-registry.ts     ServiceRegistry — string-keyed define/provide/consume/use
   context.ts          createPluginContext() — state-checked facade
-  config.ts           kaizen.json loading, harness resolution, merging
+  config.ts           Harness kaizen.json loading and resolution (global user config is in kaizen-config.ts)
   errors.ts           fatal / warn / debug
 ```
 
@@ -134,27 +134,36 @@ Calling `on()` or `defineEvent()` outside the `INITIALIZING` state throws becaus
 
 Each plugin gets its own context instance with its own config slice.
 
-## Config system (`config.ts`)
+## Config system
 
-### Named harness required
+Kaizen has two distinct config layers; each lives in a separate module.
 
-Every invocation must resolve to a named harness, via `--harness` on the CLI
-or an `extends` field in the local / global `kaizen.json`. A bare
-`kaizen.json` with neither is an error:
+### User global config (`kaizen-config.ts`)
 
+`~/.kaizen/kaizen.json` — the only user-editable config file. Schema:
+
+```json
+{
+  "defaults": { "harness": "<ref>", "plugin_config": { "<plugin>": { ... } } },
+  "marketplaces": [ ... ],
+  "marketplaceUpdateTTL": 900
+}
 ```
-A named harness is required.
-See docs/concepts/harnesses.md.
-```
 
-### Harness resolution
+`loadKaizenGlobalConfig()` validates the schema strictly: `plugins`, `extends`, `default_harness`, `plugin_config` at top level, or any unknown key, is a fatal error. See [`docs/concepts/configuration.md`](concepts/configuration.md) for the full schema and migration notes.
+
+### Harness config and resolution (`config.ts`)
+
+Every invocation must resolve to a harness. The active harness is chosen by:
+1. `--harness` on the CLI
+2. `defaults.harness` in `~/.kaizen/kaizen.json`
 
 `resolveHarness(nameOrPath)` returns `{ kaizenJsonPath, config }`. It tries,
 in order:
 
 1. Project-scoped bare name → `.kaizen/harnesses/<name>/kaizen.json`
 2. Home-scoped bare name → `~/.kaizen/harnesses/<name>/kaizen.json`
-3. Explicit local path (`./`, `../`, `/`) → the kaizen.json at that path
+3. Explicit local path (`./`, `../`, `/`) → the `kaizen.json` at that path
 4. Raw URL → rejected (use a marketplace ref instead)
 
 Marketplace refs (`<id>/<name>@<version>`) are handled upstream in
@@ -162,12 +171,15 @@ Marketplace refs (`<id>/<name>@<version>`) are handled upstream in
 harness into `~/.kaizen/marketplaces/<id>/harnesses/<name>/` before passing
 the resulting absolute path to `resolveHarness`.
 
-### Config merge
+### Effective plugin config (`config-merge.ts`)
 
-Local overlays harness:
-- `plugins` array: local wins entirely if present.
-- Plugin config objects: shallow merge, local wins on key conflicts.
-- `extends`: consumed during resolution, not passed to plugins.
+For each plugin `P` in the active harness:
+
+```
+effective_config(P) = { ...plugin_declared_defaults, ...harness_defaults, ...user_plugin_config }
+```
+
+`defaults.plugin_config[P]` from `~/.kaizen/kaizen.json` wins over harness defaults. Harness defaults win over the plugin's own declared defaults.
 
 ### Per-harness lockfile path
 

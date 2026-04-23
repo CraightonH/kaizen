@@ -3,10 +3,10 @@
  *   plugin list               — list plugins with install status
  */
 
-import { existsSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
-import { findProjectConfig, PROJECT_CONFIG } from "../core/config.js";
-import { pluginInstallDir } from "../core/kaizen-config.js";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+import { KAIZEN_HOME_CONFIG, loadHarnessConfig } from "../core/config.js";
+import { pluginInstallDir, loadKaizenGlobalConfig, looksLikeHarnessRef, materializeHarnessRef } from "../core/kaizen-config.js";
 import { parseRef } from "../core/ref-resolver.js";
 
 // ---------------------------------------------------------------------------
@@ -14,20 +14,16 @@ import { parseRef } from "../core/ref-resolver.js";
 // ---------------------------------------------------------------------------
 
 export function readLocalConfig(): Record<string, unknown> {
-  const configPath = findProjectConfig();
-  if (!configPath) {
-    console.error("No .kaizen/kaizen.json found. Run 'kaizen init' to create one.");
+  if (!existsSync(KAIZEN_HOME_CONFIG)) {
+    console.error("No ~/.kaizen/kaizen.json found. Run 'kaizen init --global' to create one.");
     process.exit(1);
   }
-  return JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+  return JSON.parse(readFileSync(KAIZEN_HOME_CONFIG, "utf8")) as Record<string, unknown>;
 }
 
 export function writeLocalConfig(config: Record<string, unknown>): void {
-  writeFileSync(PROJECT_CONFIG, JSON.stringify(config, null, 2) + "\n", "utf8");
-}
-
-function getPlugins(config: Record<string, unknown>): string[] {
-  return (config["plugins"] as string[] | undefined) ?? [];
+  mkdirSync(dirname(KAIZEN_HOME_CONFIG), { recursive: true });
+  writeFileSync(KAIZEN_HOME_CONFIG, JSON.stringify(config, null, 2) + "\n", "utf8");
 }
 
 // ---------------------------------------------------------------------------
@@ -58,12 +54,31 @@ function statusFor(name: string): InstallStatus {
 // kaizen plugin list
 // ---------------------------------------------------------------------------
 
-export function cmdPluginList(): void {
-  const config = readLocalConfig();
-  const plugins = getPlugins(config);
+export async function cmdPluginList(harnessRef?: string): Promise<void> {
+  // Resolve active harness: CLI flag takes precedence, then defaults.harness.
+  let resolvedRef = harnessRef;
+  if (!resolvedRef) {
+    const globalCfg = await loadKaizenGlobalConfig();
+    resolvedRef = globalCfg.defaults?.harness;
+  }
+
+  if (!resolvedRef) {
+    console.log(
+      "No harness active. Pass --harness or set defaults.harness in ~/.kaizen/kaizen.json.",
+    );
+    return;
+  }
+
+  // Materialize marketplace refs (e.g. "official/core-shell@0.1.0") to local paths.
+  if (looksLikeHarnessRef(resolvedRef)) {
+    resolvedRef = await materializeHarnessRef(resolvedRef);
+  }
+
+  const harnessConfig = loadHarnessConfig(resolvedRef);
+  const plugins = (harnessConfig["plugins"] as string[] | undefined) ?? [];
 
   if (plugins.length === 0) {
-    console.log("No plugins configured in kaizen.json.");
+    console.log("No plugins configured in the active harness.");
     return;
   }
 

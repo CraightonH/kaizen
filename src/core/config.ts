@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import type { KaizenConfig } from "../types/plugin.js";
-import { fatal, warn } from "./errors.js";
+import { fatal } from "./errors.js";
 
 // ---------------------------------------------------------------------------
 // Well-known paths
@@ -13,13 +13,11 @@ export const KAIZEN_HOME_CONFIG = join(KAIZEN_HOME, "kaizen.json");
 export const KAIZEN_HOME_HARNESSES = join(KAIZEN_HOME, "harnesses");
 
 export const PROJECT_DIR = ".kaizen";
-export const PROJECT_CONFIG = join(PROJECT_DIR, "kaizen.json");
 export const PROJECT_HARNESSES = join(PROJECT_DIR, "harnesses");
 
-/** Legacy root-level kaizen.json — supported during migration. */
-export const LEGACY_CONFIG = "kaizen.json";
-
-// Reserved top-level keys — not treated as plugin config namespaces.
+// Reserved top-level keys in harness kaizen.json — not treated as plugin
+// config namespaces. Used by plugin-manager to reject plugin names that
+// would collide with these.
 export const RESERVED_KEYS = new Set(["plugins", "extends"]);
 
 // ---------------------------------------------------------------------------
@@ -85,7 +83,7 @@ export function loadHarnessConfig(nameOrPath: string): KaizenConfig {
 // Config loading
 // ---------------------------------------------------------------------------
 
-function validateConfig(config: Record<string, unknown>, source: string): void {
+function validateHarnessConfig(config: Record<string, unknown>, source: string): void {
   for (const [key, value] of Object.entries(config)) {
     if (Array.isArray(value) && value.some((v) => v === null || v === undefined)) {
       fatal(`Config error: '${key}' array in ${source} contains null/undefined entries.`);
@@ -104,154 +102,37 @@ function parseAndValidateHarness(path: string, label: string): KaizenConfig {
     fatal(`${path} must be a JSON object.`);
   }
   const config = raw as Record<string, unknown>;
-  validateConfig(config, path);
+  validateHarnessConfig(config, path);
   if (!config["plugins"]) fatal(`Harness '${label}' kaizen.json is missing 'plugins'.`);
   if (!Array.isArray(config["plugins"])) fatal(`Harness '${label}' kaizen.json 'plugins' must be an array.`);
   return config as KaizenConfig;
 }
 
-function parseConfigFile(path: string): Record<string, unknown> {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(readFileSync(path, "utf8"));
-  } catch (e) {
-    fatal(`Failed to parse ${path}: ${e instanceof Error ? e.message : String(e)}`);
-  }
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    fatal(`${path} must be a JSON object.`);
-  }
-  const config = raw as Record<string, unknown>;
-  validateConfig(config, path);
-  return config;
-}
-
-/**
- * Find the project config file.
- * Priority: .kaizen/kaizen.json > kaizen.json (legacy)
- */
-export function findProjectConfig(): string | null {
-  if (existsSync(PROJECT_CONFIG)) return PROJECT_CONFIG;
-  if (existsSync(LEGACY_CONFIG)) {
-    warn(`Found kaizen.json at root. Consider moving it to .kaizen/kaizen.json.`);
-    return LEGACY_CONFIG;
-  }
-  return null;
-}
-
-export function loadKaizenConfig(path: string): KaizenConfig {
-  if (!existsSync(path)) {
-    fatal(`Config not found at ${path}. Run 'kaizen init' to create one.`);
-  }
-  const config = parseConfigFile(path);
-  // plugins is optional when config delegates to a harness via 'extends'
-  if (config["plugins"] !== undefined && !Array.isArray(config["plugins"])) {
-    fatal(`${path} 'plugins' must be an array.`);
-  }
-  return config as KaizenConfig;
-}
-
 // ---------------------------------------------------------------------------
-// Config merging
+// Resolve the active harness from CLI args
 //
-// Harness is the base. Local config overlays it:
-//   - plugins: local replaces harness entirely (if specified)
-//   - plugin configs (objects): shallow-merged, local wins on conflicts
-//   - extends: stripped — it's resolved before merging
+// The caller is responsible for loading ~/.kaizen/kaizen.json and passing
+// defaults.harness via opts.harness before calling this function. Returns
+// both the kaizen.json path (for lockfile derivation) and the parsed config.
 // ---------------------------------------------------------------------------
 
-export function mergeConfigs(base: KaizenConfig, overlay: KaizenConfig): KaizenConfig {
-  const merged: Record<string, unknown> = { ...base };
-
-  for (const [key, value] of Object.entries(overlay)) {
-    if (key === "extends") continue;
-
-    if (key === "plugins") {
-      merged["plugins"] = value;
-    } else if (
-      typeof value === "object" && value !== null && !Array.isArray(value) &&
-      typeof merged[key] === "object" && merged[key] !== null && !Array.isArray(merged[key])
-    ) {
-      merged[key] = { ...(merged[key] as Record<string, unknown>), ...(value as Record<string, unknown>) };
-    } else {
-      merged[key] = value;
-    }
-  }
-
-  return merged as KaizenConfig;
-}
-
-// ---------------------------------------------------------------------------
-// Resolve the final config from CLI args
-//
-// Priority (highest → lowest):
-//   CLI --config flag
-//   .kaizen/kaizen.json      (project)
-//   kaizen.json              (legacy root)
-//   ~/.kaizen/kaizen.json    (global default)
-// ---------------------------------------------------------------------------
-
-export function resolveConfig(opts: {
+export function resolveHarnessOrFatal(opts: {
   harness?: string;
-  configPath?: string;
   /**
-   * Pre-materialized extends path (set by the CLI pre-pass when the local
-   * config's `extends` is a marketplace ref). Overrides the raw `extends`
-   * string read from the local config.
+   * Pre-materialized extends path (set by the CLI pre-pass when the caller
+   * already resolved a marketplace ref to a local harness dir).
    */
   extendsOverride?: string;
-}): KaizenConfig {
-  const { harness, configPath, extendsOverride } = opts;
-
-  // Explicit --config path
-  const explicitPath = configPath ?? null;
-  const projectConfigPath = explicitPath ?? findProjectConfig();
-
-  if (harness) {
-    const harnessConfig = loadHarnessConfig(harness);
-    if (projectConfigPath) {
-      const localConfig = loadKaizenConfig(projectConfigPath);
-      if (localConfig.extends && localConfig.extends !== harness) {
-        warn(`--harness ${harness} overrides extends '${localConfig.extends}' in config.`);
-      }
-      return mergeConfigs(harnessConfig, localConfig);
-    }
-    return harnessConfig;
+}): ResolvedHarness {
+  const ref = opts.harness ?? opts.extendsOverride;
+  if (!ref) {
+    fatal(
+      `A harness is required.\n` +
+      `  kaizen --harness <marketplace>/<name>@<version>\n` +
+      `  kaizen --harness ./path/to/harness/\n` +
+      `  Set 'defaults.harness' in ~/.kaizen/kaizen.json\n` +
+      `See docs/concepts/configuration.md.`,
+    );
   }
-
-  if (projectConfigPath) {
-    const localConfig = loadKaizenConfig(projectConfigPath);
-    const ext = extendsOverride ?? localConfig.extends;
-    if (!ext) {
-      fatal(
-        `A named harness required.\n` +
-        `Found ${projectConfigPath} but no --harness flag and no 'extends' field.\n` +
-        `See docs/concepts/harnesses.md. Valid forms:\n` +
-        `  kaizen --harness <marketplace>/<name>@<version>\n` +
-        `  kaizen --harness ./path/to/harness/\n` +
-        `  Add "extends": "<harness-ref>" to ${projectConfigPath}`,
-      );
-    }
-    return mergeConfigs(loadHarnessConfig(ext), localConfig);
-  }
-
-  // Global default
-  if (existsSync(KAIZEN_HOME_CONFIG)) {
-    const globalConfig = loadKaizenConfig(KAIZEN_HOME_CONFIG);
-    const ext = extendsOverride ?? globalConfig.extends;
-    if (!ext) {
-      fatal(
-        `A named harness required.\n` +
-        `Found ${KAIZEN_HOME_CONFIG} but no --harness flag and no 'extends' field.\n` +
-        `See docs/concepts/harnesses.md.`,
-      );
-    }
-    return mergeConfigs(loadHarnessConfig(ext), globalConfig);
-  }
-
-  fatal(
-    `No config found.\n` +
-    `  Harness (required): kaizen --harness <marketplace>/<name>@<version>\n` +
-    `  Project config:     kaizen init\n` +
-    `  Global config:      kaizen init --global`,
-  );
+  return resolveHarness(ref);
 }
