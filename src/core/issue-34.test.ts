@@ -2,7 +2,7 @@ import { test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { resolveConfig } from "./config.js";
+import { resolveHarnessOrFatal } from "./config.js";
 
 let dir: string;
 let cwdBackup: string;
@@ -47,7 +47,7 @@ test("issue #34: local .kaizen/kaizen.json cannot clobber --harness plugin list"
     "utf8",
   );
 
-  const cfg = resolveConfig({ harness: "./harness" });
+  const { config: cfg } = resolveHarnessOrFatal({ harness: "./harness" });
 
   expect(cfg.plugins).toEqual(["official/core-cli@0.1.0"]);
   // The "evil/injected" ref from project-local config must NOT appear.

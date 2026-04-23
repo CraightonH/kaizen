@@ -7,7 +7,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { bootstrap } from "./core/index.js";
-import { resolveConfig, resolveHarness, KAIZEN_HOME, KAIZEN_HOME_CONFIG } from "./core/config.js";
+import { resolveHarnessOrFatal, KAIZEN_HOME, KAIZEN_HOME_CONFIG } from "./core/config.js";
 import { loadKaizenGlobalConfig, kaizenHome, kaizenHomeConfigPath } from "./core/kaizen-config.js";
 import { fatal, warn } from "./core/errors.js";
 import { warnStaleProjectConfig } from "./core/deprecation-warn.js";
@@ -71,12 +71,7 @@ function setCliList(config: Record<string, unknown>, clis: string[]): void {
 }
 
 function resolveHarnessJsonPath(opts: { harness?: string; extendsOverride?: string }): string {
-  if (opts.harness) return resolveHarness(opts.harness).kaizenJsonPath;
-  if (opts.extendsOverride) return resolveHarness(opts.extendsOverride).kaizenJsonPath;
-  return fatal(
-    `this command requires an active harness. Pass --harness <marketplace>/<name>@<version>, ` +
-    `or set 'defaults.harness' in ~/.kaizen/kaizen.json. See docs/concepts/harnesses.md.`,
-  );
+  return resolveHarnessOrFatal(opts).kaizenJsonPath;
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +382,6 @@ if (subcommand === "plugin") {
   if (pluginSub === "dev" && rest.includes("--observe")) {
     const { runPluginDevObserve } = await import("./commands/plugin-dev.js");
     const { readFileSync } = await import("fs");
-    const { resolveConfig: resolveConfigInner } = await import("./core/config.js");
     const nameArg = rest.find((a) => !a.startsWith("--"));
     if (!nameArg) {
       console.error("usage: kaizen plugin dev --observe <plugin-dir>");
@@ -401,8 +395,9 @@ if (subcommand === "plugin") {
     // Honor --harness flag if provided
     const harnessIdx = rest.indexOf("--harness");
     const devHarnessArg = harnessIdx !== -1 ? rest[harnessIdx + 1] : undefined;
-    const devConfig = resolveConfigInner(devHarnessArg !== undefined ? { harness: devHarnessArg } : {});
-    const devHarnessJsonPath = resolveHarnessJsonPath(devHarnessArg !== undefined ? { harness: devHarnessArg } : {});
+    const { kaizenJsonPath: devHarnessJsonPath, config: devConfig } = resolveHarnessOrFatal(
+      devHarnessArg !== undefined ? { harness: devHarnessArg } : {},
+    );
     const devLockfilePath = deriveLockfilePath(devHarnessJsonPath);
     const code = await runPluginDevObserve({ pluginName, pluginDir, outDir, kaizenConfig: devConfig, lockfilePath: devLockfilePath });
     process.exit(code);
@@ -539,9 +534,8 @@ if (subcommand === "service") {
   const sub = rawArgs[1];
   const { serviceList, serviceShow } = await import("./commands/service.js");
   const { initializePluginSystem } = await import("./core/index.js");
-  const harnessJsonPath = resolveHarnessJsonPath({});
+  const { kaizenJsonPath: harnessJsonPath, config: cfg } = resolveHarnessOrFatal({});
   const lockfilePath = deriveLockfilePath(harnessJsonPath);
-  const cfg = resolveConfig({});
   const { serviceRegistry } = await initializePluginSystem(cfg, { lockfilePath });
   if (sub === "list") {
     serviceList(serviceRegistry);
@@ -626,14 +620,10 @@ if (harnessArg !== undefined && looksLikeHarnessRef(harnessArg)) {
   harnessArg = await materializeHarnessRef(harnessArg);
 }
 
-const harnessJsonPath = resolveHarnessJsonPath({
-  ...(harnessArg !== undefined ? { harness: harnessArg } : {}),
-});
+const { kaizenJsonPath: harnessJsonPath, config: kaizenConfig } = resolveHarnessOrFatal(
+  harnessArg !== undefined ? { harness: harnessArg } : {},
+);
 const lockfilePath = deriveLockfilePath(harnessJsonPath);
-
-const kaizenConfig = resolveConfig({
-  ...(harnessArg !== undefined ? { harness: harnessArg } : {}),
-});
 
 // Bootstrap any missing marketplaces + plugins referenced by the harness.
 if ((kaizenConfig.marketplaces as unknown[])?.length || ((kaizenConfig.plugins as string[] | undefined) ?? []).some((p: string) => p.includes("/"))) {

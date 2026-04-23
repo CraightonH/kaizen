@@ -109,33 +109,30 @@ function parseAndValidateHarness(path: string, label: string): KaizenConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Resolve the final config from CLI args
+// Resolve the active harness from CLI args
 //
 // The caller is responsible for loading ~/.kaizen/kaizen.json and passing
-// defaults.harness via opts.harness before calling this function.
+// defaults.harness via opts.harness before calling this function. Returns
+// both the kaizen.json path (for lockfile derivation) and the parsed config.
 // ---------------------------------------------------------------------------
 
-export function resolveConfig(opts: {
+export function resolveHarnessOrFatal(opts: {
   harness?: string;
   /**
    * Pre-materialized extends path (set by the CLI pre-pass when the caller
    * already resolved a marketplace ref to a local harness dir).
    */
   extendsOverride?: string;
-}): KaizenConfig {
-  const { harness, extendsOverride } = opts;
-
-  if (harness) {
-    return loadHarnessConfig(harness);
+}): ResolvedHarness {
+  const ref = opts.harness ?? opts.extendsOverride;
+  if (!ref) {
+    fatal(
+      `A harness is required.\n` +
+      `  kaizen --harness <marketplace>/<name>@<version>\n` +
+      `  kaizen --harness ./path/to/harness/\n` +
+      `  Set 'defaults.harness' in ~/.kaizen/kaizen.json\n` +
+      `See docs/concepts/configuration.md.`,
+    );
   }
-  if (extendsOverride) {
-    return loadHarnessConfig(extendsOverride);
-  }
-
-  fatal(
-    `A harness is required.\n` +
-    `  kaizen --harness <marketplace>/<name>@<version>\n` +
-    `  kaizen --harness ./path/to/harness/\n` +
-    `  Set 'defaults.harness' in ~/.kaizen/kaizen.json`,
-  );
+  return resolveHarness(ref);
 }
