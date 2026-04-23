@@ -2,9 +2,23 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix #34 by deleting kaizen's legacy project-level config path, consolidating on the existing `KaizenGlobalConfig` at `~/.kaizen/kaizen.json`, and flipping the plugin-config merge order so user globals win over harness defaults.
+**Goal:** Fix #34 by deleting kaizen's legacy project-level config path, consolidating on the existing `KaizenGlobalConfig` at `~/.kaizen/kaizen.json` with a nested `defaults` structure, and flipping the plugin-config merge order so user globals win over harness defaults.
 
-**Architecture:** Kaizen today has two coexisting config systems reading the same file. The legacy path (`src/core/config.ts`: `resolveConfig` + `mergeConfigs` + `findProjectConfig` + `PROJECT_CONFIG`/`LEGACY_CONFIG`) is where #34's clobber happens. The newer path (`src/core/kaizen-config.ts`: `KaizenGlobalConfig`, `loadKaizenGlobalConfig`, `mergePluginConfig`) is what stays. We delete the legacy path, rename `KaizenGlobalConfig.defaults` → `plugin_config` and `KaizenGlobalConfig.defaultHarness` → `default_harness`, flip `mergePluginConfig`'s merge order so user wins, add validation that rejects `plugins`/`extends`/unknown top-level keys, rewrite `kaizen init` to global-only, and add migration warnings for deprecated `.kaizen/kaizen.json` / root `kaizen.json` files.
+**Architecture:** Kaizen today has two coexisting config systems reading the same file. The legacy path (`src/core/config.ts`: `resolveConfig` + `mergeConfigs` + `findProjectConfig` + `PROJECT_CONFIG`/`LEGACY_CONFIG`) is where #34's clobber happens. The newer path (`src/core/kaizen-config.ts`: `KaizenGlobalConfig`, `loadKaizenGlobalConfig`, `mergePluginConfig`) is what stays. We delete the legacy path, restructure `KaizenGlobalConfig` so `defaults` becomes a nested object `{ harness?, plugin_config? }` (replacing the old flat plugin-name-keyed map and the sibling `defaultHarness` field), flip `mergePluginConfig`'s merge order so user wins, add validation that rejects `plugins`/`extends`/unknown top-level keys, rewrite `kaizen init` to global-only, and add migration warnings for deprecated `.kaizen/kaizen.json` / root `kaizen.json` files.
+
+**Final `~/.kaizen/kaizen.json` shape:**
+```json
+{
+  "defaults": {
+    "harness": "official/core-shell@1.0.0",
+    "plugin_config": {
+      "gitlab": { "base_url": "https://gitlab.mycompany.com" }
+    }
+  },
+  "marketplaces": [ { "id": "official", "url": "..." } ],
+  "marketplaceUpdateTTL": 900
+}
+```
 
 **Tech Stack:** TypeScript + Bun. Tests via `bun test`. Typecheck via `bun run typecheck`.
 
@@ -65,7 +79,7 @@ Task commit messages follow `<type>(<scope>): <subject> (#34)`. Types: `feat`, `
 
 ---
 
-## Task 1: Rename `KaizenGlobalConfig` fields
+## Task 1: Restructure `KaizenGlobalConfig` with nested `defaults`
 
 **Files:**
 - Modify: `src/types/plugin.ts:333-339`
@@ -75,36 +89,41 @@ Task commit messages follow `<type>(<scope>): <subject> (#34)`. Types: `feat`, `
 Open `src/types/plugin.ts`. Replace the `KaizenGlobalConfig` interface with:
 
 ```typescript
-export interface KaizenGlobalConfig {
-  marketplaces?: MarketplaceRef[];
-  /** Default harness ref used when --harness is not passed on the CLI. */
-  default_harness?: string;
+export interface KaizenDefaults {
+  /** Harness ref used when --harness is not passed on the CLI. */
+  harness?: string;
   /** Per-plugin config overrides. Keyed by plugin name. Values are plugin-specific objects. */
   plugin_config?: Record<string, Record<string, unknown>>;
+}
+
+export interface KaizenGlobalConfig {
+  marketplaces?: MarketplaceRef[];
+  /** User-chosen defaults: default harness + per-plugin config overrides. */
+  defaults?: KaizenDefaults;
   /** Seconds between background marketplace refreshes; 0 disables. Default 900. */
   marketplaceUpdateTTL?: number;
 }
 ```
 
-The prior shape had `defaultHarness` and `defaults` with a looser `Record<string, unknown>` type. We tighten `plugin_config` to a map of plugin-name → object.
+The prior shape had `defaultHarness` (top-level) and `defaults` (a loose `Record<string, unknown>` of plugin-name → config). We collapse both into a single nested `defaults` object with exactly two permitted sub-keys.
 
 - [ ] **Step 2: Typecheck to surface callers**
 
 Run: `bun run typecheck`
 Expected: FAIL in at least these locations:
-- `src/core/plugin-manager.ts` (references `.defaults`)
-- possibly `src/core/marketplace.ts` (reads/writes `marketplaces`, should still typecheck)
-- possibly `src/core/kaizen-config.test.ts`
+- `src/core/plugin-manager.ts` (reads `.defaults?.[plugin.name]` — that's the old flat-map access, which is now wrong)
+- `src/core/kaizen-config.test.ts` (any existing tests constructing the old shape)
+- possibly other callers of `globalConfig.defaults`
 
-Note the failing files for Task 5 and 6.
+Note the failing files for Task 2.
 
-- [ ] **Step 3: Commit (field rename alone, fix-ups come next)**
+- [ ] **Step 3: Commit (schema shape alone, fix-ups come next)**
 
 Do NOT commit yet — the tree won't compile. Continue to Task 2 before committing.
 
 ---
 
-## Task 2: Update `plugin-manager.ts` to read `plugin_config`
+## Task 2: Update `plugin-manager.ts` to read `defaults.plugin_config`
 
 **Files:**
 - Modify: `src/core/plugin-manager.ts:637`
@@ -120,26 +139,28 @@ const globalDefaults = (this.globalConfig?.defaults?.[plugin.name] as Record<str
 Replace with:
 
 ```typescript
-const userPluginConfig = (this.globalConfig?.plugin_config?.[plugin.name] as Record<string, unknown> | undefined) ?? {};
+const userPluginConfig = this.globalConfig?.defaults?.plugin_config?.[plugin.name] ?? {};
 ```
 
 Also update the call on the next line from `mergePluginConfig(plugin.config, globalDefaults, harnessConfig)` to `mergePluginConfig(plugin.config, userPluginConfig, harnessConfig)` — the arg order is still wrong at this point; Task 3 will flip it.
 
+Note: the `as Record<string, unknown> | undefined` cast is no longer needed because `KaizenDefaults.plugin_config` is now typed as `Record<string, Record<string, unknown>>`. If TypeScript complains, it means the types disagree — fix them, don't cast.
+
 - [ ] **Step 2: Typecheck**
 
 Run: `bun run typecheck`
-Expected: any remaining `defaults` references flagged. Fix each one by reading `plugin_config` instead. If `marketplaces.ts` / `marketplace.ts` references `.defaults`, that's a different thing (the test is marketplace catalog defaults, not plugin defaults) — leave it alone unless the type error says otherwise.
+Expected: any remaining `globalConfig.defaults[...]` direct accesses flagged. Fix each — plugin-name keys live at `globalConfig.defaults.plugin_config[...]` now, and the top-level `defaults.harness` replaces the former `defaultHarness` everywhere.
 
 - [ ] **Step 3: Run the affected unit tests**
 
 Run: `bun test src/core/plugin-manager.test.ts src/core/kaizen-config.test.ts`
-Expected: some failures around `defaults` vs `plugin_config`. Skip if tests still pass; otherwise note them for Task 6.
+Expected: some failures around the old flat shape. Note them for Task 6.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add src/types/plugin.ts src/core/plugin-manager.ts
-git commit -m "refactor(config): rename KaizenGlobalConfig defaults → plugin_config, defaultHarness → default_harness (#34)"
+git commit -m "refactor(config): nest KaizenGlobalConfig.defaults with harness + plugin_config (#34)"
 ```
 
 ---
@@ -271,14 +292,16 @@ function writeCfg(obj: unknown) {
   writeFileSync(path, JSON.stringify(obj), "utf8");
 }
 
-test("loadKaizenGlobalConfig: accepts default_harness and plugin_config", async () => {
+test("loadKaizenGlobalConfig: accepts nested defaults.harness and defaults.plugin_config", async () => {
   writeCfg({
-    default_harness: "official/core-shell@1.0.0",
-    plugin_config: { gitlab: { base_url: "https://gitlab.mycompany.com" } },
+    defaults: {
+      harness: "official/core-shell@1.0.0",
+      plugin_config: { gitlab: { base_url: "https://gitlab.mycompany.com" } },
+    },
   });
   const cfg = await loadKaizenGlobalConfig();
-  expect(cfg.default_harness).toBe("official/core-shell@1.0.0");
-  expect(cfg.plugin_config?.gitlab).toEqual({ base_url: "https://gitlab.mycompany.com" });
+  expect(cfg.defaults?.harness).toBe("official/core-shell@1.0.0");
+  expect(cfg.defaults?.plugin_config?.gitlab).toEqual({ base_url: "https://gitlab.mycompany.com" });
 });
 
 test("loadKaizenGlobalConfig: rejects top-level `plugins` key", async () => {
@@ -286,13 +309,28 @@ test("loadKaizenGlobalConfig: rejects top-level `plugins` key", async () => {
   await expect(loadKaizenGlobalConfig()).rejects.toThrow(/plugins.*not allowed|not supported/i);
 });
 
-test("loadKaizenGlobalConfig: rejects top-level `extends` key with rename hint", async () => {
+test("loadKaizenGlobalConfig: rejects top-level `extends` with 'move to defaults.harness' hint", async () => {
   writeCfg({ extends: "foo/bar@1.0.0" });
-  await expect(loadKaizenGlobalConfig()).rejects.toThrow(/extends.*default_harness/);
+  await expect(loadKaizenGlobalConfig()).rejects.toThrow(/extends.*defaults\.harness/);
+});
+
+test("loadKaizenGlobalConfig: rejects top-level `default_harness` with 'nest under defaults' hint", async () => {
+  writeCfg({ default_harness: "foo/bar@1.0.0" });
+  await expect(loadKaizenGlobalConfig()).rejects.toThrow(/default_harness.*defaults\.harness/);
+});
+
+test("loadKaizenGlobalConfig: rejects top-level `plugin_config` with 'nest under defaults' hint", async () => {
+  writeCfg({ plugin_config: { gitlab: {} } });
+  await expect(loadKaizenGlobalConfig()).rejects.toThrow(/plugin_config.*defaults\.plugin_config/);
+});
+
+test("loadKaizenGlobalConfig: rejects old flat shape (plugin names directly under defaults)", async () => {
+  writeCfg({ defaults: { gitlab: { base_url: "x" } } });
+  await expect(loadKaizenGlobalConfig()).rejects.toThrow(/defaults\.gitlab|defaults\.plugin_config/);
 });
 
 test("loadKaizenGlobalConfig: rejects unknown top-level keys", async () => {
-  writeCfg({ default_harness: "x/y@1", random_nonsense: true });
+  writeCfg({ defaults: { harness: "x/y@1" }, random_nonsense: true });
   await expect(loadKaizenGlobalConfig()).rejects.toThrow(/random_nonsense/);
 });
 
@@ -306,8 +344,8 @@ test("loadKaizenGlobalConfig: allows marketplaces and marketplaceUpdateTTL", asy
   expect(cfg.marketplaceUpdateTTL).toBe(600);
 });
 
-test("loadKaizenGlobalConfig: plugin_config must be an object of objects", async () => {
-  writeCfg({ plugin_config: { gitlab: "not an object" } });
+test("loadKaizenGlobalConfig: defaults.plugin_config must be an object of objects", async () => {
+  writeCfg({ defaults: { plugin_config: { gitlab: "not an object" } } });
   await expect(loadKaizenGlobalConfig()).rejects.toThrow(/plugin_config/);
 });
 
@@ -328,11 +366,11 @@ Open `src/core/kaizen-config.ts`. Replace `loadKaizenGlobalConfig` with:
 
 ```typescript
 const ALLOWED_TOP_LEVEL_KEYS = new Set([
-  "default_harness",
-  "plugin_config",
+  "defaults",
   "marketplaces",
   "marketplaceUpdateTTL",
 ]);
+const ALLOWED_DEFAULTS_KEYS = new Set(["harness", "plugin_config"]);
 
 export async function loadKaizenGlobalConfig(): Promise<KaizenGlobalConfig> {
   const path = kaizenHomeConfigPath();
@@ -352,7 +390,18 @@ export async function loadKaizenGlobalConfig(): Promise<KaizenGlobalConfig> {
   }
   if ("extends" in obj) {
     throw new Error(
-      `${path}: top-level 'extends' has been renamed to 'default_harness'. Rename the key and try again.`,
+      `${path}: top-level 'extends' has been replaced by 'defaults.harness'. ` +
+      `Move the value under \`defaults\` and try again.`,
+    );
+  }
+  if ("default_harness" in obj) {
+    throw new Error(
+      `${path}: top-level 'default_harness' is not allowed — nest it as 'defaults.harness'.`,
+    );
+  }
+  if ("plugin_config" in obj) {
+    throw new Error(
+      `${path}: top-level 'plugin_config' is not allowed — nest it as 'defaults.plugin_config'.`,
     );
   }
   const unknownKeys = Object.keys(obj).filter((k) => !ALLOWED_TOP_LEVEL_KEYS.has(k));
@@ -363,16 +412,30 @@ export async function loadKaizenGlobalConfig(): Promise<KaizenGlobalConfig> {
     );
   }
 
-  if (obj.default_harness !== undefined && typeof obj.default_harness !== "string") {
-    throw new Error(`${path}: 'default_harness' must be a string.`);
-  }
-  if (obj.plugin_config !== undefined) {
-    if (typeof obj.plugin_config !== "object" || obj.plugin_config === null || Array.isArray(obj.plugin_config)) {
-      throw new Error(`${path}: 'plugin_config' must be an object.`);
+  if (obj.defaults !== undefined) {
+    if (typeof obj.defaults !== "object" || obj.defaults === null || Array.isArray(obj.defaults)) {
+      throw new Error(`${path}: 'defaults' must be an object.`);
     }
-    for (const [name, value] of Object.entries(obj.plugin_config)) {
-      if (typeof value !== "object" || value === null || Array.isArray(value)) {
-        throw new Error(`${path}: 'plugin_config.${name}' must be an object.`);
+    const defaults = obj.defaults as Record<string, unknown>;
+    const unknownDefaultsKeys = Object.keys(defaults).filter((k) => !ALLOWED_DEFAULTS_KEYS.has(k));
+    if (unknownDefaultsKeys.length > 0) {
+      throw new Error(
+        `${path}: unknown keys under 'defaults': ${unknownDefaultsKeys.join(", ")}. ` +
+        `Allowed: ${[...ALLOWED_DEFAULTS_KEYS].join(", ")}. ` +
+        `If these are plugin names, move them under 'defaults.plugin_config'.`,
+      );
+    }
+    if (defaults.harness !== undefined && typeof defaults.harness !== "string") {
+      throw new Error(`${path}: 'defaults.harness' must be a string.`);
+    }
+    if (defaults.plugin_config !== undefined) {
+      if (typeof defaults.plugin_config !== "object" || defaults.plugin_config === null || Array.isArray(defaults.plugin_config)) {
+        throw new Error(`${path}: 'defaults.plugin_config' must be an object.`);
+      }
+      for (const [name, value] of Object.entries(defaults.plugin_config)) {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) {
+          throw new Error(`${path}: 'defaults.plugin_config.${name}' must be an object.`);
+        }
       }
     }
   }
@@ -454,14 +517,14 @@ export function resolveConfig(opts: {
   }
 
   // Fall through to global default harness. The caller is responsible for
-  // loading ~/.kaizen/kaizen.json and passing its default_harness via opts.harness
+  // loading ~/.kaizen/kaizen.json and passing defaults.harness via opts.harness
   // when they want that behavior; resolveConfig itself no longer reaches for
   // ~/.kaizen/kaizen.json synchronously (loadKaizenGlobalConfig is async).
   fatal(
     `A harness is required.\n` +
     `  kaizen --harness <marketplace>/<name>@<version>\n` +
     `  kaizen --harness ./path/to/harness/\n` +
-    `  Set 'default_harness' in ~/.kaizen/kaizen.json`,
+    `  Set 'defaults.harness' in ~/.kaizen/kaizen.json`,
   );
 }
 ```
@@ -476,7 +539,7 @@ Open `src/cli.ts`. Remove the imports of `findProjectConfig`, `PROJECT_CONFIG`, 
 
 Find every call-site that references the removed symbols and rewrite:
 
-- Before `resolveConfig({...})` is called, `cli.ts` needs to load `~/.kaizen/kaizen.json` via `loadKaizenGlobalConfig()` and pass `default_harness` as the `harness` opt when `--harness` is absent. The current `resolveConfig` call on line 647 looks like:
+- Before `resolveConfig({...})` is called, `cli.ts` needs to load `~/.kaizen/kaizen.json` via `loadKaizenGlobalConfig()` and pass `defaults.harness` as the `harness` opt when `--harness` is absent. The current `resolveConfig` call on line 647 looks like:
   ```typescript
   const kaizenConfig = resolveConfig({ harness, configPath, extendsOverride });
   ```
@@ -487,7 +550,7 @@ Find every call-site that references the removed symbols and rewrite:
   let effectiveHarness = harness;
   if (!effectiveHarness && !extendsOverride) {
     const global = await loadKaizenGlobalConfig();
-    effectiveHarness = global.default_harness;
+    effectiveHarness = global.defaults?.harness;
   }
   const kaizenConfig = resolveConfig({ harness: effectiveHarness, extendsOverride });
   ```
@@ -613,7 +676,7 @@ const LEGACY_ROOT = "kaizen.json";
 
 const MESSAGE = (path: string) =>
   `Found '${path}'. Project-level kaizen config is no longer supported. ` +
-  `Move 'extends' to '~/.kaizen/kaizen.json' as 'default_harness', ` +
+  `Move 'extends' to '~/.kaizen/kaizen.json' as 'defaults.harness', ` +
   `or pass --harness explicitly. See docs/concepts/configuration.md.`;
 
 export function warnStaleProjectConfig(sink: WarnSink): void {
@@ -693,15 +756,15 @@ if (subcommand === "init") {
 
   mkdirSync(KAIZEN_HOME, { recursive: true });
   const body: Record<string, unknown> = {};
-  if (harnessRef) body.default_harness = harnessRef;
+  if (harnessRef) body.defaults = { harness: harnessRef };
   writeFileSync(KAIZEN_HOME_CONFIG, JSON.stringify(body, null, 2) + "\n", "utf8");
 
   if (harnessRef) {
-    console.log(`Created ~/.kaizen/kaizen.json with default_harness=${harnessRef}`);
+    console.log(`Created ~/.kaizen/kaizen.json with defaults.harness=${harnessRef}`);
   } else {
     console.log(
       `Created ~/.kaizen/kaizen.json.\n` +
-      `Pass --harness on each run, or add 'default_harness' to the file.`,
+      `Pass --harness on each run, or add 'defaults.harness' to the file.`,
     );
   }
   process.exit(0);
@@ -726,7 +789,7 @@ to:
 Open whatever test files exercise `kaizen init`. Update them to:
 - Assert that `kaizen init` without `--global` exits non-zero with the project-config-not-supported message.
 - Assert that `kaizen init --global` writes `~/.kaizen/kaizen.json` (using `KAIZEN_HOME_OVERRIDE` for isolation).
-- Assert that `kaizen init --global --harness X` produces `{"default_harness": "X"}`.
+- Assert that `kaizen init --global --harness X` produces `{"defaults": {"harness": "X"}}`.
 
 If no test file covers this today, create `src/cli-init.test.ts` with at least the three cases above. Use `Bun.spawn` or direct import of the subcommand logic (if it's extractable); simplest approach is a subprocess-level test that invokes `bun src/cli.ts init ...` with `KAIZEN_HOME_OVERRIDE` set to a tmpdir.
 
@@ -843,10 +906,12 @@ Kaizen has exactly one user-editable config file: `~/.kaizen/kaizen.json`.
 
 ```json
 {
-  "default_harness": "official/core-shell@1.0.0",
-  "plugin_config": {
-    "gitlab":   { "base_url": "https://gitlab.mycompany.com", "username": "alice" },
-    "core-cli": { "clis": ["docker", "kubectl"] }
+  "defaults": {
+    "harness": "official/core-shell@1.0.0",
+    "plugin_config": {
+      "gitlab":   { "base_url": "https://gitlab.mycompany.com", "username": "alice" },
+      "core-cli": { "clis": ["docker", "kubectl"] }
+    }
   },
   "marketplaces": [
     { "id": "official", "url": "https://github.com/CraightonH/kaizen-marketplace.git" }
@@ -856,8 +921,9 @@ Kaizen has exactly one user-editable config file: `~/.kaizen/kaizen.json`.
 
 ### Fields
 
-- **`default_harness`** *(optional, string)* — harness ref used when `--harness` is not passed on the CLI.
-- **`plugin_config`** *(optional, object)* — per-plugin config overrides, keyed by plugin name.
+- **`defaults`** *(optional, object)* — what this user defaults to.
+  - **`defaults.harness`** *(optional, string)* — harness ref used when `--harness` is not passed on the CLI.
+  - **`defaults.plugin_config`** *(optional, object)* — per-plugin config overrides, keyed by plugin name.
 - **`marketplaces`** *(optional, array)* — registered marketplaces. Managed by `kaizen marketplace add/remove`.
 - **`marketplaceUpdateTTL`** *(optional, number)* — background marketplace refresh interval in seconds.
 
@@ -871,19 +937,19 @@ For each plugin `P` in the active harness:
 effective_config(P) = { ...plugin_declared_defaults, ...harness_defaults, ...user_plugin_config }
 ```
 
-User `plugin_config[P]` wins over harness defaults. Harness defaults win over the plugin's own declared defaults.
+User `defaults.plugin_config[P]` wins over harness defaults. Harness defaults win over the plugin's own declared defaults.
 
 ## Choosing a harness
 
 The active harness is selected by:
 
 1. `--harness <ref>` on the CLI
-2. `default_harness` in `~/.kaizen/kaizen.json`
+2. `defaults.harness` in `~/.kaizen/kaizen.json`
 3. Otherwise, kaizen refuses to start.
 
 ## What moved
 
-Project-level kaizen config (`.kaizen/kaizen.json` overlay and root `kaizen.json`) is no longer supported. If you had one, move its `extends` value to `default_harness` in `~/.kaizen/kaizen.json`. If it had per-plugin config overrides, move those under `plugin_config` in the same file. Per-project config scoping will be revisited in a future release.
+Project-level kaizen config (`.kaizen/kaizen.json` overlay and root `kaizen.json`) is no longer supported. If you had one, move its `extends` value to `defaults.harness` in `~/.kaizen/kaizen.json`. If it had per-plugin config overrides, move those under `defaults.plugin_config` in the same file. Per-project config scoping will be revisited in a future release.
 ````
 
 - [ ] **Step 2: Update `docs/concepts/harnesses.md`**
@@ -964,7 +1030,7 @@ Before declaring done, all of these must be true:
 - [ ] `bun test` passes.
 - [ ] `bun test --integration` passes.
 - [ ] `src/core/config.ts` no longer exports `mergeConfigs`, `findProjectConfig`, `loadKaizenConfig`, `PROJECT_CONFIG`, or `LEGACY_CONFIG`.
-- [ ] `KaizenGlobalConfig` in `src/types/plugin.ts` uses `default_harness` and `plugin_config` (not `defaultHarness` / `defaults`).
+- [ ] `KaizenGlobalConfig` in `src/types/plugin.ts` has a nested `defaults` object with `harness?` and `plugin_config?` (not a top-level `defaultHarness` or flat plugin-name-keyed `defaults`).
 - [ ] `mergePluginConfig` spreads arguments in the order `declaration → harness → user` (user wins).
 - [ ] `loadKaizenGlobalConfig` rejects top-level `plugins`, `extends`, and unknown keys.
 - [ ] `kaizen init` without `--global` errors out; `kaizen init --global [--harness X]` writes the new schema.
