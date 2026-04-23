@@ -2,14 +2,37 @@ import { test, expect, describe, afterEach } from "bun:test";
 import { mergePluginConfig, separateSecrets, applyEnvOverrides, envVarNameFor } from "./config-merge";
 
 describe("mergePluginConfig", () => {
-  test("plugin defaults < global defaults < harness config (right wins)", () => {
+  test("mergePluginConfig: user global wins over harness default", () => {
+    const declaration = { defaults: { base_url: "https://gitlab.com", timeout: 30 } };
+    const userPluginConfig = { base_url: "https://gitlab.mycompany.com" };
+    const harnessConfig = { base_url: "https://harness.example.com" };
+
+    const merged = mergePluginConfig(declaration, userPluginConfig, harnessConfig);
+
+    expect(merged).toEqual({
+      base_url: "https://gitlab.mycompany.com", // user wins
+      timeout: 30,                              // declaration fallback preserved
+    });
+  });
+
+  test("mergePluginConfig: harness wins over plugin declaration defaults", () => {
+    const declaration = { defaults: { base_url: "plugin-default" } };
+    const userPluginConfig = {};
+    const harnessConfig = { base_url: "harness-default" };
+
+    const merged = mergePluginConfig(declaration, userPluginConfig, harnessConfig);
+
+    expect(merged.base_url).toBe("harness-default");
+  });
+
+  test("plugin defaults < harness config < user config (right wins)", () => {
     const declaration = {
       defaults: { timeout: 5000, retries: 2 },
     };
-    const globalDefaults = { timeout: 10000 };
+    const userPluginConfig = { timeout: 10000 };
     const harnessConfig = { retries: 5 };
 
-    const result = mergePluginConfig(declaration, globalDefaults, harnessConfig);
+    const result = mergePluginConfig(declaration, userPluginConfig, harnessConfig);
 
     expect(result).toEqual({
       timeout: 10000,
@@ -37,10 +60,10 @@ describe("mergePluginConfig", () => {
   });
 
   test("undefined declaration defaults to empty object", () => {
-    const globalDefaults = { timeout: 5000 };
+    const userPluginConfig = { timeout: 5000 };
     const harnessConfig = { retries: 3 };
 
-    const result = mergePluginConfig(undefined, globalDefaults, harnessConfig);
+    const result = mergePluginConfig(undefined, userPluginConfig, harnessConfig);
 
     expect(result).toEqual({
       timeout: 5000,

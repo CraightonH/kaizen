@@ -308,7 +308,7 @@ describe("Plugin Config Integration Tests", () => {
   // ============================================================================
 
   describe("Test 9: Four-layer merge precedence", () => {
-    test("merge precedence: plugin < global < harness (shallow)", () => {
+    test("merge precedence: plugin < harness < user-global (shallow)", () => {
       const declaration: PluginConfigDeclaration = {
         defaults: {
           timeout: 1000,
@@ -321,8 +321,10 @@ describe("Plugin Config Integration Tests", () => {
 
       const merged = mergePluginConfig(declaration, global, harness);
 
-      expect(merged.timeout).toBe(3000);
+      // user global wins over harness
+      expect(merged.timeout).toBe(2000);
       expect(merged.base_url).toBe("https://default.example.com");
+      // harness wins over plugin declaration (no user global for retry)
       expect((merged.retry as Record<string, unknown>).max).toBe(5);
       expect((merged.retry as Record<string, unknown>).delay).toBeUndefined();
     });

@@ -2,13 +2,13 @@ import type { PluginConfigDeclaration, SecretRef, StructuredSecretRef } from "..
 
 export function mergePluginConfig(
   declaration: PluginConfigDeclaration | undefined,
-  globalDefaults: Record<string, unknown>,
+  userPluginConfig: Record<string, unknown>,
   harnessConfig: Record<string, unknown>,
 ): Record<string, unknown> {
   return {
     ...(declaration?.defaults ?? {}),
-    ...globalDefaults,
     ...harnessConfig,
+    ...userPluginConfig,
   };
 }
 
