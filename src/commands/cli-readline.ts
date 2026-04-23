@@ -1,12 +1,10 @@
 /**
- * Shared stdin line reader.
- *
- * A single readline interface for the process. Sequential callers each get
- * the next line in order — no race, no buffering loss. Both core-ui-terminal
- * and core-executor-debug import readStdinLine() from here so they share
- * the same queue rather than fighting over separate readline instances.
+ * Line reader for CLI commands that run as the kaizen binary itself
+ * (install consent prompts, scaffolding wizards). Plugin code must NOT
+ * use this — it is not part of the plugin host API. A plugin that
+ * needs stdin input should own its own readline interface and expose
+ * it as a service.
  */
-
 import { createInterface } from "readline";
 
 const rl = createInterface({ input: process.stdin, terminal: false });
@@ -20,7 +18,6 @@ rl.on("line", (line) => {
 });
 
 rl.on("close", () => {
-  // Drain any pending readers with empty string so they don't hang
   for (const resolve of waiting) resolve("");
   waiting.length = 0;
 });
@@ -31,8 +28,4 @@ export function readStdinLine(): Promise<string> {
     if (line !== undefined) resolve(line);
     else waiting.push(resolve);
   });
-}
-
-export function stdinClosed(): Promise<void> {
-  return new Promise((resolve) => rl.once("close", resolve));
 }
