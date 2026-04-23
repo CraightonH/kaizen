@@ -519,7 +519,7 @@ function validateConfigKey(entry: unknown, index: number): ConfigKey {
 
 export async function runPluginCreate(
   targetPath: string,
-  opts: { defaults?: boolean }
+  opts: { defaults?: boolean; flags?: PluginCreateFlags } = {}
 ): Promise<number> {
   // 1. Check target does not exist
   if (existsSync(targetPath)) {
@@ -530,7 +530,6 @@ export async function runPluginCreate(
   let cfg: PluginScaffoldConfig;
 
   if (opts.defaults) {
-    // 2. Defaults mode
     cfg = {
       name: basename(targetPath),
       description: "",
@@ -542,8 +541,14 @@ export async function runPluginCreate(
       configKeys: [],
       driver: false,
     };
+  } else if (opts.flags !== undefined) {
+    try {
+      cfg = buildConfigFromFlags(targetPath, opts.flags);
+    } catch (e) {
+      console.error(`Error: ${(e as Error).message}`);
+      return 1;
+    }
   } else {
-    // 3. Interactive mode
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -555,23 +560,16 @@ export async function runPluginCreate(
     }
   }
 
-  // 4. Create directory
+  // Create directory and write files
   mkdirSync(targetPath, { recursive: true });
-
-  // 5. Write files
   writeFileSync(join(targetPath, "package.json"), generatePackageJson(cfg));
   writeFileSync(join(targetPath, "tsconfig.json"), generateTsConfig());
   writeFileSync(join(targetPath, "index.ts"), generateIndexTs(cfg));
   writeFileSync(join(targetPath, "index.test.ts"), generateIndexTestTs(cfg));
   writeFileSync(join(targetPath, "README.md"), generateReadme(cfg));
-
-  // 6. Create .kaizen dir
   mkdirSync(join(targetPath, ".kaizen"), { recursive: true });
-
-  // 7. Write .gitkeep
   writeFileSync(join(targetPath, ".kaizen", ".gitkeep"), "");
 
-  // 8. Print success message
   const displayPath = `./${basename(targetPath)}`;
   console.log(`Created plugin scaffold at ${displayPath}`);
   console.log(`Next steps:`);

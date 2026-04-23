@@ -284,3 +284,55 @@ describe("buildConfigFromFlags", () => {
       .toThrow(/type/);
   });
 });
+
+describe("non-interactive mode", () => {
+  let tmpBase: string;
+  let targetPath: string;
+
+  beforeEach(() => {
+    tmpBase = mkdtempSync(join(tmpdir(), "kaizen-create-"));
+    targetPath = join(tmpBase, "np");
+  });
+
+  afterEach(() => {
+    rmSync(tmpBase, { recursive: true, force: true });
+  });
+
+  it("runs non-interactively when flags are passed", async () => {
+    const code = await runPluginCreate(targetPath, {
+      flags: { name: "np", tier: "scoped", grants: ["fs"], driver: true },
+    });
+    expect(code).toBe(0);
+    const src = readFileSync(join(targetPath, "index.ts"), "utf8");
+    expect(src).toContain(`name: "np"`);
+    expect(src).toContain(`tier: "scoped"`);
+    expect(src).toContain(`fs:`);
+    expect(src).toContain("driver: true,");
+    expect(src).toContain("async start(ctx)");
+  });
+
+  it("non-interactive with no flags produces defaults-equivalent output", async () => {
+    const code = await runPluginCreate(targetPath, { flags: {} });
+    expect(code).toBe(0);
+    const src = readFileSync(join(targetPath, "index.ts"), "utf8");
+    expect(src).toContain(`name: "np"`);
+    expect(src).toContain(`tier: "trusted"`);
+    expect(src).not.toContain("driver:");
+  });
+
+  it("returns 1 on invalid tier", async () => {
+    const code = await runPluginCreate(targetPath, {
+      flags: { tier: "god-mode" as never },
+    });
+    expect(code).toBe(1);
+    expect(existsSync(targetPath)).toBe(false);
+  });
+
+  it("returns 1 on invalid config-keys JSON", async () => {
+    const code = await runPluginCreate(targetPath, {
+      flags: { configKeysJson: "not json" },
+    });
+    expect(code).toBe(1);
+    expect(existsSync(targetPath)).toBe(false);
+  });
+});
