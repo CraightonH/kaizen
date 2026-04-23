@@ -385,6 +385,9 @@ async function promptConfig(rl: readline.Interface, targetPath: string): Promise
   const consumesInput = await prompt(rl, `Services consumed (comma-separated) [none]: `);
   const consumes = consumesInput ? consumesInput.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
+  const driverInput = await prompt(rl, `Is this a session driver? (y/N) [N]: `);
+  const driver = driverInput.toLowerCase() === "y";
+
   const hasConfigInput = await prompt(rl, `Does this plugin have config? (y/N) [N]: `);
   const hasConfig = hasConfigInput.toLowerCase() === "y";
 
@@ -405,7 +408,7 @@ async function promptConfig(rl: readline.Interface, targetPath: string): Promise
     }
   }
 
-  return { name, description, tier, grants, provides, consumes, hasConfig, configKeys, driver: false };
+  return { name, description, tier, grants, provides, consumes, hasConfig, configKeys, driver };
 }
 
 // ---------------------------------------------------------------------------
