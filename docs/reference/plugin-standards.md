@@ -122,7 +122,7 @@ async setup(ctx) {
   });
 
   // Declare consumption intent
-  ctx.consumeService("core-events:service");
+  ctx.consumeService("events:vocabulary");
 }
 ```
 
@@ -260,6 +260,7 @@ const tool: ToolDefinition = {
 ### Event declaration and subscription
 
 - [required] Call `ctx.defineEvent(name)` before emitting any event to declare its type
+- [guideline] If the `defineEvent` call lives in a different plugin (a vocabulary plugin), add that plugin's vocabulary service to `services.consumes`. Without a services edge the topo-sort cannot guarantee init order — the vocabulary plugin may not have run before your first `emit`. See [`guides/ecosystem-design.md`](../guides/ecosystem-design.md).
 - [required] Document all events your plugin emits (in README and inline code comments)
 - [required] For cross-plugin event subscriptions, declare `permissions.events.subscribe` with the event patterns you consume
 

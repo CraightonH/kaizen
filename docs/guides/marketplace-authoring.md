@@ -137,7 +137,7 @@ kaizen marketplace add <url> [--id <id>]
   against a local kaizen checkout.
 
 If `--id` is omitted, kaizen derives one from the URL. The id is what
-consumers type in plugin refs: `official/core-events@1.0.0`.
+consumers type in plugin refs: `my-marketplace/my-plugin@1.0.0`.
 
 Harnesses reference the marketplace the same way. A `kaizen.json`:
 

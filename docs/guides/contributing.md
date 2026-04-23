@@ -37,7 +37,7 @@ the debug harness. Override the sibling location with
 Sanity check:
 
 ```sh
-bun src/cli.ts --harness official/core-debug@1.0.0 run "hello"
+bun src/cli.ts --harness my-marketplace/my-harness@1.0.0 run "hello"
 ```
 
 ## Running tests
