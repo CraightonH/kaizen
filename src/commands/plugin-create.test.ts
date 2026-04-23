@@ -107,3 +107,69 @@ describe("runPluginCreate", () => {
     });
   });
 });
+
+describe("driver generator", () => {
+  let tmpBase: string;
+  let targetPath: string;
+
+  beforeEach(() => {
+    tmpBase = mkdtempSync(join(tmpdir(), "kaizen-create-"));
+    targetPath = join(tmpBase, "my-driver");
+  });
+
+  afterEach(() => {
+    rmSync(tmpBase, { recursive: true, force: true });
+  });
+
+  it("emits driver: true and start(ctx) in index.ts when driver flag is set", async () => {
+    const { generateIndexTs } = await import("./plugin-create.js");
+    const src = generateIndexTs({
+      name: "my-driver",
+      description: "",
+      tier: "trusted",
+      grants: [],
+      provides: [],
+      consumes: [],
+      hasConfig: false,
+      configKeys: [],
+      driver: true,
+    });
+    expect(src).toContain("driver: true,");
+    expect(src).toContain("async start(ctx)");
+    expect(src).toContain(`ctx.log("driver started")`);
+  });
+
+  it("generated test asserts driver: true when driver flag is set", async () => {
+    const { generateIndexTestTs } = await import("./plugin-create.js");
+    const src = generateIndexTestTs({
+      name: "my-driver",
+      description: "",
+      tier: "trusted",
+      grants: [],
+      provides: [],
+      consumes: [],
+      hasConfig: false,
+      configKeys: [],
+      driver: true,
+    });
+    expect(src).toContain(`expect(plugin.driver).toBe(true)`);
+  });
+
+  it("non-driver generation is unchanged", async () => {
+    const { generateIndexTs, generateIndexTestTs } = await import("./plugin-create.js");
+    const cfg = {
+      name: "p",
+      description: "",
+      tier: "trusted" as const,
+      grants: [],
+      provides: [],
+      consumes: [],
+      hasConfig: false,
+      configKeys: [],
+      driver: false,
+    };
+    expect(generateIndexTs(cfg)).not.toContain("driver:");
+    expect(generateIndexTs(cfg)).not.toContain("async start(ctx)");
+    expect(generateIndexTestTs(cfg)).not.toContain("plugin.driver");
+  });
+});

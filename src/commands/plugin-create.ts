@@ -148,13 +148,20 @@ export function generateIndexTs(cfg: PluginScaffoldConfig): string {
     `const plugin: KaizenPlugin = {`,
     `  name: "${cfg.name}",`,
     `  apiVersion: "2.0.0",`,
+  ];
+
+  if (cfg.driver) {
+    lines.push(`  driver: true,`);
+  }
+
+  lines.push(
     `  permissions: {`,
     ...permissionsLines,
     `  },`,
     `  services: {`,
     ...capsLines,
     `  },`,
-  ];
+  );
 
   if (configBlock) {
     lines.push(configBlock);
@@ -165,6 +172,19 @@ export function generateIndexTs(cfg: PluginScaffoldConfig): string {
     `  async setup(ctx) {`,
     ...setupLines,
     `  },`,
+  );
+
+  if (cfg.driver) {
+    lines.push(
+      ``,
+      `  async start(ctx) {`,
+      `    // TODO: implement session loop`,
+      `    ctx.log("driver started");`,
+      `  },`,
+    );
+  }
+
+  lines.push(
     `};`,
     ``,
     `export default plugin;`,
@@ -231,6 +251,14 @@ export function generateIndexTestTs(cfg: PluginScaffoldConfig): string {
     `    expect(plugin.apiVersion).toBe("2.0.0");`,
     `  });`,
     ``,
+    ...(cfg.driver
+      ? [
+          `  it("declares driver: true", () => {`,
+          `    expect(plugin.driver).toBe(true);`,
+          `  });`,
+          ``,
+        ]
+      : []),
     `  it("setup runs without error", async () => {`,
     `    const ctx = makeCtx();`,
     `    await plugin.setup(ctx);`,
