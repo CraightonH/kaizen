@@ -165,7 +165,7 @@ const plugin: KaizenPlugin = {
 build; no runtime coupling):
 
 ```ts
-import type { PathHelpers } from "official/utils/public";
+import type { PathHelpers } from "my-marketplace/utils/public";
 
 const plugin: KaizenPlugin = {
   name: "github",
@@ -185,7 +185,7 @@ manually when service interfaces change.
 
 ## Consumer TypeScript setup {#consumer-typescript-setup}
 
-`import type { X } from "official/utils/public"` is a bare specifier without
+`import type { X } from "my-marketplace/utils/public"` is a bare specifier without
 a real package in `node_modules`. TypeScript needs help resolving it.
 
 **Recommended — `tsconfig.json` `paths`** pointing at the installed plugin's
@@ -195,7 +195,7 @@ exact version directory:
 {
   "compilerOptions": {
     "paths": {
-      "official/utils/*": ["/Users/you/.kaizen/marketplaces/official/plugins/utils@0.1.0/*"]
+      "my-marketplace/utils/*": ["/Users/you/.kaizen/marketplaces/my-marketplace/plugins/utils@0.1.0/*"]
     }
   }
 }
