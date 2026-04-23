@@ -551,6 +551,16 @@ export class PluginManager {
       warn(`Cannot unload plugin '${name}': not loaded.`);
       return;
     }
+    if (typeof record.plugin.stop === "function" && record.ctx) {
+      try {
+        await runInPluginScope(name, async () => {
+          await record.plugin.stop!(record.ctx!);
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        warn(`Plugin '${name}' stop() failed: ${msg}`);
+      }
+    }
     this.eventBus.deregisterByPlugin(name);
     this.serviceRegistry.deregisterByPlugin(name);
     this.enforcer.deregister(name);
