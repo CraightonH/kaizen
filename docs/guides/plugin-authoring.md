@@ -352,6 +352,35 @@ fixes:
 | `config secrets key "..." not declared in config.schema.properties` | Add the key to `config.schema.properties`. |
 | `core-secrets:provider dependency is implicit` (warn) | List it in `services.consumes` for discoverability. |
 
+## Plugin config keys {#plugin-config-keys}
+
+If your plugin reads config values at runtime, document the keys in your
+`README.md` so users know what to put under `defaults.plugin_config.<your-plugin>`
+in `~/.kaizen/kaizen.json`. For example, a plugin named `gitlab` that reads
+`base_url` and `username` should include:
+
+```md
+### User config (`~/.kaizen/kaizen.json`)
+
+```json
+{
+  "defaults": {
+    "plugin_config": {
+      "gitlab": {
+        "base_url": "https://gitlab.mycompany.com",
+        "username": "alice"
+      }
+    }
+  }
+}
+```
+```
+
+Declare the same keys in `plugin.config.schema` (the JSON Schema block in your
+manifest) so kaizen can validate user-supplied values. Secret keys additionally
+go in `plugin.config.secrets`. See [`reference/plugin-api.md`](../reference/plugin-api.md)
+for the full `config` field shape.
+
 ## Next steps
 
 Once your plugin validates, publish it:
