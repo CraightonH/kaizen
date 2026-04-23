@@ -122,7 +122,7 @@ async setup(ctx) {
   });
 
   // Declare consumption intent
-  ctx.consumeService("core-events:service");
+  ctx.consumeService("events:vocabulary");
 }
 ```
 
