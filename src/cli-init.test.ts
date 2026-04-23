@@ -1,9 +1,10 @@
 import { test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
-const CLI = "/Users/chancock/git/kaizen/src/cli.ts";
+const CLI = join(dirname(fileURLToPath(import.meta.url)), "cli.ts");
 
 let home: string;
 
