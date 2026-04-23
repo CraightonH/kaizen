@@ -71,9 +71,9 @@ export function cmdConfigShow(pluginName?: string): number {
     for (const [key, value] of Object.entries(gDefaults)) {
       if (typeof value === "object" && value !== null && "provider" in value) {
         const ref = value as { provider: string; ref: string };
-        console.log(`  ${key.padEnd(20)} *** (provider: ${ref.provider}, ref: ${ref.ref})  [global]`);
+        console.log(`  ${key.padEnd(20)} *** (provider: ${ref.provider}, ref: ${ref.ref})`);
       } else {
-        console.log(`  ${key.padEnd(20)} ${JSON.stringify(value)}  [global]`);
+        console.log(`  ${key.padEnd(20)} ${JSON.stringify(value)}`);
       }
     }
     console.log();
