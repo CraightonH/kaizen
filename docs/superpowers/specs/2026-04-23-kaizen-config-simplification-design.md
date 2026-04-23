@@ -35,6 +35,11 @@ There is exactly one kaizen config file: `~/.kaizen/kaizen.json`. It holds exact
 - **`default_harness`** (optional, string): the harness ref used when `--harness` is not passed on the CLI.
 - **`plugin_config`** (optional, object): per-plugin config overrides. Keyed by plugin name. Values are plugin-specific objects.
 
+The following pre-existing top-level keys are also allowed (they live at `~/.kaizen/kaizen.json` today and are orthogonal to the config-simplification work):
+
+- **`marketplaces`** (array): registered marketplace refs, managed by `kaizen marketplace add/remove`.
+- **`marketplaceUpdateTTL`** (number): background marketplace refresh cadence.
+
 Any other top-level key is a validation error. In particular:
 
 - **`plugins` is rejected.** The plugin set is defined by the harness. Users cannot add, remove, or replace plugins via config.
@@ -64,26 +69,48 @@ Harness files keep their current schema: `plugins` is an array of refs, and per-
 For each plugin `P` in the active harness:
 
 ```
-effective_config(P) = { ...harness_defaults_for(P), ...user_global_config_for(P) }
+effective_config(P) = { ...plugin_declared_defaults(P), ...harness_defaults_for(P), ...user_global_config_for(P) }
 ```
 
-Shallow merge, user wins on conflicts. Applied only to plugin config — nothing else merges. `harness_defaults_for(P)` comes from the top-level `P`-keyed object inside the harness's `kaizen.json`. `user_global_config_for(P)` comes from `plugin_config[P]` in `~/.kaizen/kaizen.json`.
+Shallow merge, user wins on conflicts, harness wins over plugin's own declared defaults. Applied only to plugin config — nothing else merges.
+
+- `plugin_declared_defaults(P)` comes from the plugin's own `config.defaults` declaration.
+- `harness_defaults_for(P)` comes from the top-level `P`-keyed object inside the harness's `kaizen.json`.
+- `user_global_config_for(P)` comes from `plugin_config[P]` in `~/.kaizen/kaizen.json`.
 
 This is the entire configuration system. There is no other merge, no other overlay, no other precedence rule.
 
+**Note:** the existing `mergePluginConfig` in `src/core/config-merge.ts` currently orders these arguments `{ ...declaration, ...global, ...harness }` (harness wins). This must flip to `{ ...declaration, ...harness, ...global }` so the user's `~/.kaizen/kaizen.json` takes precedence over harness defaults — otherwise the north-star gitlab use case fails.
+
 ### Code changes
 
-- Delete `mergeConfigs` from `src/core/config.ts`.
+**In `src/core/config.ts` (legacy path — delete):**
+- Delete `mergeConfigs`.
 - Delete `findProjectConfig`, `PROJECT_CONFIG`, `LEGACY_CONFIG`.
+- Delete `loadKaizenConfig` (its only remaining caller is project/legacy/global paths we're removing).
 - Rewrite `resolveConfig`:
   ```
   1. Determine harness ref: opts.harness || global.default_harness || fatal.
-  2. Load harness config.
-  3. If ~/.kaizen/kaizen.json has plugin_config, apply the per-plugin shallow merge described above.
-  4. Return the resulting effective config.
+  2. Load harness config (via loadHarnessConfig, unchanged).
+  3. Return harness config as-is; per-plugin user overrides are applied in plugin-manager via mergePluginConfig.
   ```
-- Add a validator for `~/.kaizen/kaizen.json` that rejects any top-level key outside `{default_harness, plugin_config}`, rejects `plugins` and `extends` with targeted messages, and validates that `plugin_config` is an object of objects.
-- Update `loadKaizenConfig` (or split into `loadUserConfig`) so the user-config validator is distinct from the harness validator. They have different schemas now.
+
+**In `src/core/kaizen-config.ts` and `src/types/plugin.ts` (new canonical path — augment):**
+- Rename `KaizenGlobalConfig.defaultHarness` → `default_harness`.
+- Rename `KaizenGlobalConfig.defaults` → `plugin_config`.
+- Update `loadKaizenGlobalConfig` to validate: reject `plugins`, reject `extends` (with a "rename to default_harness" message), reject unknown top-level keys outside `{default_harness, plugin_config, marketplaces, marketplaceUpdateTTL}`.
+- `loadKaizenGlobalConfig` must stay tolerant of an absent file (returns `{}`), same as today.
+
+**In `src/core/config-merge.ts` (merge-order flip):**
+- Change `mergePluginConfig` from `{ ...declaration, ...globalDefaults, ...harnessConfig }` to `{ ...declaration, ...harnessConfig, ...globalDefaults }` so user globals win over harness defaults.
+- Rename parameter `globalDefaults` → `userPluginConfig` for clarity.
+
+**In `src/core/plugin-manager.ts`:**
+- Update line ~637 to read `this.globalConfig?.plugin_config?.[plugin.name]` (was `defaults`).
+
+**In `src/cli.ts`:**
+- Remove imports of `findProjectConfig`, `PROJECT_CONFIG`, `LEGACY_CONFIG`.
+- Rewrite `kaizen init` to global-only (see section below).
 
 ### `kaizen init`
 
