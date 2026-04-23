@@ -317,32 +317,13 @@ export interface UiProvider {
 export type EventHandler = (payload?: unknown) => Promise<unknown | void>;
 ```
 
-kaizen core itself defines no event names — the event vocabulary is owned by
-plugins. In practice, the `core-events` plugin exports the canonical event
-names and payload types and registers a service that exposes them. Import
-event names and payload types from `core-events`:
-
-```ts
-import { EVENTS } from "core-events";
-import type {
-  SessionContext,
-  UserMessageContext,
-  ResponseContext,
-  ToolCallContext,
-  ToolResultContext,
-} from "core-events";
-```
-
-Conventional event names shipped by `core-events`:
-
-| Event | Payload type | When it fires |
-|-------|--------------|---------------|
-| `session:start` | `SessionContext` | Once at session open |
-| `session:end` | `{ sessionId }` | Once at session close |
-| `session:user_message` | `UserMessageContext` | Each user turn |
-| `session:response` | `ResponseContext` | Each assistant response |
-| `tool:before` | `ToolCallContext` | Before `execute()` |
-| `tool:after` | `ToolResultContext` | After `execute()` |
+kaizen core itself defines no event names — the vocabulary is owned entirely
+by plugins. A plugin that emits events should call `ctx.defineEvent` for each
+name during `setup()`. When the `defineEvent` calls live in a separate
+vocabulary plugin, emitters must declare a `consumes` dependency on that
+plugin's service to guarantee it initializes first. See
+[`guides/ecosystem-design.md`](../guides/ecosystem-design.md) for the full
+pattern and worked examples.
 
 `emit()` semantics:
 
