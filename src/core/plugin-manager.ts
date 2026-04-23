@@ -569,6 +569,14 @@ export class PluginManager {
     debug(`Plugin '${name}' unloaded.`);
   }
 
+  async unloadAll(): Promise<void> {
+    const names = [...this.plugins.keys()];
+    // Unload in reverse order so consumers stop before their providers.
+    for (const name of names.reverse()) {
+      await this.unload(name);
+    }
+  }
+
   async reload(name: string): Promise<void> {
     await this.unload(name);
     await this.load(name);
