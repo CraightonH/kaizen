@@ -92,8 +92,7 @@ Subcommands:
 
 Flags:
   --harness <ref>                       harness ref (marketplace/name@version)
-  --config <path>                       alternate kaizen.json path
-  --trust-lockfile                      reuse existing lockfile; no prompts
+--trust-lockfile                      reuse existing lockfile; no prompts
   --non-interactive                     refuse any prompt-requiring consent
   --allow-unscoped                      permit non-interactive UNSCOPED consent
   --allow-destructive                   enable destructive CLI tools
