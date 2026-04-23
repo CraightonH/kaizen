@@ -1,23 +1,12 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import type { KaizenGlobalConfig } from "../types/plugin.js";
-import { PROJECT_CONFIG, KAIZEN_HOME_CONFIG } from "../core/config.js";
-
-function readProjectConfig(): Record<string, unknown> {
-  if (!existsSync(PROJECT_CONFIG)) return {};
-  try { return JSON.parse(readFileSync(PROJECT_CONFIG, "utf8")) as Record<string, unknown>; }
-  catch { return {}; }
-}
+import { KAIZEN_HOME_CONFIG } from "../core/config.js";
 
 function readGlobalConfig(): KaizenGlobalConfig {
   if (!existsSync(KAIZEN_HOME_CONFIG)) return {};
   try { return JSON.parse(readFileSync(KAIZEN_HOME_CONFIG, "utf8")) as KaizenGlobalConfig; }
   catch { return {}; }
-}
-
-function writeProjectConfig(config: Record<string, unknown>): void {
-  mkdirSync(dirname(PROJECT_CONFIG), { recursive: true });
-  writeFileSync(PROJECT_CONFIG, JSON.stringify(config, null, 2) + "\n", "utf8");
 }
 
 function writeGlobalConfig(config: KaizenGlobalConfig): void {
@@ -63,18 +52,12 @@ function coerceValue(raw: string, existing: unknown): unknown {
 }
 
 export function cmdConfigShow(pluginName?: string): number {
-  const project = readProjectConfig();
   const global = readGlobalConfig();
   const globalPluginConfig = global.defaults?.plugin_config ?? {};
 
-  const plugins = (project["plugins"] as string[] | undefined) ?? [];
   const allPluginNames = pluginName
     ? [pluginName]
-    : [...new Set([
-        ...plugins,
-        ...Object.keys(project).filter((k) => k !== "plugins" && k !== "extends"),
-        ...Object.keys(globalPluginConfig),
-      ])];
+    : Object.keys(globalPluginConfig);
 
   if (allPluginNames.length === 0) {
     console.log("No plugin configuration found.");
@@ -82,17 +65,15 @@ export function cmdConfigShow(pluginName?: string): number {
   }
 
   for (const name of allPluginNames) {
-    const harness = (project[name] as Record<string, unknown> | undefined) ?? {};
     const gDefaults = globalPluginConfig[name] ?? {};
-    const merged = { ...gDefaults, ...harness };
 
     console.log(`${name}:`);
-    for (const [key, value] of Object.entries(merged)) {
+    for (const [key, value] of Object.entries(gDefaults)) {
       if (typeof value === "object" && value !== null && "provider" in value) {
         const ref = value as { provider: string; ref: string };
-        console.log(`  ${key.padEnd(20)} *** (provider: ${ref.provider}, ref: ${ref.ref})  [harness]`);
+        console.log(`  ${key.padEnd(20)} *** (provider: ${ref.provider}, ref: ${ref.ref})  [global]`);
       } else {
-        console.log(`  ${key.padEnd(20)} ${JSON.stringify(value)}  [${harness[key] !== undefined ? "harness" : "global"}]`);
+        console.log(`  ${key.padEnd(20)} ${JSON.stringify(value)}  [global]`);
       }
     }
     console.log();
@@ -106,11 +87,8 @@ export function cmdConfigGet(pluginName: string | undefined, path: string | unde
     return 2;
   }
 
-  const project = readProjectConfig();
   const global = readGlobalConfig();
-  const harness = (project[pluginName] as Record<string, unknown> | undefined) ?? {};
-  const gDefaults = global.defaults?.plugin_config?.[pluginName] ?? {};
-  const merged = { ...gDefaults, ...harness };
+  const merged = global.defaults?.plugin_config?.[pluginName] ?? {};
 
   const value = getNestedValue(merged, path);
   if (value === undefined) {
@@ -138,27 +116,19 @@ export function cmdConfigSet(
     return 2;
   }
 
-  if (flags.global) {
-    const cfg = readGlobalConfig();
-    if (!cfg.defaults) cfg.defaults = {};
-    if (!cfg.defaults.plugin_config) cfg.defaults.plugin_config = {};
-    const pluginCfgMap = cfg.defaults.plugin_config;
-    if (!pluginCfgMap[pluginName]) pluginCfgMap[pluginName] = {};
-    const existing = getNestedValue(pluginCfgMap[pluginName]!, path);
-    setNestedValue(pluginCfgMap[pluginName]!, path, coerceValue(value, existing));
-    writeGlobalConfig(cfg);
-    console.log(`Set ${pluginName}.${path} in global config.`);
-  } else {
-    const cfg = readProjectConfig();
-    if (typeof cfg[pluginName] !== "object" || cfg[pluginName] === null) {
-      cfg[pluginName] = {};
-    }
-    const pluginCfg = cfg[pluginName] as Record<string, unknown>;
-    const existing = getNestedValue(pluginCfg, path);
-    setNestedValue(pluginCfg, path, coerceValue(value, existing));
-    writeProjectConfig(cfg);
-    console.log(`Set ${pluginName}.${path} in project config.`);
+  if (!flags.global) {
+    console.error("Project-level config is no longer supported. Use --global to write to ~/.kaizen/kaizen.json.");
+    return 2;
   }
+  const cfg = readGlobalConfig();
+  if (!cfg.defaults) cfg.defaults = {};
+  if (!cfg.defaults.plugin_config) cfg.defaults.plugin_config = {};
+  const pluginCfgMap = cfg.defaults.plugin_config;
+  if (!pluginCfgMap[pluginName]) pluginCfgMap[pluginName] = {};
+  const existing = getNestedValue(pluginCfgMap[pluginName]!, path);
+  setNestedValue(pluginCfgMap[pluginName]!, path, coerceValue(value, existing));
+  writeGlobalConfig(cfg);
+  console.log(`Set ${pluginName}.${path} in global config.`);
   return 0;
 }
 
@@ -221,20 +191,13 @@ export async function cmdConfigSetSecret(
     await fileProvider.set(ref, secretValue);
 
     const refObj = { provider: "kaizen", ref };
-    if (flags.global) {
-      const cfg = readGlobalConfig();
-      if (!cfg.defaults) cfg.defaults = {};
-      if (!cfg.defaults.plugin_config) cfg.defaults.plugin_config = {};
-      const pluginCfgMap = cfg.defaults.plugin_config;
-      if (!pluginCfgMap[pluginName]) pluginCfgMap[pluginName] = {};
-      pluginCfgMap[pluginName]![key] = refObj;
-      writeGlobalConfig(cfg);
-    } else {
-      const cfg = readProjectConfig();
-      if (typeof cfg[pluginName] !== "object" || cfg[pluginName] === null) cfg[pluginName] = {};
-      (cfg[pluginName] as Record<string, unknown>)[key] = refObj;
-      writeProjectConfig(cfg);
-    }
+    const cfg = readGlobalConfig();
+    if (!cfg.defaults) cfg.defaults = {};
+    if (!cfg.defaults.plugin_config) cfg.defaults.plugin_config = {};
+    const pluginCfgMap = cfg.defaults.plugin_config;
+    if (!pluginCfgMap[pluginName]) pluginCfgMap[pluginName] = {};
+    pluginCfgMap[pluginName]![key] = refObj;
+    writeGlobalConfig(cfg);
     console.log(`Secret stored. Ref: ${JSON.stringify(refObj)}`);
     return 0;
   } else {

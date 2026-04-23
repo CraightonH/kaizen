@@ -54,14 +54,12 @@ describe("resolveHarness", () => {
   });
 });
 
-describe("resolveConfig — named harness required", () => {
-  test("errors when no --harness and no extends in config", () => {
-    mkdirSync(join(tmp, ".kaizen"), { recursive: true });
-    writeFileSync(join(tmp, ".kaizen", "kaizen.json"), JSON.stringify({ plugins: [] }));
-    expect(() => resolveConfig({})).toThrow(/named harness required/i);
+describe("resolveConfig", () => {
+  test("errors when no harness provided", () => {
+    expect(() => resolveConfig({})).toThrow(/harness is required/i);
   });
 
-  test("succeeds with --harness", () => {
+  test("succeeds with explicit harness name", () => {
     const dir = join(tmp, ".kaizen", "harnesses", "dev");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "kaizen.json"), JSON.stringify({ plugins: ["a"] }));
@@ -69,13 +67,23 @@ describe("resolveConfig — named harness required", () => {
     expect(cfg.plugins).toEqual(["a"]);
   });
 
-  test("succeeds when local config has extends", () => {
-    const h = join(tmp, ".kaizen", "harnesses", "base");
-    mkdirSync(h, { recursive: true });
-    writeFileSync(join(h, "kaizen.json"), JSON.stringify({ plugins: ["x"] }));
-    mkdirSync(join(tmp, ".kaizen"), { recursive: true });
-    writeFileSync(join(tmp, ".kaizen", "kaizen.json"), JSON.stringify({ extends: "base" }));
-    const cfg = resolveConfig({});
+  test("succeeds with extendsOverride", () => {
+    const dir = join(tmp, ".kaizen", "harnesses", "base");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "kaizen.json"), JSON.stringify({ plugins: ["x"] }));
+    const cfg = resolveConfig({ extendsOverride: "base" });
     expect(cfg.plugins).toEqual(["x"]);
+  });
+
+  test("harness plugins are returned unchanged (no project-config overlay)", () => {
+    const dir = join(tmp, ".kaizen", "harnesses", "official");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "kaizen.json"), JSON.stringify({ plugins: ["official/core-cli@0.1.0"] }));
+    // Even if a project .kaizen/kaizen.json exists, it is NOT merged into the harness config.
+    mkdirSync(join(tmp, ".kaizen"), { recursive: true });
+    writeFileSync(join(tmp, ".kaizen", "kaizen.json"), JSON.stringify({ plugins: ["evil/injected@0.0.0"] }));
+    const cfg = resolveConfig({ harness: "official" });
+    expect(cfg.plugins).toEqual(["official/core-cli@0.1.0"]);
+    expect(JSON.stringify(cfg)).not.toContain("evil/injected");
   });
 });
