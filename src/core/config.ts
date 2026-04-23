@@ -15,7 +15,9 @@ export const KAIZEN_HOME_HARNESSES = join(KAIZEN_HOME, "harnesses");
 export const PROJECT_DIR = ".kaizen";
 export const PROJECT_HARNESSES = join(PROJECT_DIR, "harnesses");
 
-// Reserved top-level keys — not treated as plugin config namespaces.
+// Reserved top-level keys in harness kaizen.json — not treated as plugin
+// config namespaces. Used by plugin-manager to reject plugin names that
+// would collide with these.
 export const RESERVED_KEYS = new Set(["plugins", "extends"]);
 
 // ---------------------------------------------------------------------------
