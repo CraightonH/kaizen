@@ -7,9 +7,9 @@ describe("registerHostApi", () => {
     _resetForTesting();
     registerHostApi();
     const mod = (await import("kaizen/types")) as Record<string, unknown>;
-    expect(mod.createLLMRuntime).toBe(hostApi.createLLMRuntime);
-    expect(mod.readStdinLine).toBe(hostApi.readStdinLine);
     expect(mod.PLUGIN_API_VERSION).toBe(hostApi.PLUGIN_API_VERSION);
+    expect(mod.createLLMRuntime).toBeUndefined();
+    expect(mod.readStdinLine).toBeUndefined();
   });
 
   it("warns on second call and does not throw", () => {

@@ -10,14 +10,11 @@ between kaizen and all plugins."
 
 ```ts
 import {
-  // Runtime values
-  createLLMRuntime,
-  readStdinLine,
+  // Runtime value (the only one)
   PLUGIN_API_VERSION,
   // Types (erased at runtime)
   type KaizenPlugin,
   type PluginContext,
-  type ToolDefinition,
 } from "kaizen/types";
 ```
 
@@ -25,45 +22,18 @@ import {
 
 ## Runtime values
 
-These are real values — callable classes, constants, and functions.
-
-### `createLLMRuntime`
-
-```ts
-function createLLMRuntime(config: {
-  adapter: "anthropic" | "openai" | "google" | "mistral";
-  model: string;
-  api_key_env?: string;
-  api_key?: string;
-  baseURL?: string;
-}): {
-  send(messages: Message[], tools: ToolDefinition[]): Promise<LLMResponse>;
-  stream(messages: Message[], tools: ToolDefinition[]): AsyncIterable<LLMStreamChunk>;
-};
-```
-
-Factory for an `Executor`-shaped object backed by the `ai` SDK. Used by
-executor plugins to avoid reimplementing provider wiring. The return value
-conforms to the [`Executor`](./plugin-api.md#executor) interface.
-
-### `readStdinLine`
-
-```ts
-function readStdinLine(): Promise<string>;
-```
-
-Reads the next line from process stdin. Multiple callers each receive the
-next available line in order — there is a single shared readline interface
-for the whole process, so importing this everywhere is safe. Returns `""`
-on stdin close.
-
-Used by `core-ui-terminal` and `core-executor-debug` to share one queue
-rather than fighting over separate readline instances.
+**Core holds exactly one opinion:** one plugin must be the session driver
+and receive `start()`. Everything else — LLM runtime, stdin reading, UI
+shape, tool shape — is a plugin-to-plugin concern mediated by the
+[service registry](../concepts/plugin-model.md#services). Accordingly, the
+`kaizen/types` runtime surface exposes only `PLUGIN_API_VERSION`. Plugins
+that need an LLM adapter or shared stdin obtain them by consuming services
+published by other plugins.
 
 ### `PLUGIN_API_VERSION`
 
 ```ts
-const PLUGIN_API_VERSION: string;  // current value: "2"
+const PLUGIN_API_VERSION: string;  // current value: "3"
 ```
 
 The semver major version of the plugin API. Core warns (but still loads) if a
@@ -205,27 +175,6 @@ for type annotations in your plugin source. Full shapes are in
 - `JsonSchema` — JSON Schema subset for tool `parameters`
 - `PluginEntry` — plugin-manager listing entry
 - `PluginManagerPublicApi` / `PluginManagerLifecycleApi` — runtime plugin control
-
-### LLM / message types
-
-- `Message` — `{ role; content; tool_call_id?; tool_calls? }`
-- `MessageRole` — `"system" | "user" | "assistant" | "tool"`
-- `AgentMessage` — tagged union sent via `UiChannel.send`
-- `UserMessage` — tagged union returned by `UiChannel.receive`
-- `ToolCall` — `{ id; name; args }`
-- `LLMResponse` — `{ content; tool_calls; stop_reason }`
-- `LLMStreamChunk` — streaming chunk shape
-- `Executor` — `{ send; stream }`
-
-### Tool types
-
-- `ToolDefinition` — `{ name; description; parameters; destructive?; execute }`
-- `ToolResult` — `{ ok; output?; data?; error?; exit_code? }`
-
-### UI types
-
-- `UiProvider` — `{ accept(): AsyncIterable<UiChannel> }`
-- `UiChannel` — `{ id; receive; send; close }`
 
 ### Marketplace types
 

@@ -11,7 +11,7 @@ import { readLockfile, writeLockfile, upsertPluginEntry, type LockfileEntry } fr
 import { canonicalTierGrantHash } from "../core/plugin-hash.js";
 import { renderScopedUAC, renderUnscopedUAC } from "../core/uac-renderer.js";
 import { decideConsent } from "../core/consent-flow.js";
-import { readStdinLine } from "../core/stdin.js";
+import { readStdinLine } from "./cli-readline.js";
 import { PROJECT_CONFIG } from "../core/config.js";
 import { mergePluginConfig, separateSecrets } from "../core/config-merge.js";
 import { validateConfig, validateSchemaItself } from "../core/config-validator.js";

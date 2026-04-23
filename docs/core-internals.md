@@ -14,9 +14,11 @@ src/core/
   context.ts          createPluginContext() — state-checked facade
   config.ts           kaizen.json loading, harness resolution, merging
   errors.ts           fatal / warn / debug
-  llm.ts              Vercel AI SDK adapter
-  stdin.ts            Shared readline queue
 ```
+
+Core ships with no LLM adapter and no shared stdin queue — both used to live
+here and have been removed. Plugins that want those capabilities publish
+them as services; consumer plugins obtain them via `ctx.useService`.
 
 ## bootstrap()
 
@@ -95,8 +97,9 @@ returns a non-void value. Handler errors are caught, logged to stderr, and
 execution continues with the next handler.
 
 The return value of `emit()` is an array of every handler's return value,
-including `undefined`. The driver plugin inspects this array to implement
-short-circuit logic (e.g. skip `execute()` if any handler returns a `ToolResult`).
+including `undefined`. The driver plugin (or any other emitter) inspects
+this array to implement short-circuit logic — for example, letting a
+`tool:before` handler preempt execution by returning a result object.
 
 Calling `on()` or `defineEvent()` outside the `INITIALIZING` state throws because
 `createPluginContext()` wraps both calls with `assertInitializing()`.
@@ -174,25 +177,19 @@ next to the harness's `kaizen.json`. See
 [docs/concepts/harnesses.md](concepts/harnesses.md#state-files) for path
 patterns and the re-materialization preservation rule.
 
-## LLM adapter (`llm.ts`)
+## Plugin unload and `stop()`
 
-`createLLMRuntime(config)` returns an `Executor` backed by the Vercel AI SDK.
-Supports Anthropic and any OpenAI-compatible endpoint via adapter selection.
+`PluginManager.unloadAll()` walks loaded plugins in reverse insertion order
+(consumers before providers) and, for each, invokes the optional
+`plugin.stop(ctx)` hook before the manager deregisters that plugin's
+events, services, and permissions. `stop()` runs inside `runInPluginScope`
+so the same `ctx` used during `setup`/`start` is still valid — permissions
+are live and services can still be `use`d.
 
-Message conversion (`toAiSdkMessages`):
-- `system`/`user` → direct passthrough
-- `assistant` with tool_calls → multipart content with `tool-call` parts
-- `tool` → `tool-result` content (AI SDK v6 shape)
-
-Tool conversion (`toAiSdkTools`):
-- Uses `dynamicTool({ description, inputSchema: jsonSchema(params) })`
-- The AI SDK never calls `execute()` — kaizen's `ToolRegistry` handles execution
-
-## stdin (`stdin.ts`)
-
-A single shared readline interface for the process. Both `core-ui-terminal` and
-`core-executor-debug` import `readStdinLine()` from here. This prevents two
-readline instances from fighting over stdin. The queue delivers lines FIFO to
-whichever caller is waiting.
-
-`core-cli`'s destructive-guard confirmation prompt also uses `readStdinLine()`.
+Errors thrown from `stop()` are caught, logged as warnings, and do not
+block deregistration of the rest of the plugin. `runHarness` calls
+`unloadAll()` in its `finally` block (before `auditLog.flush()`), so a
+normal shutdown always gives each plugin a chance to release its
+resources. This is the symmetric half of the `setup`/`start` lifecycle and
+the correct place to close readlines, unsubscribe listeners, stop timers,
+dispose file watchers, and so on.

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from "fs";
 import { dirname, join } from "path";
 import { pathToFileURL } from "url";
-import type { KaizenPlugin, KaizenConfig, KaizenGlobalConfig, PluginEntry, PluginManagerPublicApi, PluginManagerLifecycleApi } from "../types/plugin.js";
+import type { KaizenPlugin, KaizenConfig, KaizenGlobalConfig, PluginEntry, PluginManagerPublicApi, PluginManagerLifecycleApi, PluginContext } from "../types/plugin.js";
 import { PLUGIN_API_VERSION } from "../types/plugin.js";
 import { mergePluginConfig, separateSecrets, applyEnvOverrides } from "./config-merge.js";
 import { validateConfig, validateSchemaItself } from "./config-validator.js";
@@ -284,6 +284,7 @@ function topoSort(plugins: KaizenPlugin[]): KaizenPlugin[] {
 interface PluginRecord {
   plugin: KaizenPlugin;
   entry: PluginEntry;
+  ctx?: PluginContext;
 }
 
 export class PluginManager {
@@ -405,7 +406,7 @@ export class PluginManager {
       const critical = isCritical(plugin, this.serviceRegistry);
       const rPath = resolvedPathMap.get(plugin.name) ?? null;
       try {
-        await this.setupPlugin(plugin, rPath);
+        const ctx = await this.setupPlugin(plugin, rPath);
         loadedNames.add(plugin.name);
         this.plugins.set(plugin.name, {
           plugin,
@@ -415,6 +416,7 @@ export class PluginManager {
             services: plugin.services ?? {},
             status: "loaded",
           },
+          ctx,
         });
         debug(`Plugin '${plugin.name}' initialized.`);
       } catch (err) {
@@ -509,7 +511,7 @@ export class PluginManager {
       this.serviceRegistry.consume(resolveCapName(raw, aliases), plugin.name);
     }
     try {
-      await this.setupPlugin(plugin, resolvedPath);
+      const ctx = await this.setupPlugin(plugin, resolvedPath);
       this.plugins.set(name, {
         plugin,
         entry: {
@@ -518,6 +520,7 @@ export class PluginManager {
           services: plugin.services ?? {},
           status: "loaded",
         },
+        ctx,
       });
       try {
         this.serviceRegistry.validateAll();
@@ -548,12 +551,30 @@ export class PluginManager {
       warn(`Cannot unload plugin '${name}': not loaded.`);
       return;
     }
+    if (typeof record.plugin.stop === "function" && record.ctx) {
+      try {
+        await runInPluginScope(name, async () => {
+          await record.plugin.stop!(record.ctx!);
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        warn(`Plugin '${name}' stop() failed: ${msg}`);
+      }
+    }
     this.eventBus.deregisterByPlugin(name);
     this.serviceRegistry.deregisterByPlugin(name);
     this.enforcer.deregister(name);
     record.entry.status = "unloaded";
     this.plugins.delete(name);
     debug(`Plugin '${name}' unloaded.`);
+  }
+
+  async unloadAll(): Promise<void> {
+    const names = [...this.plugins.keys()];
+    // Unload in reverse order so consumers stop before their providers.
+    for (const name of names.reverse()) {
+      await this.unload(name);
+    }
   }
 
   async reload(name: string): Promise<void> {
@@ -605,7 +626,7 @@ export class PluginManager {
   // Internal setup
   // --------------------------------------------------------------------------
 
-  private async setupPlugin(plugin: KaizenPlugin, resolvedPath: string | null = null): Promise<void> {
+  private async setupPlugin(plugin: KaizenPlugin, resolvedPath: string | null = null): Promise<PluginContext> {
     // Register the plugin's permission manifest (defaults to trusted).
     this.enforcer.register(plugin.name, plugin.permissions ?? { tier: "trusted" });
     // Scan imports after registration so check() has the manifest.
@@ -674,6 +695,8 @@ export class PluginManager {
     } catch {
       // Plugin didn't register a secret provider — that's fine
     }
+
+    return ctx;
   }
 
   private scanAndCheckImports(pluginName: string, resolvedPath: string): void {

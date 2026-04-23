@@ -99,6 +99,9 @@ export async function runHarness(opts: RunHarnessOpts): Promise<void> {
   try {
     await runInPluginScope(driver.name, async () => { await driver.start!(ctx); });
   } finally {
+    try { await manager.unloadAll(); } catch (err) {
+      console.error("[kaizen] error during plugin teardown:", err);
+    }
     await auditLog.flush();
   }
 }

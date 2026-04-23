@@ -81,22 +81,4 @@ describe.skip("kaizen-official-plugins e2e (through host-api virtual module)", (
     await installHarness("official", "core-debug", (v as { path: string }).path);
     expect(existsSync(join(harnessInstallDir("official", "core-debug"), "kaizen.json"))).toBe(true);
   });
-
-  it("loads an executor plugin that imports createLLMRuntime via kaizen/types", async () => {
-    // core-executor-anthropic imports `createLLMRuntime` from "kaizen/types"
-    // — a runtime value that only the virtual module provides.
-    await addMarketplace(SIBLING, { id: "official", local: true });
-    const cat = await readCatalog("official");
-    const entry = cat.entries.find((e) => e.kind === "plugin" && e.name === "core-executor-anthropic");
-    expect(entry).toBeDefined();
-    const version = entry!.versions[0]!;
-    await installPlugin(
-      "official",
-      "core-executor-anthropic",
-      version.version,
-      (version as { source: import("../types/plugin.js").PluginSource }).source,
-    );
-    const plugin = await loadPluginFromInstallDir("official", "core-executor-anthropic", version.version);
-    expect(plugin.name).toBe("core-executor-anthropic");
-  });
 });

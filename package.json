@@ -20,9 +20,6 @@
     "typescript": "^5.4.0"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.66",
-    "@ai-sdk/openai": "^3.0.50",
-    "ai": "^6.0.146",
     "ajv": "^8.18.0",
     "yaml": "^2.8.3"
   }

@@ -9,7 +9,7 @@
  * live in the `core-events` plugin, not here. Import them from `core-events`.
  */
 
-export const PLUGIN_API_VERSION = "2";
+export const PLUGIN_API_VERSION = "3";
 
 /**
  * Type-only declarations live here. Runtime values that plugins need are
@@ -56,109 +56,6 @@ export type SecretRef = string | StructuredSecretRef;
 export interface SecretsContext {
   get(key: string): Promise<string | undefined>;
   refresh(key: string): Promise<string | undefined>;
-}
-
-// ---------------------------------------------------------------------------
-// LLM primitives
-// ---------------------------------------------------------------------------
-
-export type MessageRole = "system" | "user" | "assistant" | "tool";
-
-export interface Message {
-  role: MessageRole;
-  content: string;
-  /** Present on role=tool messages — identifies which tool call this is the result of. */
-  tool_call_id?: string;
-  /** Present on role=assistant messages when the LLM requested tool calls. */
-  tool_calls?: ToolCall[];
-}
-
-export interface ToolCall {
-  id: string;
-  name: string;
-  args: Record<string, unknown>;
-}
-
-export interface LLMResponse {
-  content: string;
-  tool_calls: ToolCall[];
-  /** Raw stop reason from the provider (e.g. "end_turn", "tool_use"). */
-  stop_reason: string;
-}
-
-export interface LLMStreamChunk {
-  type: "text" | "tool_call" | "done";
-  text?: string;
-  tool_call?: Partial<ToolCall>;
-}
-
-export interface Executor {
-  send(messages: Message[], tools: ToolDefinition[]): Promise<LLMResponse>;
-  stream(messages: Message[], tools: ToolDefinition[]): AsyncIterable<LLMStreamChunk>;
-}
-
-// ---------------------------------------------------------------------------
-// Tools
-// ---------------------------------------------------------------------------
-
-export interface ToolResult {
-  ok: boolean;
-  /** Human-readable output. Sent to LLM when data is absent. */
-  output?: string;
-  /**
-   * Structured output (JSON). Sent to LLM instead of output when both present.
-   * output is then for human display only.
-   */
-  data?: unknown;
-  /** Error message. Sent to LLM when ok=false. */
-  error?: string;
-  /** For subprocess-based tools. Informational only. */
-  exit_code?: number;
-}
-
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: JsonSchema;
-  /**
-   * If true, core prints the call and prompts for confirmation before executing,
-   * unless the session was started with --allow-destructive.
-   */
-  destructive?: boolean;
-  execute(args: Record<string, unknown>): Promise<ToolResult>;
-}
-
-// ---------------------------------------------------------------------------
-// UI channel — typed message transport between agent and user
-// ---------------------------------------------------------------------------
-
-export type UserMessage =
-  | { type: "text"; content: string };
-
-export type AgentMessage =
-  | { type: "text";        content: string }
-  | { type: "text_delta";  content: string }
-  | { type: "tool_call";   name: string; args: Record<string, unknown> }
-  | { type: "tool_result"; name: string; ok: boolean; output: string }
-  | { type: "error";       message: string };
-
-export interface UiChannel {
-  readonly id: string;
-  /** Block until the user sends a message. Throws if the channel is closed. */
-  receive(): Promise<UserMessage>;
-  /** Send a message to the user. */
-  send(msg: AgentMessage): Promise<void>;
-  /** Cleanly close the channel from the agent side. */
-  close(): Promise<void>;
-}
-
-export interface UiProvider {
-  /**
-   * Yields one UiChannel per session.
-   * Terminal: yields one channel then stops.
-   * Web: yields a new channel per incoming connection, indefinitely.
-   */
-  accept(): AsyncIterable<UiChannel>;
 }
 
 // ---------------------------------------------------------------------------
@@ -325,6 +222,13 @@ export interface KaizenPlugin {
 
   setup(ctx: PluginContext): Promise<void>;
   start?(ctx: PluginContext): Promise<void>;
+  /**
+   * Called during unload, before events/services/permissions are deregistered.
+   * Use to close resources opened in setup() or start() (readline interfaces,
+   * network listeners, timers, file watchers). Errors are logged but do not
+   * prevent deregistration.
+   */
+  stop?(ctx: PluginContext): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
