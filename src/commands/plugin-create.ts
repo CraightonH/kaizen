@@ -22,6 +22,7 @@ export interface PluginScaffoldConfig {
   consumes: string[];
   hasConfig: boolean;
   configKeys: ConfigKey[];
+  driver: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -376,7 +377,7 @@ async function promptConfig(rl: readline.Interface, targetPath: string): Promise
     }
   }
 
-  return { name, description, tier, grants, provides, consumes, hasConfig, configKeys };
+  return { name, description, tier, grants, provides, consumes, hasConfig, configKeys, driver: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -406,6 +407,7 @@ export async function runPluginCreate(
       consumes: [],
       hasConfig: false,
       configKeys: [],
+      driver: false,
     };
   } else {
     // 3. Interactive mode

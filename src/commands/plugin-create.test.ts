@@ -80,6 +80,13 @@ describe("runPluginCreate", () => {
       expect(readme).toContain("Installation");
     });
 
+    it("defaults do not produce a driver manifest", async () => {
+      await runPluginCreate(targetPath, { defaults: true });
+      const src = readFileSync(join(targetPath, "index.ts"), "utf8");
+      expect(src).not.toContain("driver: true");
+      expect(src).not.toContain("async start(ctx)");
+    });
+
     it("uses basename of targetPath as name", async () => {
       const nestedTarget = join(tmpBase, "nested", "my-nested-plugin");
       const code = await runPluginCreate(nestedTarget, { defaults: true });
