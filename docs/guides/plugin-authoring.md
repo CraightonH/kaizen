@@ -260,6 +260,11 @@ your `setup()` actually touches. If your plugin subscribes to events, capture
 the `on` handlers and invoke them directly. If it consumes a service, stub
 `useService` to return a test double.
 
+If your plugin emits events defined by a vocabulary plugin, the real harness
+requires a `consumes` declaration for that vocabulary service (so init order
+is pinned). In tests, stub `useService` to return the vocabulary object
+directly — no services edge is needed in the test context.
+
 `plugin-standards.md` requires at least one `*.test.ts` that exercises
 metadata plus `setup()`; `kaizen plugin validate` checks for the file's
 presence but not its contents.
