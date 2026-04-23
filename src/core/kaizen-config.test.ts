@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, readFileSync, existsSync } from "fs";
+import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
 import {
   kaizenHome, marketplacesDir, marketplaceDir, marketplaceRepoDir,
   pluginInstallDir, harnessInstallDir,
   ensureKaizenHome, loadKaizenGlobalConfig, saveKaizenGlobalConfig,
-  looksLikeHarnessRef,
+  looksLikeHarnessRef, kaizenHomeConfigPath,
 } from "./kaizen-config.js";
 
 let home: string;
@@ -84,5 +84,91 @@ describe("looksLikeHarnessRef", () => {
   it("rejects bare names without a slash", () => {
     expect(looksLikeHarnessRef("core-anthropic")).toBe(false);
     expect(looksLikeHarnessRef("my-local-harness")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Validation tests (Task 4)
+// ---------------------------------------------------------------------------
+
+describe("loadKaizenGlobalConfig validation", () => {
+  let tmpHome: string;
+
+  beforeEach(() => {
+    tmpHome = join(tmpdir(), `kaizen-cfg-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    process.env.KAIZEN_HOME_OVERRIDE = tmpHome;
+  });
+
+  afterEach(() => {
+    delete process.env.KAIZEN_HOME_OVERRIDE;
+    try { rmSync(tmpHome, { recursive: true, force: true }); } catch {}
+  });
+
+  function writeCfg(obj: unknown) {
+    const path = kaizenHomeConfigPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(obj), "utf8");
+  }
+
+  it("accepts nested defaults.harness and defaults.plugin_config", async () => {
+    writeCfg({
+      defaults: {
+        harness: "official/core-shell@1.0.0",
+        plugin_config: { gitlab: { base_url: "https://gitlab.mycompany.com" } },
+      },
+    });
+    const cfg = await loadKaizenGlobalConfig();
+    expect(cfg.defaults?.harness).toBe("official/core-shell@1.0.0");
+    expect(cfg.defaults?.plugin_config?.gitlab).toEqual({ base_url: "https://gitlab.mycompany.com" });
+  });
+
+  it("rejects top-level `plugins` key", async () => {
+    writeCfg({ plugins: ["foo/bar@1.0.0"] });
+    await expect(loadKaizenGlobalConfig()).rejects.toThrow(/plugins.*not allowed|not supported/i);
+  });
+
+  it("rejects top-level `extends` with 'move to defaults.harness' hint", async () => {
+    writeCfg({ extends: "foo/bar@1.0.0" });
+    await expect(loadKaizenGlobalConfig()).rejects.toThrow(/extends.*defaults\.harness/);
+  });
+
+  it("rejects top-level `default_harness` with 'nest under defaults' hint", async () => {
+    writeCfg({ default_harness: "foo/bar@1.0.0" });
+    await expect(loadKaizenGlobalConfig()).rejects.toThrow(/default_harness.*defaults\.harness/);
+  });
+
+  it("rejects top-level `plugin_config` with 'nest under defaults' hint", async () => {
+    writeCfg({ plugin_config: { gitlab: {} } });
+    await expect(loadKaizenGlobalConfig()).rejects.toThrow(/plugin_config.*defaults\.plugin_config/);
+  });
+
+  it("rejects old flat shape (plugin names directly under defaults)", async () => {
+    writeCfg({ defaults: { gitlab: { base_url: "x" } } });
+    await expect(loadKaizenGlobalConfig()).rejects.toThrow(/defaults\.gitlab|defaults\.plugin_config/);
+  });
+
+  it("rejects unknown top-level keys", async () => {
+    writeCfg({ defaults: { harness: "x/y@1" }, random_nonsense: true });
+    await expect(loadKaizenGlobalConfig()).rejects.toThrow(/random_nonsense/);
+  });
+
+  it("allows marketplaces and marketplaceUpdateTTL", async () => {
+    writeCfg({
+      marketplaces: [{ id: "official", url: "https://example.com/repo.git" }],
+      marketplaceUpdateTTL: 600,
+    });
+    const cfg = await loadKaizenGlobalConfig();
+    expect(cfg.marketplaces?.[0]?.id).toBe("official");
+    expect(cfg.marketplaceUpdateTTL).toBe(600);
+  });
+
+  it("defaults.plugin_config must be an object of objects", async () => {
+    writeCfg({ defaults: { plugin_config: { gitlab: "not an object" } } });
+    await expect(loadKaizenGlobalConfig()).rejects.toThrow(/plugin_config/);
+  });
+
+  it("returns {} when file is absent", async () => {
+    const cfg = await loadKaizenGlobalConfig();
+    expect(cfg).toEqual({});
   });
 });
