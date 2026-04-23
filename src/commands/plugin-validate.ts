@@ -232,7 +232,19 @@ export async function checkConfigSchema(plugin: Record<string, unknown>): Promis
   return results;
 }
 
-export async function scanImports(filePath: string): Promise<ValidationResult[]> {
+async function loadPluginTier(dir: string, entryRelative: string): Promise<string | undefined> {
+  try {
+    const entryPath = join(dir, entryRelative);
+    const mod = await import(pathToFileURL(entryPath).href) as { default?: unknown };
+    const plugin = (mod.default ?? mod) as Record<string, unknown>;
+    const permissions = plugin.permissions as Record<string, unknown> | undefined;
+    return permissions?.tier as string | undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function scanImports(filePath: string, tier?: string): Promise<ValidationResult[]> {
   const results: ValidationResult[] = [];
 
   let src: string;
@@ -259,6 +271,8 @@ export async function scanImports(filePath: string): Promise<ValidationResult[]>
     });
     return results;
   }
+
+  if (tier === "unscoped") return results;
 
   for (const imp of imports) {
     if (FLAGGED_IMPORTS.has(imp)) {
@@ -343,7 +357,8 @@ export async function runPluginValidate(dir: string): Promise<number> {
     if (entryRelative) {
       const entryPath = join(dir, entryRelative);
       if (existsSync(entryPath)) {
-        const importResults = await scanImports(entryPath);
+        const tier = await loadPluginTier(dir, entryRelative);
+        const importResults = await scanImports(entryPath, tier);
         allResults.push(...importResults);
       }
     }

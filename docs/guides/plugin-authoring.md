@@ -292,7 +292,8 @@ Checks (see `src/commands/plugin-validate.ts` for the full list):
   `services.consumes`.
 - Warns on imports of `node:fs`, `node:child_process`, `node:worker_threads`,
   `bun:ffi`, and their unprefixed forms — the runtime enforcer blocks these
-  regardless.
+  regardless. Skipped for `unscoped` tier (those plugins are exempt from import
+  enforcement).
 - `*.test.ts` file present; `README.md` present.
 
 Exit code is `0` on pass (possibly with warnings), `1` on any failure. Common
