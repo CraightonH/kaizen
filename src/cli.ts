@@ -9,7 +9,8 @@ import { join } from "path";
 import { bootstrap } from "./core/index.js";
 import { resolveConfig, resolveHarness, KAIZEN_HOME, KAIZEN_HOME_CONFIG } from "./core/config.js";
 import { loadKaizenGlobalConfig } from "./core/kaizen-config.js";
-import { fatal } from "./core/errors.js";
+import { fatal, warn } from "./core/errors.js";
+import { warnStaleProjectConfig } from "./core/deprecation-warn.js";
 import { deriveLockfilePath } from "./core/lockfile-path.js";
 import {
   readLocalConfig,
@@ -115,6 +116,13 @@ Environment:
 See docs/concepts/harnesses.md for harness configuration.`);
   process.exit(0);
 }
+
+// ---------------------------------------------------------------------------
+// Deprecation check: warn if stale project-local config files are present.
+// Runs after --help so help output stays clean.
+// ---------------------------------------------------------------------------
+
+warnStaleProjectConfig({ warn });
 
 // ---------------------------------------------------------------------------
 // Subcommand: kaizen init [--global]
