@@ -59,39 +59,6 @@ export interface SecretsContext {
 }
 
 // ---------------------------------------------------------------------------
-// UI channel — typed message transport between agent and user
-// ---------------------------------------------------------------------------
-
-export type UserMessage =
-  | { type: "text"; content: string };
-
-export type AgentMessage =
-  | { type: "text";        content: string }
-  | { type: "text_delta";  content: string }
-  | { type: "tool_call";   name: string; args: Record<string, unknown> }
-  | { type: "tool_result"; name: string; ok: boolean; output: string }
-  | { type: "error";       message: string };
-
-export interface UiChannel {
-  readonly id: string;
-  /** Block until the user sends a message. Throws if the channel is closed. */
-  receive(): Promise<UserMessage>;
-  /** Send a message to the user. */
-  send(msg: AgentMessage): Promise<void>;
-  /** Cleanly close the channel from the agent side. */
-  close(): Promise<void>;
-}
-
-export interface UiProvider {
-  /**
-   * Yields one UiChannel per session.
-   * Terminal: yields one channel then stops.
-   * Web: yields a new channel per incoming connection, indefinitely.
-   */
-  accept(): AsyncIterable<UiChannel>;
-}
-
-// ---------------------------------------------------------------------------
 // Event bus
 // ---------------------------------------------------------------------------
 
