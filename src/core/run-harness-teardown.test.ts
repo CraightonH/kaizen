@@ -49,7 +49,7 @@ function writePlugin(spec: PluginSpec): string {
   const parts: string[] = [];
   parts.push(`export default {`);
   parts.push(`  name: ${JSON.stringify(spec.name)},`);
-  parts.push(`  apiVersion: "2",`);
+  parts.push(`  apiVersion: "3",`);
   if (spec.driver) parts.push(`  driver: true,`);
   parts.push(`  async setup(ctx) {},`);
   if (spec.driver) parts.push(`  async start(ctx) {},`);
@@ -87,7 +87,7 @@ describe("PluginManager.unloadAll", () => {
     await manager.unloadAll();
 
     const bridge = (globalThis as unknown as Record<string, { calls: string[] }>)[bridgeKey]!;
-    expect(bridge.calls.sort()).toEqual(["driver-plug", "other-plug"]);
+    expect(bridge.calls).toEqual(["other-plug", "driver-plug"]);
     expect(manager.list()).toEqual([]);
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });

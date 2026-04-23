@@ -48,7 +48,7 @@ function writePlugin(spec: PluginSpec): string {
   const parts: string[] = [];
   parts.push(`export default {`);
   parts.push(`  name: ${JSON.stringify(spec.name)},`);
-  parts.push(`  apiVersion: "2",`);
+  parts.push(`  apiVersion: "3",`);
   parts.push(`  async setup(ctx) {`);
   if (spec.setupBody) parts.push(spec.setupBody);
   parts.push(`  },`);
