@@ -5,7 +5,7 @@
 This guide walks through scaffolding, implementing, testing, and validating a
 kaizen plugin. For exact type signatures see
 [`reference/plugin-api.md`](../reference/plugin-api.md); for the host API
-surface (secrets, config, events, LLM runtime) see
+surface (secrets, config, events) see
 [`reference/host-api.md`](../reference/host-api.md). For the rules validation
 enforces, see [`reference/plugin-standards.md`](../reference/plugin-standards.md).
 
@@ -71,7 +71,7 @@ import type { KaizenPlugin } from "kaizen/types";
 
 const plugin: KaizenPlugin = {
   name: "my-plugin",            // kebab-case; matches config namespace in kaizen.json
-  apiVersion: "2.0.0",          // semver; core warns on major mismatch with PLUGIN_API_VERSION
+  apiVersion: "3.0.0",          // semver; core warns on major mismatch with PLUGIN_API_VERSION
   permissions: { tier: "trusted" },
   services: { provides: [], consumes: [] },
 
@@ -93,15 +93,16 @@ Required fields: `name`, `apiVersion`, `setup`. Optional: `driver`,
 
 ## Registering tools {#tools}
 
-LLM tool-calling is not yet wired into core. A future `core-tools` broker
-plugin will own tool registration and dispatch; when it lands it will define
-the service name that tool-providing plugins use.
+Core has no opinion on what a "tool" is — there is no `ctx.registerTool`
+method, no core-managed tool registry, and no built-in tool-definition
+type. Tool shape is a plugin-to-plugin contract: a tool-broker plugin
+defines a service name (for example, `core-tools:registry`) and the shape
+of the objects it accepts, and tool-providing plugins consume that service
+during their `setup()`.
 
-For now, `ToolDefinition` and `ToolResult` types exist in the API (they are
-used by the `Executor` interface for the LLM round-trip), but there is no
-`ctx.registerTool()` method and no core-managed tool registry.
-
-<!-- TODO: expand this section once core-tools publishes its service names -->
+Until a stable first-party broker publishes its service name, pick a broker
+from your marketplace (or write one) and follow the types it ships in its
+`public.d.ts`.
 
 ## Using the host API
 
@@ -125,7 +126,7 @@ async setup(ctx) {
 ```
 
 For the full surface — `SecretsContext`, `CtxFs`, `CtxNet`, `CtxExec`,
-`createLLMRuntime`, event semantics — see
+event semantics — see
 [`reference/host-api.md`](../reference/host-api.md).
 
 ## Publishing types {#publishing-types}
@@ -245,7 +246,7 @@ function makeCtx() {
 describe("my-plugin", () => {
   it("has correct metadata", () => {
     expect(plugin.name).toBe("my-plugin");
-    expect(plugin.apiVersion).toBe("2.0.0");
+    expect(plugin.apiVersion).toBe("3.0.0");
   });
 
   it("setup completes without error", async () => {

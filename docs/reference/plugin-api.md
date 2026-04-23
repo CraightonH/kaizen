@@ -7,7 +7,7 @@ file is the reference layer — exact shapes and method signatures. For the
 conceptual layer (plugin model, lifecycle, service semantics), see
 [`docs/concepts/plugin-model.md`](../concepts/plugin-model.md).
 
-Current API version: `PLUGIN_API_VERSION = "2"`.
+Current API version: `PLUGIN_API_VERSION = "3"`.
 
 ---
 
@@ -27,6 +27,7 @@ export interface KaizenPlugin {
   config?: PluginConfigDeclaration;
   setup(ctx: PluginContext): Promise<void>;
   start?(ctx: PluginContext): Promise<void>;
+  stop?(ctx: PluginContext): Promise<void>;
 }
 ```
 
@@ -41,6 +42,7 @@ export interface KaizenPlugin {
 | `config` | `PluginConfigDeclaration` | no | Declares config schema, defaults, and which keys are secrets. |
 | `setup` | `(ctx: PluginContext) => Promise<void>` | yes | Called once during `INITIALIZING`. Define and provide services, declare consumption intent, and subscribe to events here. |
 | `start` | `(ctx: PluginContext) => Promise<void>` | no | Only implement if `driver=true`. Core calls this after all plugins initialize. |
+| `stop` | `(ctx: PluginContext) => Promise<void>` | no | Called during unload before the plugin's events, services, and permissions are deregistered. Use to close resources opened in `setup`/`start` (readline interfaces, listeners, timers, file watchers). Runs inside `runInPluginScope`, so `ctx` permissions remain active. Errors are warned but do not block deregistration. `runHarness` calls `PluginManager.unloadAll()` in its `finally` block, invoking `stop` on every loaded plugin in reverse insertion order (consumers before providers). |
 
 ### PluginServices
 
@@ -191,41 +193,7 @@ export interface PluginManagerLifecycleApi {
 
 ---
 
-## Tool definition
-
-`ToolDefinition`, `ToolResult`, and `ToolCall` are part of the API surface used
-by the `Executor` interface (LLM tool-calling round-trip). A tool-broker plugin
-(`core-tools`) is planned for a future release and will define how plugins
-register callable tools. Until then, core has no `registerTool` method and
-does not manage a tool registry.
-
-```ts
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: JsonSchema;
-  destructive?: boolean;
-  execute(args: Record<string, unknown>): Promise<ToolResult>;
-}
-
-export interface ToolResult {
-  ok: boolean;
-  output?: string;     // human-readable; sent to LLM when data is absent
-  data?: unknown;      // structured JSON; sent to LLM instead of output when present
-  error?: string;      // sent to LLM when ok=false
-  exit_code?: number;  // for subprocess-based tools; informational only
-}
-
-export interface ToolCall {
-  id: string;
-  name: string;
-  args: Record<string, unknown>;
-}
-```
-
-### JsonSchema
-
-The subset used for tool parameter definitions:
+## JsonSchema
 
 ```ts
 export type JsonSchema = {
@@ -239,75 +207,18 @@ export type JsonSchema = {
 };
 ```
 
----
+Exported for plugins that want to declare validated shapes (e.g. in
+`ServiceSpec.schema` or `PluginConfigDeclaration.schema`). Core uses the
+same subset internally.
 
-## Executor and UI types
-
-These types are part of the plugin API surface. Executor and UI plugins use
-`ctx.provideService(name, impl)` plus `ctx.defineService(...)` to expose
-their implementations. The driver plugin (e.g. `core-driver`) defines the
-service names it expects and documents them in its own README. Core does not
-enshrine `kaizen.executor`, `kaizen.ui`, or any other well-known name.
-
-<!-- TODO: expand once core-driver publishes its service names -->
-
-### Executor
-
-```ts
-export interface Executor {
-  send(messages: Message[], tools: ToolDefinition[]): Promise<LLMResponse>;
-  stream(messages: Message[], tools: ToolDefinition[]): AsyncIterable<LLMStreamChunk>;
-}
-
-export type MessageRole = "system" | "user" | "assistant" | "tool";
-
-export interface Message {
-  role: MessageRole;
-  content: string;
-  tool_call_id?: string;   // role=tool only — links result to its call
-  tool_calls?: ToolCall[]; // role=assistant only — when the LLM requested calls
-}
-
-export interface LLMResponse {
-  content: string;
-  tool_calls: ToolCall[];
-  stop_reason: string;     // raw provider stop reason, e.g. "end_turn"
-}
-
-export interface LLMStreamChunk {
-  type: "text" | "tool_call" | "done";
-  text?: string;
-  tool_call?: Partial<ToolCall>;
-}
-```
-
-### UI
-
-```ts
-export type UserMessage =
-  | { type: "text"; content: string };
-
-export type AgentMessage =
-  | { type: "text";        content: string }
-  | { type: "text_delta";  content: string }
-  | { type: "tool_call";   name: string; args: Record<string, unknown> }
-  | { type: "tool_result"; name: string; ok: boolean; output: string }
-  | { type: "error";       message: string };
-
-export interface UiChannel {
-  readonly id: string;
-  receive(): Promise<UserMessage>;  // blocks until user sends; throws when closed
-  send(msg: AgentMessage): Promise<void>;
-  close(): Promise<void>;
-}
-
-export interface UiProvider {
-  /** Yields one UiChannel per session.
-   *  Terminal: yields one channel then stops.
-   *  Web: yields a new channel per connection, indefinitely. */
-  accept(): AsyncIterable<UiChannel>;
-}
-```
+> **Core holds exactly one opinion:** one plugin must be the session driver
+> and receive `start()`. LLM shape, UI shape, tool shape, and stdin handling
+> are plugin-to-plugin concerns mediated by the service registry — core does
+> not define executor, UI-channel, or tool-definition types, nor any other
+> runtime or message type beyond what appears in this file. Plugins that
+> want to cooperate agree on service names and
+> ship the types via `public.d.ts` (see
+> [Publishing types](../guides/plugin-authoring.md#publishing-types)).
 
 ---
 

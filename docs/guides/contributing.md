@@ -61,7 +61,7 @@ src/
   host-api.ts         # authoritative plugin API surface (types + runtime values)
   core/               # loader, event bus, registry, resolver, secrets, etc.
   commands/           # one file per CLI subcommand (install, plugin-*, marketplace-*)
-  types/plugin.ts     # KaizenPlugin, ToolDefinition, MarketplaceCatalog, …
+  types/plugin.ts     # KaizenPlugin, PluginContext, MarketplaceCatalog, …
   integration/        # in-repo integration helpers
   spike/              # throwaway prototypes
 

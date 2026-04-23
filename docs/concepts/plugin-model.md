@@ -124,7 +124,7 @@ moment the order changes.
 
 ## Plugin lifecycle
 
-Three moments matter for a plugin author:
+Four moments matter for a plugin author:
 
 - **`setup(ctx)`** — runs once during `INITIALIZING`. The only time you can
   call `defineService`, `provideService`, `consumeService`, `defineEvent`, or
@@ -136,13 +136,20 @@ Three moments matter for a plugin author:
   dependency's handler). If a handler throws, core logs and continues.
 - **`start(ctx)`** — runs once, on the single session driver (the plugin
   that declared `driver: true`). Core calls it after `READY`. The driver
-  owns the session from that point forward: it reads from UI channels, calls
-  the executor, iterates tool calls, emits lifecycle events, and eventually
-  closes.
+  owns the session from that point forward and shapes it entirely via
+  services it consumes from other plugins — reading user input, calling an
+  LLM, iterating tool calls, emitting lifecycle events, closing.
+- **`stop(ctx)`** — optional. Runs during unload, before the plugin's
+  events, services, and permissions are deregistered. It is the symmetric
+  half of `setup`/`start`: close anything you opened (readline interfaces,
+  listeners, timers, file watchers, sockets). Runs inside
+  `runInPluginScope`, so `ctx` permissions still work. Errors are warned
+  but do not block deregistration.
 
-There is no separate `teardown()` hook today. Cleanup belongs in a
-`session:end` handler (or whatever the session driver exposes as a close
-event).
+  `runHarness` calls `PluginManager.unloadAll()` in its `finally` block,
+  invoking `stop()` on every loaded plugin in reverse insertion order
+  (consumers before providers) so a consumer can still call a provider's
+  service during its own shutdown.
 
 ## Permission tiers
 

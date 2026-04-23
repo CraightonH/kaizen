@@ -225,33 +225,16 @@ test("plugin initializes without error", async () => {
 
 ### Tool execution
 
-- [required] Tool handlers (via `execute()`) must return `{ ok: false, error: "..." }` for errors instead of throwing
-- [required] Core wraps tool exceptions; returning `ToolResult` with `ok: false` is the standard error path
+Core defines no tool type or tool registry — tool shape is a contract
+between a broker plugin and the plugins that register with it. Follow the
+broker's `public.d.ts` for the exact return shape. General guidance:
+
+- [guideline] Prefer returning a structured result object over throwing when the error is expected (network failure, invalid input, missing secret). Reserve throws for bugs.
+- [guideline] If the broker defines a discriminated result shape (e.g. `{ ok: false, error }`), use it consistently so LLM-facing layers can render failures uniformly.
 
 ### Event handlers
 
 - [guideline] If an event handler throws, core logs the error and continues with the next handler; do not rely on exception propagation
-
-### Example
-
-```typescript
-const tool: ToolDefinition = {
-  name: "fetch-data",
-  description: "Fetch data from API",
-  parameters: { type: "object" },
-  async execute(args) {
-    try {
-      const response = await fetch("https://api.example.com/data");
-      if (!response.ok) {
-        return { ok: false, error: `API error: ${response.statusText}` };
-      }
-      return { ok: true, data: await response.json() };
-    } catch (err) {
-      return { ok: false, error: `Network error: ${err instanceof Error ? err.message : String(err)}` };
-    }
-  }
-};
-```
 
 ---
 

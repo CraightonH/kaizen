@@ -12,22 +12,30 @@ else — the session loop, terminal UI, CLI tools, and the LLM itself — is a p
 ┌─────────────────────────────────────────────────────┐
 │  kaizen core                                        │
 │  ┌──────────────┐  ┌───────────┐  ┌──────────────┐ │
-│  │ plugin loader│  │ event bus │  │  capability/ │ │
-│  │  topo-sort   │  │ on/emit   │  │  service reg │ │
+│  │ plugin loader│  │ event bus │  │   service    │ │
+│  │  topo-sort   │  │ on/emit   │  │   registry   │ │
 │  └──────────────┘  └───────────┘  └──────────────┘ │
+│  ┌──────────────────────┐  ┌────────────────────┐  │
+│  │ permission enforcer  │  │ driver lifecycle   │  │
+│  └──────────────────────┘  └────────────────────┘  │
 └─────────────────────────────────────────────────────┘
         │ loads
         ▼
 ┌───────────────────────────────────────────────────────────┐
-│  Default plugin stack (first-party, installed separately) │
+│  Plugin stack (first-party + third-party, all plugins)    │
 │                                                           │
-│  core-events          defines event vocabulary            │
-│  core-executor-*      wraps LLM / shell / debug           │
-│  core-ui-terminal     stdin/stdout I/O                    │
-│  core-cli             CLI introspection + tool runner     │
-│  core-driver          session loop (driver: true)         │
+│  <vocabulary plugin>  defines event names                 │
+│  <LLM plugin>         provides an executor service        │
+│  <UI plugin>          provides a channel service          │
+│  <tool plugins>       provide callable-tool services      │
+│  <driver plugin>      session loop (driver: true)         │
 └───────────────────────────────────────────────────────────┘
 ```
+
+Core holds exactly one opinion: one plugin must declare `driver: true` and
+receive `start()` after initialization. LLM shape, UI shape, tool shape,
+and stdin handling are plugin-to-plugin concerns mediated by the service
+registry — core has no built-in LLM adapter or stdin queue.
 
 ## The three things core does
 
@@ -54,18 +62,16 @@ kaizen run
   │
   ├─ READY → core calls driver.start(ctx)
   │
-  └─ RUNNING (driven by the session-driver plugin)
-      ├─ emit session:start
-      └─ loop:
-          ├─ UI channel: receive() → user message
-          ├─ executor.send(history, tools) → LLMResponse
-          ├─ for each tool call:
-          │   ├─ emit tool:before
-          │   ├─ tools.execute(name, args)
-          │   └─ emit tool:after
-          ├─ emit session:response
-          └─ UI channel: send(text)
-      └─ emit session:end → CLOSED
+  ├─ RUNNING (driven by the session-driver plugin)
+  │   │  Everything in this phase — reading user input, calling an LLM,
+  │   │  dispatching tool calls, rendering output, emitting lifecycle
+  │   │  events — is the driver's own logic, implemented against services
+  │   │  it consumes from other plugins. Core has no loop of its own.
+  │
+  └─ CLOSED (runHarness finally:)
+      ├─ pluginManager.unloadAll() — invokes stop() on each loaded plugin
+      │   in reverse insertion order (consumers before providers)
+      └─ auditLog.flush()
 ```
 
 ## The session driver
@@ -102,8 +108,8 @@ defines no events — `core-events` defines the default vocabulary. `ctx.emit()`
 runs all handlers serially and returns an array of all return values.
 
 **Key invariant:** `emit()` always runs every handler. Short-circuit logic
-(e.g. skipping tool execution if a `tool:before` handler returns a `ToolResult`)
-is the caller's responsibility, not the event bus's.
+(e.g. letting a `tool:before` handler preempt execution by returning a
+result) is the caller's responsibility, not the event bus's.
 
 ## Directory structure
 
@@ -123,8 +129,6 @@ src/
     context.ts         createPluginContext() — the PluginContext handed to each plugin
     config.ts          Config loading, harness resolution, config merging
     errors.ts          fatal / warn / debug helpers
-    llm.ts             Vercel AI SDK adapter (Anthropic + OpenAI-compatible)
-    stdin.ts           Shared readline queue (avoids competing readers)
   types/
     plugin.ts          Public plugin API types — the contract for plugin authors
 
