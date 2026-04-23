@@ -25,6 +25,7 @@ gap. Open an issue or check `docs/superpowers/specs/` for in-progress work.
 ### Concepts
 - [Platform](concepts/platform.md) — why kaizen exists and what it is
 - [Architecture](concepts/architecture.md) — kernel model, event bus, registry
+- [Configuration](concepts/configuration.md) — `~/.kaizen/kaizen.json` schema and merge order
 - [Plugin Model](concepts/plugin-model.md) — what plugins are and how they load
 - [Security](concepts/security.md) — plugin security model and permission tiers
 - [Harnesses](concepts/harnesses.md) — sharing pre-configured plugin stacks

@@ -144,15 +144,12 @@ First-party plugins and harnesses live in a separate repo:
 
 ```
 ~/.kaizen/                   Global kaizen home (created by install.sh or kaizen init --global)
-  kaizen.json                Default config — used when no project config found
+  kaizen.json                User config — defaults.harness, defaults.plugin_config, marketplaces
   marketplaces/              Per-marketplace install trees (see "Install tree" below)
   harnesses/                 Authored harnesses, resolved by bare name
-
-<project>/
-  .kaizen/                   Project-local config (like .vscode/)
-    kaizen.json              Project config — extends a harness or defines full plugin stack
-    harnesses/               Project-local authored harnesses
 ```
+
+> **No project-level config.** There is no `.kaizen/kaizen.json` overlay or root `kaizen.json` in projects. All user configuration lives in `~/.kaizen/kaizen.json`. See [`docs/concepts/configuration.md`](./configuration.md).
 
 Plugins installed from marketplaces live under
 `~/.kaizen/marketplaces/<id>/plugins/`. Harnesses installed from marketplaces
@@ -181,7 +178,7 @@ All marketplace data lives under `~/.kaizen/` (or `$KAIZEN_HOME_OVERRIDE` in tes
 
 ```
 ~/.kaizen/
-  kaizen.json                              # global config (KaizenGlobalConfig)
+  kaizen.json                              # user global config (KaizenGlobalConfig — defaults, marketplaces)
   marketplaces/
     <id>/
       repo/                                # git clone (or symlink for local dev)

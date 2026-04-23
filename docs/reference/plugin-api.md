@@ -280,7 +280,9 @@ harness-authored providers.
 
 ---
 
-## KaizenConfig (kaizen.json shape)
+## KaizenConfig (harness kaizen.json shape)
+
+`KaizenConfig` describes a **harness** `kaizen.json` — the file maintained by harness authors, not end users. End-user config lives exclusively in `~/.kaizen/kaizen.json`; see [`docs/concepts/configuration.md`](../concepts/configuration.md).
 
 ```ts
 export interface KaizenConfig {
@@ -289,11 +291,19 @@ export interface KaizenConfig {
   marketplaces?: MarketplaceRef[];
   [pluginName: string]: unknown;  // per-plugin config slices
 }
+```
+
+## KaizenGlobalConfig (~/.kaizen/kaizen.json shape)
+
+```ts
+export interface KaizenDefaults {
+  harness?: string;                                    // default harness ref
+  plugin_config?: Record<string, Record<string, unknown>>;  // per-plugin overrides
+}
 
 export interface KaizenGlobalConfig {
   marketplaces?: MarketplaceRef[];
-  defaultHarness?: string;
-  defaults?: Record<string, unknown>;
+  defaults?: KaizenDefaults;
   marketplaceUpdateTTL?: number;   // seconds; 0 disables; default 900
 }
 ```
