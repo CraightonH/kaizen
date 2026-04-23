@@ -18,7 +18,7 @@ These are descriptions of what plugins tend to do, not types kaizen enforces. Th
 
 ### Vocabulary plugin (optional, strongly recommended)
 
-A plugin whose `setup()` calls `ctx.defineEvent` for every event name the ecosystem uses, then exposes those names as a service.
+A plugin whose `setup()` calls `ctx.defineEvent` for every event name the ecosystem uses, then registers and provides that vocabulary as a service (`ctx.defineService` declares the slot; `ctx.provideService` supplies the implementation).
 
 ```ts
 // events/index.ts
@@ -79,7 +79,7 @@ const plugin: KaizenPlugin = {
 
 ### Everything else
 
-Service providers and event subscribers. Could be a terminal interface, a web server, an LLM wrapper, a GitHub client, a database adapter, a pre-execution gate. No prescribed names, no cardinality limits beyond the one-provider-per-service rule (two plugins providing the same service name is a fatal startup error — give them distinct names: `openai:llm`, `anthropic:llm`).
+Service providers and event subscribers. Could be a terminal interface, a web server, an LLM wrapper, a GitHub client, a database adapter, a pre-execution gate. No prescribed names, no cardinality limits beyond the one-provider-per-service rule (two plugins providing the same service name is a fatal startup error — give them distinct names: `openai:llm`, `anthropic:llm`). Service names follow the `pluginname:symbol` convention — the prefix is the owning plugin's name, which prevents collisions across the ecosystem.
 
 A driver that wants to fan out to multiple providers uses the event bus — that is what it exists for.
 
@@ -95,11 +95,10 @@ The fix is to expose the vocabulary as a service. Emitters declare a `consumes` 
 // Emitter plugin manifest
 services: { consumes: ["events:vocabulary"] }
 
-// Emitter plugin setup
+// Emitter plugin setup — consumeService pins init order via the services DAG
 async setup(ctx) {
   ctx.consumeService("events:vocabulary");
-  // safe to emit — vocabulary plugin is guaranteed to have run first
-  await ctx.emit("session:start");
+  // emit happens in start() or event handlers, after all plugins have set up
 }
 ```
 
@@ -149,6 +148,6 @@ This harness can have multiple LLM plugins simultaneously. A second plugin provi
 |--------|------|--------|
 | `policy` | Tool-call gate | subscribes to `tool:before` |
 
-The `policy` plugin subscribes to `tool:before`. Before the driver lets a tool execute, it emits `tool:before` and checks the results. The policy plugin inspects the pending call and can signal rejection (by throwing, or by returning a sentinel value the driver checks). The driver then skips or aborts the tool call.
+The `policy` plugin subscribes to `tool:before`. Before the driver lets a tool execute, it emits `tool:before` and checks the results. The policy plugin inspects the pending call and can signal rejection (by throwing, or by returning a sentinel value — a convention the driver author defines; kaizen has no built-in rejection signal). The driver then skips or aborts the tool call.
 
 Adding or removing the `policy` plugin changes behavior without touching any other plugin. The driver does not know what policies exist; it only knows to check before executing.
