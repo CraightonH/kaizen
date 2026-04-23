@@ -9,14 +9,10 @@
  * authoritative, reviewable contract between kaizen and all plugins.
  */
 
-import { readStdinLine } from "./core/stdin.js";
-import { createLLMRuntime } from "./core/llm.js";
 import { PLUGIN_API_VERSION } from "./types/plugin.js";
 
 /** Runtime values exposed to plugins via `import "kaizen/types"`. */
 export const hostApi = {
-  createLLMRuntime,
-  readStdinLine,
   PLUGIN_API_VERSION,
 } as const;
 
@@ -26,18 +22,6 @@ export type {
   KaizenConfig,
   KaizenGlobalConfig,
   PluginContext,
-  ToolDefinition,
-  ToolResult,
-  Executor,
-  UiProvider,
-  UiChannel,
-  AgentMessage,
-  UserMessage,
-  Message,
-  MessageRole,
-  ToolCall,
-  LLMResponse,
-  LLMStreamChunk,
   PluginPermissions,
   PluginServices,
   PluginConfigDeclaration,
