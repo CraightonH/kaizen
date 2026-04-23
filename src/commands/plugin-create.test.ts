@@ -336,3 +336,30 @@ describe("non-interactive mode", () => {
     expect(existsSync(targetPath)).toBe(false);
   });
 });
+
+describe("cli flag shapes", () => {
+  let tmpBase: string;
+  let targetPath: string;
+
+  beforeEach(() => {
+    tmpBase = mkdtempSync(join(tmpdir(), "kaizen-create-"));
+    targetPath = join(tmpBase, "svc");
+  });
+
+  afterEach(() => {
+    rmSync(tmpBase, { recursive: true, force: true });
+  });
+
+  it("accepts repeated + comma-separated grants merged", async () => {
+    // Simulating what cli.ts will produce after normalizing
+    // parseArgs output ("--grant fs,net --grant env" becomes ["fs","net","env"])
+    const code = await runPluginCreate(targetPath, {
+      flags: { grants: ["fs", "net", "env"] },
+    });
+    expect(code).toBe(0);
+    const src = readFileSync(join(targetPath, "index.ts"), "utf8");
+    expect(src).toContain("fs:");
+    expect(src).toContain("net:");
+    expect(src).toContain("env:");
+  });
+});
