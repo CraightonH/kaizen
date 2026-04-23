@@ -5,8 +5,8 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
-import { KAIZEN_HOME_CONFIG } from "../core/config.js";
-import { pluginInstallDir } from "../core/kaizen-config.js";
+import { KAIZEN_HOME_CONFIG, loadHarnessConfig } from "../core/config.js";
+import { pluginInstallDir, loadKaizenGlobalConfig, looksLikeHarnessRef, materializeHarnessRef } from "../core/kaizen-config.js";
 import { parseRef } from "../core/ref-resolver.js";
 
 // ---------------------------------------------------------------------------
@@ -24,10 +24,6 @@ export function readLocalConfig(): Record<string, unknown> {
 export function writeLocalConfig(config: Record<string, unknown>): void {
   mkdirSync(dirname(KAIZEN_HOME_CONFIG), { recursive: true });
   writeFileSync(KAIZEN_HOME_CONFIG, JSON.stringify(config, null, 2) + "\n", "utf8");
-}
-
-function getPlugins(config: Record<string, unknown>): string[] {
-  return (config["plugins"] as string[] | undefined) ?? [];
 }
 
 // ---------------------------------------------------------------------------
@@ -58,12 +54,31 @@ function statusFor(name: string): InstallStatus {
 // kaizen plugin list
 // ---------------------------------------------------------------------------
 
-export function cmdPluginList(): void {
-  const config = readLocalConfig();
-  const plugins = getPlugins(config);
+export async function cmdPluginList(harnessRef?: string): Promise<void> {
+  // Resolve active harness: CLI flag takes precedence, then defaults.harness.
+  let resolvedRef = harnessRef;
+  if (!resolvedRef) {
+    const globalCfg = await loadKaizenGlobalConfig();
+    resolvedRef = globalCfg.defaults?.harness;
+  }
+
+  if (!resolvedRef) {
+    console.log(
+      "No harness active. Pass --harness or set defaults.harness in ~/.kaizen/kaizen.json.",
+    );
+    return;
+  }
+
+  // Materialize marketplace refs (e.g. "official/core-shell@0.1.0") to local paths.
+  if (looksLikeHarnessRef(resolvedRef)) {
+    resolvedRef = await materializeHarnessRef(resolvedRef);
+  }
+
+  const harnessConfig = loadHarnessConfig(resolvedRef);
+  const plugins = (harnessConfig["plugins"] as string[] | undefined) ?? [];
 
   if (plugins.length === 0) {
-    console.log("No plugins configured in kaizen.json.");
+    console.log("No plugins configured in the active harness.");
     return;
   }
 

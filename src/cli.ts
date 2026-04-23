@@ -48,15 +48,25 @@ const rawArgs = process.argv.slice(2);
 const subcommand = rawArgs[0];
 
 function getCliList(config: Record<string, unknown>): string[] {
-  const cliConfig = config["core-cli"] as Record<string, unknown> | undefined;
-  return (cliConfig?.["clis"] as string[] | undefined) ?? [];
+  const defaults = config["defaults"] as Record<string, unknown> | undefined;
+  const pluginConfig = defaults?.["plugin_config"] as Record<string, unknown> | undefined;
+  const coreCli = pluginConfig?.["core-cli"] as Record<string, unknown> | undefined;
+  return (coreCli?.["clis"] as string[] | undefined) ?? [];
 }
 
 function setCliList(config: Record<string, unknown>, clis: string[]): void {
-  if (typeof config["core-cli"] !== "object" || config["core-cli"] === null) {
-    config["core-cli"] = {};
+  if (typeof config["defaults"] !== "object" || config["defaults"] === null) {
+    config["defaults"] = {};
   }
-  (config["core-cli"] as Record<string, unknown>)["clis"] = clis;
+  const defaults = config["defaults"] as Record<string, unknown>;
+  if (typeof defaults["plugin_config"] !== "object" || defaults["plugin_config"] === null) {
+    defaults["plugin_config"] = {};
+  }
+  const pluginConfig = defaults["plugin_config"] as Record<string, unknown>;
+  if (typeof pluginConfig["core-cli"] !== "object" || pluginConfig["core-cli"] === null) {
+    pluginConfig["core-cli"] = {};
+  }
+  (pluginConfig["core-cli"] as Record<string, unknown>)["clis"] = clis;
 }
 
 function resolveHarnessJsonPath(opts: { harness?: string; extendsOverride?: string }): string {
@@ -160,7 +170,7 @@ if (subcommand === "add") {
     clis.push(cliName);
     setCliList(config, clis);
     writeLocalConfig(config);
-    console.log(`Added '${cliName}' to core-cli.clis.`);
+    console.log(`Added '${cliName}' to defaults.plugin_config.core-cli.clis.`);
   }
   process.exit(0);
 }
@@ -180,7 +190,7 @@ if (subcommand === "remove") {
   } else {
     setCliList(config, filtered);
     writeLocalConfig(config);
-    console.log(`Removed '${cliName}' from core-cli.clis.`);
+    console.log(`Removed '${cliName}' from defaults.plugin_config.core-cli.clis.`);
   }
   process.exit(0);
 }
@@ -490,9 +500,12 @@ if (subcommand === "plugin") {
   }
 
   switch (pluginSub) {
-    case "list":
-      cmdPluginList();
+    case "list": {
+      const harnessIdxForList = rawArgs.findIndex((a) => a === "--harness");
+      const harnessRefForList = harnessIdxForList >= 0 ? rawArgs[harnessIdxForList + 1] : undefined;
+      await cmdPluginList(harnessRefForList);
       break;
+    }
     case "install":
     case "remove":
       console.error(
