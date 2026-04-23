@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { bootstrap } from "./core/index.js";
 import { resolveConfig, resolveHarness, KAIZEN_HOME, KAIZEN_HOME_CONFIG } from "./core/config.js";
-import { loadKaizenGlobalConfig } from "./core/kaizen-config.js";
+import { loadKaizenGlobalConfig, kaizenHome, kaizenHomeConfigPath } from "./core/kaizen-config.js";
 import { fatal, warn } from "./core/errors.js";
 import { warnStaleProjectConfig } from "./core/deprecation-warn.js";
 import { deriveLockfilePath } from "./core/lockfile-path.js";
@@ -125,7 +125,7 @@ See docs/concepts/harnesses.md for harness configuration.`);
 warnStaleProjectConfig({ warn });
 
 // ---------------------------------------------------------------------------
-// Subcommand: kaizen init [--global]
+// Subcommand: kaizen init --global [--harness <ref>]
 // ---------------------------------------------------------------------------
 
 if (subcommand === "init") {
@@ -142,15 +142,16 @@ if (subcommand === "init") {
     process.exit(2);
   }
 
-  if (existsSync(KAIZEN_HOME_CONFIG)) {
+  const homeConfigPath = kaizenHomeConfigPath();
+  if (existsSync(homeConfigPath)) {
     console.log(`~/.kaizen/kaizen.json already exists.`);
     process.exit(0);
   }
 
-  mkdirSync(KAIZEN_HOME, { recursive: true });
+  mkdirSync(kaizenHome(), { recursive: true });
   const initBody: Record<string, unknown> = {};
   if (harnessRef) initBody.defaults = { harness: harnessRef };
-  writeFileSync(KAIZEN_HOME_CONFIG, JSON.stringify(initBody, null, 2) + "\n", "utf8");
+  writeFileSync(homeConfigPath, JSON.stringify(initBody, null, 2) + "\n", "utf8");
 
   if (harnessRef) {
     console.log(`Created ~/.kaizen/kaizen.json with defaults.harness=${harnessRef}`);

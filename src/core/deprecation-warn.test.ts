@@ -33,7 +33,9 @@ test("warnStaleProjectConfig: warns when root kaizen.json exists", () => {
   const warnings: string[] = [];
   warnStaleProjectConfig({ warn: (m) => warnings.push(m) });
   expect(warnings.length).toBe(1);
-  expect(warnings[0]).toMatch(/^|\skaizen\.json/);
+  // Sanity: the message mentions root kaizen.json, not just .kaizen/kaizen.json.
+  expect(warnings[0]).not.toMatch(/^Found '\.kaizen\//);
+  expect(warnings[0]).toMatch(/(^|[^.])kaizen\.json/);
 });
 
 test("warnStaleProjectConfig: silent when neither file exists", () => {
