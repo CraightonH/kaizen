@@ -279,6 +279,14 @@ describe("scanImports", () => {
     const results = await scanImports("/nonexistent/path/index.ts");
     expect(results.some((r) => r.status === "warn" && r.message?.includes("Could not parse"))).toBe(true);
   });
+
+  it("does not flag imports for unscoped tier", async () => {
+    const dir = makeTmpDir();
+    const filePath = join(dir, "index.ts");
+    writeFileSync(filePath, `import fs from "node:fs";\nimport { spawn } from "node:child_process";\nexport default {};\n`);
+    const results = await scanImports(filePath, "unscoped");
+    expect(results.filter((r) => r.status === "warn")).toHaveLength(0);
+  });
 });
 
 // ─── checkFilesPresent ────────────────────────────────────────────────────────
