@@ -24,7 +24,7 @@ There is exactly one kaizen config file: `~/.kaizen/kaizen.json`. It holds exact
 
 ```json
 {
-  "extends": "official/core-shell@1.0.0",
+  "default_harness": "official/core-shell@1.0.0",
   "plugin_config": {
     "gitlab":   { "base_url": "https://gitlab.mycompany.com", "username": "alice" },
     "core-cli": { "clis": ["docker", "kubectl"] }
@@ -32,13 +32,14 @@ There is exactly one kaizen config file: `~/.kaizen/kaizen.json`. It holds exact
 }
 ```
 
-- **`extends`** (optional, string): the default harness ref used when `--harness` is not passed on the CLI.
+- **`default_harness`** (optional, string): the harness ref used when `--harness` is not passed on the CLI.
 - **`plugin_config`** (optional, object): per-plugin config overrides. Keyed by plugin name. Values are plugin-specific objects.
 
 Any other top-level key is a validation error. In particular:
 
 - **`plugins` is rejected.** The plugin set is defined by the harness. Users cannot add, remove, or replace plugins via config.
 - Unknown top-level keys fatal with a clear message listing the allowed keys.
+- A top-level `extends` key (the pre-change name) fatals with a targeted message telling the user to rename it to `default_harness`.
 
 ### No project-level config
 
@@ -53,7 +54,7 @@ Any other top-level key is a validation error. In particular:
 When kaizen starts, the active harness is selected by this precedence:
 
 1. `--harness <ref>` flag on the CLI.
-2. `extends` field in `~/.kaizen/kaizen.json`.
+2. `default_harness` field in `~/.kaizen/kaizen.json`.
 3. Fatal with guidance (same shape as today's error).
 
 Harness files keep their current schema: `plugins` is an array of refs, and per-plugin config keys may appear at the top level as defaults.
@@ -76,19 +77,19 @@ This is the entire configuration system. There is no other merge, no other overl
 - Delete `findProjectConfig`, `PROJECT_CONFIG`, `LEGACY_CONFIG`.
 - Rewrite `resolveConfig`:
   ```
-  1. Determine harness ref: opts.harness || global.extends || fatal.
+  1. Determine harness ref: opts.harness || global.default_harness || fatal.
   2. Load harness config.
   3. If ~/.kaizen/kaizen.json has plugin_config, apply the per-plugin shallow merge described above.
   4. Return the resulting effective config.
   ```
-- Add a validator for `~/.kaizen/kaizen.json` that rejects any top-level key outside `{extends, plugin_config}`, rejects `plugins` with a targeted message, and validates that `plugin_config` is an object of objects.
+- Add a validator for `~/.kaizen/kaizen.json` that rejects any top-level key outside `{default_harness, plugin_config}`, rejects `plugins` and `extends` with targeted messages, and validates that `plugin_config` is an object of objects.
 - Update `loadKaizenConfig` (or split into `loadUserConfig`) so the user-config validator is distinct from the harness validator. They have different schemas now.
 
 ### `kaizen init`
 
 Simplified to global-only:
 
-- `kaizen init --global [--harness <ref>]` writes `~/.kaizen/kaizen.json`. With `--harness`, the file is `{"extends": "<ref>"}`. Without it, the file is `{}` and the user is told they'll need `--harness` on each run or must add `extends` manually.
+- `kaizen init --global [--harness <ref>]` writes `~/.kaizen/kaizen.json`. With `--harness`, the file is `{"default_harness": "<ref>"}`. Without it, the file is `{}` and the user is told they'll need `--harness` on each run or must add `default_harness` manually.
 - `kaizen init` without `--global` prints an error pointing to `--global` (project-level init no longer exists).
 - Existing no-clobber behavior preserved: if `~/.kaizen/kaizen.json` already exists, print a message and exit 0.
 
@@ -97,7 +98,7 @@ Simplified to global-only:
 Users who have existing `.kaizen/kaizen.json` files (including ones produced by `kaizen init` pre-change) will see them become inert — kaizen no longer looks there. To avoid silent surprise:
 
 - On first run where `.kaizen/kaizen.json` exists and `~/.kaizen/kaizen.json` does not, print a prominent warning:
-  > Found `.kaizen/kaizen.json`. Project-level config is no longer supported. Move `extends` to `~/.kaizen/kaizen.json`, or pass `--harness` explicitly. See `docs/concepts/configuration.md`.
+  > Found `.kaizen/kaizen.json`. Project-level config is no longer supported. Move `extends` to `~/.kaizen/kaizen.json` as `default_harness`, or pass `--harness` explicitly. See `docs/concepts/configuration.md`.
 - Same warning for legacy root `kaizen.json`.
 - The warning reads the deprecated file only to surface useful info in the message; it is not merged into config.
 
@@ -114,7 +115,7 @@ Users whose existing `.kaizen/kaizen.json` contains plugin config overrides must
 Each of these was discussed during brainstorming and deliberately deferred:
 
 - **Per-project plugin config overrides.** The "different gitlab URL per project" use case is not supported in v1. Users fork a harness and tune defaults there, or live with one global config. Revisit once a consistent override architecture is designed.
-- **Per-project default harness.** No pointer file, no `.kaizen/harness`, no project config. Use `--harness` explicitly, or rely on the global `extends`.
+- **Per-project default harness.** No pointer file, no `.kaizen/harness`, no project config. Use `--harness` explicitly, or rely on the global `default_harness`.
 - **`kaizen harness fork`.** Deferred. When we revisit per-project configuration, fork ergonomics and lockfile-copy semantics become part of that design.
 - **File format change (YAML/JSONC).** Tracked in [#48](https://github.com/CraightonH/kaizen/issues/48). Will be decided holistically across harnesses, marketplaces, and user config.
 - **Secrets.** Already handled by `kaizen config set-secret` and the secret providers. No change.
