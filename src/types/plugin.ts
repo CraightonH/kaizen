@@ -9,7 +9,7 @@
  * live in the `core-events` plugin, not here. Import them from `core-events`.
  */
 
-export const PLUGIN_API_VERSION = "2";
+export const PLUGIN_API_VERSION = "3";
 
 /**
  * Type-only declarations live here. Runtime values that plugins need are
