@@ -431,8 +431,72 @@ if (subcommand === "plugin") {
 
   if (pluginSub === "create") {
     const { runPluginCreate } = await import("./commands/plugin-create.js");
+    const { parseArgs } = await import("node:util");
+
+    let parsed: ReturnType<typeof parseArgs>;
+    try {
+      parsed = parseArgs({
+        args: rest,
+        allowPositionals: true,
+        strict: true,
+        options: {
+          name:                { type: "string" },
+          description:         { type: "string" },
+          tier:                { type: "string" },
+          grant:               { type: "string", multiple: true },
+          provides:            { type: "string", multiple: true },
+          consumes:            { type: "string", multiple: true },
+          driver:              { type: "boolean" },
+          "config-keys-json":  { type: "string" },
+          "config-keys-file":  { type: "string" },
+          defaults:            { type: "boolean" },
+        },
+      });
+    } catch (e) {
+      console.error(`error: ${(e as Error).message}`);
+      process.exit(1);
+    }
+
+    const values = parsed.values as Record<string, string | boolean | string[] | undefined>;
     const targetPath = name ?? ".";
-    const code = await runPluginCreate(targetPath, { defaults: rest.includes("--defaults") });
+
+    const splitList = (xs: string[] | undefined): string[] =>
+      (xs ?? []).flatMap((s) => s.split(",").map((x) => x.trim()).filter(Boolean));
+
+    const scaffoldFlagNames = [
+      "name", "description", "tier", "grant", "provides",
+      "consumes", "driver", "config-keys-json", "config-keys-file",
+    ];
+    const anyScaffoldFlag = scaffoldFlagNames.some((k) => values[k] !== undefined);
+
+    if (values.defaults) {
+      const code = await runPluginCreate(targetPath, { defaults: true });
+      process.exit(code);
+    }
+
+    if (!process.stdin.isTTY || anyScaffoldFlag) {
+      const flags: import("./commands/plugin-create.js").PluginCreateFlags = {
+        ...(values.name !== undefined ? { name: values.name as string } : {}),
+        ...(values.description !== undefined ? { description: values.description as string } : {}),
+        ...(values.tier !== undefined ? { tier: values.tier as "trusted" | "scoped" | "unscoped" } : {}),
+        ...(splitList(values.grant as string[] | undefined).length > 0
+          ? { grants: splitList(values.grant as string[] | undefined) as Array<"fs" | "net" | "env" | "exec" | "events"> }
+          : {}),
+        ...(splitList(values.provides as string[] | undefined).length > 0
+          ? { provides: splitList(values.provides as string[] | undefined) }
+          : {}),
+        ...(splitList(values.consumes as string[] | undefined).length > 0
+          ? { consumes: splitList(values.consumes as string[] | undefined) }
+          : {}),
+        ...(values.driver !== undefined ? { driver: values.driver as boolean } : {}),
+        ...(values["config-keys-json"] !== undefined ? { configKeysJson: values["config-keys-json"] as string } : {}),
+        ...(values["config-keys-file"] !== undefined ? { configKeysFile: values["config-keys-file"] as string } : {}),
+      };
+      const code = await runPluginCreate(targetPath, { flags });
+      process.exit(code);
+    }
+
+    const code = await runPluginCreate(targetPath, {});
     process.exit(code);
   }
 

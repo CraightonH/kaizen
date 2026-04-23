@@ -30,14 +30,57 @@ kaizen plugin create <target-dir>
 
 Interactive prompts cover: plugin name, description, permission tier
 (`trusted` / `scoped` / `unscoped`), scoped grants (`fs`, `net`, `env`, `exec`,
-`events`), `provides` / `consumes` services, and optional config keys
-(including which are secrets).
+`events`), `provides` / `consumes` services, whether the plugin is a session
+driver, and optional config keys (including which are secrets).
 
 Add `--defaults` to skip prompts and scaffold a minimal `trusted` plugin:
 
 ```sh
 kaizen plugin create ./my-plugin --defaults
 ```
+
+Every prompt also has a corresponding flag, so the command can run fully
+non-interactively (for agents, CI, or bulk scaffolding). When stdin is not a
+TTY, or any scaffold flag is passed, prompts are skipped entirely and unset
+fields fall back to defaults:
+
+```sh
+kaizen plugin create ./my-plugin \
+  --name my-plugin \
+  --description "does a thing" \
+  --tier scoped \
+  --grant fs,net \
+  --provides my-plugin:api \
+  --driver
+```
+
+Flags:
+
+| Flag                   | Purpose                                                    |
+|------------------------|------------------------------------------------------------|
+| `--name`               | Plugin name (default: basename of target path)             |
+| `--description`        | Description text                                           |
+| `--tier`               | `trusted` \| `scoped` \| `unscoped` (default `trusted`)     |
+| `--grant`              | One or more of `fs,net,env,exec,events`. Repeatable and/or comma-separated. |
+| `--provides`           | Service name; repeatable and/or comma-separated.           |
+| `--consumes`           | Service name; repeatable and/or comma-separated.           |
+| `--driver`             | Scaffold a session driver (adds `driver:true` and a `start(ctx)` stub). |
+| `--config-keys-json`   | Inline JSON array of ConfigKey objects.                    |
+| `--config-keys-file`   | Path to a JSON file with a ConfigKey array.                |
+| `--defaults`           | Use defaults for all fields; skip prompts.                 |
+
+ConfigKey shape (applies to both `--config-keys-json` and `--config-keys-file`):
+
+```json
+[
+  { "name": "api_key", "type": "string", "required": true,  "secret": true },
+  { "name": "port",    "type": "number", "required": false, "secret": false }
+]
+```
+
+`type` must be `string` or `number`. Kaizen validates this structure but does
+not validate the semantic correctness of the resulting config schema — that is
+the plugin author's responsibility.
 
 The generator writes:
 
