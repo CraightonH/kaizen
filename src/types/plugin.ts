@@ -325,6 +325,13 @@ export interface KaizenPlugin {
 
   setup(ctx: PluginContext): Promise<void>;
   start?(ctx: PluginContext): Promise<void>;
+  /**
+   * Called during unload, before events/services/permissions are deregistered.
+   * Use to close resources opened in setup() or start() (readline interfaces,
+   * network listeners, timers, file watchers). Errors are logged but do not
+   * prevent deregistration.
+   */
+  stop?(ctx: PluginContext): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
