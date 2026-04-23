@@ -330,10 +330,17 @@ export interface MarketplaceRef {
   updatedAt?: string;              // ISO-8601
 }
 
+export interface KaizenDefaults {
+  /** Harness ref used when --harness is not passed on the CLI. */
+  harness?: string;
+  /** Per-plugin config overrides. Keyed by plugin name. Values are plugin-specific objects. */
+  plugin_config?: Record<string, Record<string, unknown>>;
+}
+
 export interface KaizenGlobalConfig {
   marketplaces?: MarketplaceRef[];
-  defaultHarness?: string;
-  defaults?: Record<string, unknown>;   // Spec 2 uses this
+  /** User-chosen defaults: default harness + per-plugin config overrides. */
+  defaults?: KaizenDefaults;
   /** Seconds between background marketplace refreshes; 0 disables. Default 900. */
   marketplaceUpdateTTL?: number;
 }

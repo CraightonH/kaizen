@@ -65,7 +65,7 @@ function coerceValue(raw: string, existing: unknown): unknown {
 export function cmdConfigShow(pluginName?: string): number {
   const project = readProjectConfig();
   const global = readGlobalConfig();
-  const globalDefaults = (global.defaults ?? {}) as Record<string, Record<string, unknown>>;
+  const globalPluginConfig = global.defaults?.plugin_config ?? {};
 
   const plugins = (project["plugins"] as string[] | undefined) ?? [];
   const allPluginNames = pluginName
@@ -73,7 +73,7 @@ export function cmdConfigShow(pluginName?: string): number {
     : [...new Set([
         ...plugins,
         ...Object.keys(project).filter((k) => k !== "plugins" && k !== "extends"),
-        ...Object.keys(globalDefaults),
+        ...Object.keys(globalPluginConfig),
       ])];
 
   if (allPluginNames.length === 0) {
@@ -83,7 +83,7 @@ export function cmdConfigShow(pluginName?: string): number {
 
   for (const name of allPluginNames) {
     const harness = (project[name] as Record<string, unknown> | undefined) ?? {};
-    const gDefaults = globalDefaults[name] ?? {};
+    const gDefaults = globalPluginConfig[name] ?? {};
     const merged = { ...gDefaults, ...harness };
 
     console.log(`${name}:`);
@@ -109,7 +109,7 @@ export function cmdConfigGet(pluginName: string | undefined, path: string | unde
   const project = readProjectConfig();
   const global = readGlobalConfig();
   const harness = (project[pluginName] as Record<string, unknown> | undefined) ?? {};
-  const gDefaults = ((global.defaults as Record<string, Record<string, unknown>> | undefined)?.[pluginName]) ?? {};
+  const gDefaults = global.defaults?.plugin_config?.[pluginName] ?? {};
   const merged = { ...gDefaults, ...harness };
 
   const value = getNestedValue(merged, path);
@@ -141,10 +141,11 @@ export function cmdConfigSet(
   if (flags.global) {
     const cfg = readGlobalConfig();
     if (!cfg.defaults) cfg.defaults = {};
-    const defaults = cfg.defaults as Record<string, Record<string, unknown>>;
-    if (!defaults[pluginName]) defaults[pluginName] = {};
-    const existing = getNestedValue(defaults[pluginName]!, path);
-    setNestedValue(defaults[pluginName]!, path, coerceValue(value, existing));
+    if (!cfg.defaults.plugin_config) cfg.defaults.plugin_config = {};
+    const pluginCfgMap = cfg.defaults.plugin_config;
+    if (!pluginCfgMap[pluginName]) pluginCfgMap[pluginName] = {};
+    const existing = getNestedValue(pluginCfgMap[pluginName]!, path);
+    setNestedValue(pluginCfgMap[pluginName]!, path, coerceValue(value, existing));
     writeGlobalConfig(cfg);
     console.log(`Set ${pluginName}.${path} in global config.`);
   } else {
@@ -223,9 +224,10 @@ export async function cmdConfigSetSecret(
     if (flags.global) {
       const cfg = readGlobalConfig();
       if (!cfg.defaults) cfg.defaults = {};
-      const defaults = cfg.defaults as Record<string, Record<string, unknown>>;
-      if (!defaults[pluginName]) defaults[pluginName] = {};
-      defaults[pluginName][key] = refObj;
+      if (!cfg.defaults.plugin_config) cfg.defaults.plugin_config = {};
+      const pluginCfgMap = cfg.defaults.plugin_config;
+      if (!pluginCfgMap[pluginName]) pluginCfgMap[pluginName] = {};
+      pluginCfgMap[pluginName]![key] = refObj;
       writeGlobalConfig(cfg);
     } else {
       const cfg = readProjectConfig();

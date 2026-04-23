@@ -634,8 +634,8 @@ export class PluginManager {
 
     // Merge config layers
     const harnessConfig = (this.config[plugin.name] as Record<string, unknown> | undefined) ?? {};
-    const globalDefaults = (this.globalConfig?.defaults?.[plugin.name] as Record<string, unknown> | undefined) ?? {};
-    const merged = mergePluginConfig(plugin.config, globalDefaults, harnessConfig);
+    const userPluginConfig = this.globalConfig?.defaults?.plugin_config?.[plugin.name] ?? {};
+    const merged = mergePluginConfig(plugin.config, userPluginConfig, harnessConfig);
 
     // Separate secrets from non-secret config
     const { config: pluginConfig, secretRefs } = separateSecrets(merged, plugin.config?.secrets ?? []);
