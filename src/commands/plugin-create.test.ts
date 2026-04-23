@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, existsSync, readFileSync, rmSync } from "fs";
+import { mkdtempSync, existsSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { runPluginCreate } from "./plugin-create.js";
@@ -171,5 +171,116 @@ describe("driver generator", () => {
     expect(generateIndexTs(cfg)).not.toContain("driver:");
     expect(generateIndexTs(cfg)).not.toContain("async start(ctx)");
     expect(generateIndexTestTs(cfg)).not.toContain("plugin.driver");
+  });
+});
+
+describe("buildConfigFromFlags", () => {
+  let tmpBase: string;
+
+  beforeEach(() => {
+    tmpBase = mkdtempSync(join(tmpdir(), "kaizen-create-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpBase, { recursive: true, force: true });
+  });
+
+  it("fills defaults for unset flags", async () => {
+    const { buildConfigFromFlags } = await import("./plugin-create.js");
+    const cfg = buildConfigFromFlags("/tmp/some-path/my-plug", {});
+    expect(cfg).toEqual({
+      name: "my-plug",
+      description: "",
+      tier: "trusted",
+      grants: [],
+      provides: [],
+      consumes: [],
+      hasConfig: false,
+      configKeys: [],
+      driver: false,
+    });
+  });
+
+  it("applies all flags", async () => {
+    const { buildConfigFromFlags } = await import("./plugin-create.js");
+    const cfg = buildConfigFromFlags("/tmp/x/plug", {
+      name: "custom-name",
+      description: "desc",
+      tier: "scoped",
+      grants: ["fs", "net"],
+      provides: ["svc:a"],
+      consumes: ["svc:b"],
+      driver: true,
+    });
+    expect(cfg.name).toBe("custom-name");
+    expect(cfg.description).toBe("desc");
+    expect(cfg.tier).toBe("scoped");
+    expect(cfg.grants).toEqual(["fs", "net"]);
+    expect(cfg.provides).toEqual(["svc:a"]);
+    expect(cfg.consumes).toEqual(["svc:b"]);
+    expect(cfg.driver).toBe(true);
+  });
+
+  it("rejects invalid tier", async () => {
+    const { buildConfigFromFlags } = await import("./plugin-create.js");
+    expect(() => buildConfigFromFlags("/tmp/p", { tier: "god-mode" as never }))
+      .toThrow(/tier/);
+  });
+
+  it("rejects invalid grant", async () => {
+    const { buildConfigFromFlags } = await import("./plugin-create.js");
+    expect(() => buildConfigFromFlags("/tmp/p", { grants: ["bogus" as never] }))
+      .toThrow(/grant/);
+  });
+
+  it("parses --config-keys-json inline", async () => {
+    const { buildConfigFromFlags } = await import("./plugin-create.js");
+    const json = JSON.stringify([
+      { name: "api_key", type: "string", required: true, secret: true },
+    ]);
+    const cfg = buildConfigFromFlags("/tmp/p", { configKeysJson: json });
+    expect(cfg.hasConfig).toBe(true);
+    expect(cfg.configKeys).toEqual([
+      { name: "api_key", type: "string", required: true, secret: true },
+    ]);
+  });
+
+  it("parses --config-keys-file", async () => {
+    const { buildConfigFromFlags } = await import("./plugin-create.js");
+    const file = join(tmpBase, "keys.json");
+    writeFileSync(file, JSON.stringify([
+      { name: "port", type: "number", required: false, secret: false },
+    ]));
+    const cfg = buildConfigFromFlags("/tmp/p", { configKeysFile: file });
+    expect(cfg.hasConfig).toBe(true);
+    expect(cfg.configKeys[0]?.name).toBe("port");
+  });
+
+  it("rejects both --config-keys-json and --config-keys-file", async () => {
+    const { buildConfigFromFlags } = await import("./plugin-create.js");
+    expect(() => buildConfigFromFlags("/tmp/p", {
+      configKeysJson: "[]",
+      configKeysFile: "/tmp/x.json",
+    })).toThrow(/mutually exclusive/);
+  });
+
+  it("rejects malformed config-keys JSON (not array)", async () => {
+    const { buildConfigFromFlags } = await import("./plugin-create.js");
+    expect(() => buildConfigFromFlags("/tmp/p", { configKeysJson: "{}" }))
+      .toThrow(/array/);
+  });
+
+  it("rejects malformed config-keys entry (missing name)", async () => {
+    const { buildConfigFromFlags } = await import("./plugin-create.js");
+    const json = JSON.stringify([{ type: "string", required: false, secret: false }]);
+    expect(() => buildConfigFromFlags("/tmp/p", { configKeysJson: json }))
+      .toThrow(/name/);
+  });
+
+  it("rejects malformed config-keys entry (bad type)", async () => {
+    const { buildConfigFromFlags } = await import("./plugin-create.js");
+    const json = JSON.stringify([{ name: "x", type: "enum", required: false, secret: false }]);
+    expect(() => buildConfigFromFlags("/tmp/p", { configKeysJson: json }))
+      .toThrow(/type/);
   });
 });

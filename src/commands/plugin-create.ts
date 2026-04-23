@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join, basename } from "path";
 import * as readline from "readline";
 
@@ -23,6 +23,18 @@ export interface PluginScaffoldConfig {
   hasConfig: boolean;
   configKeys: ConfigKey[];
   driver: boolean;
+}
+
+export interface PluginCreateFlags {
+  name?: string;
+  description?: string;
+  tier?: "trusted" | "scoped" | "unscoped";
+  grants?: Array<"fs" | "net" | "env" | "exec" | "events">;
+  provides?: string[];
+  consumes?: string[];
+  driver?: boolean;
+  configKeysJson?: string;
+  configKeysFile?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -409,6 +421,96 @@ async function promptConfig(rl: readline.Interface, targetPath: string): Promise
   }
 
   return { name, description, tier, grants, provides, consumes, hasConfig, configKeys, driver };
+}
+
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// buildConfigFromFlags
+// ---------------------------------------------------------------------------
+
+const VALID_TIERS = ["trusted", "scoped", "unscoped"] as const;
+const VALID_GRANTS = ["fs", "net", "env", "exec", "events"] as const;
+const VALID_CONFIG_TYPES = ["string", "number"] as const;
+
+export function buildConfigFromFlags(
+  targetPath: string,
+  flags: PluginCreateFlags
+): PluginScaffoldConfig {
+  if (flags.tier && !VALID_TIERS.includes(flags.tier)) {
+    throw new Error(
+      `Invalid --tier "${flags.tier}"; must be one of ${VALID_TIERS.join(", ")}`
+    );
+  }
+
+  if (flags.grants) {
+    for (const g of flags.grants) {
+      if (!VALID_GRANTS.includes(g)) {
+        throw new Error(
+          `Invalid --grant "${g}"; must be one of ${VALID_GRANTS.join(", ")}`
+        );
+      }
+    }
+  }
+
+  if (flags.configKeysJson && flags.configKeysFile) {
+    throw new Error(
+      "--config-keys-json and --config-keys-file are mutually exclusive"
+    );
+  }
+
+  let configKeys: ConfigKey[] = [];
+  let hasConfig = false;
+  const rawJson =
+    flags.configKeysJson
+      ?? (flags.configKeysFile ? readFileSync(flags.configKeysFile, "utf8") : undefined);
+
+  if (rawJson !== undefined) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawJson);
+    } catch (e) {
+      throw new Error(`config keys input is not valid JSON: ${String(e)}`);
+    }
+    if (!Array.isArray(parsed)) {
+      throw new Error("config keys input must be a JSON array");
+    }
+    configKeys = parsed.map((entry, i) => validateConfigKey(entry, i));
+    hasConfig = true;
+  }
+
+  return {
+    name: flags.name ?? basename(targetPath),
+    description: flags.description ?? "",
+    tier: flags.tier ?? "trusted",
+    grants: flags.grants ?? [],
+    provides: flags.provides ?? [],
+    consumes: flags.consumes ?? [],
+    hasConfig,
+    configKeys,
+    driver: flags.driver ?? false,
+  };
+}
+
+function validateConfigKey(entry: unknown, index: number): ConfigKey {
+  if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+    throw new Error(`config keys[${index}] must be an object`);
+  }
+  const e = entry as Record<string, unknown>;
+  if (typeof e.name !== "string" || e.name.length === 0) {
+    throw new Error(`config keys[${index}] missing required string "name"`);
+  }
+  if (typeof e.type !== "string" || !VALID_CONFIG_TYPES.includes(e.type as never)) {
+    throw new Error(
+      `config keys[${index}].type must be one of ${VALID_CONFIG_TYPES.join(", ")}`
+    );
+  }
+  if (typeof e.required !== "boolean") {
+    throw new Error(`config keys[${index}].required must be a boolean`);
+  }
+  if (typeof e.secret !== "boolean") {
+    throw new Error(`config keys[${index}].secret must be a boolean`);
+  }
+  return { name: e.name, type: e.type, required: e.required, secret: e.secret };
 }
 
 // ---------------------------------------------------------------------------
