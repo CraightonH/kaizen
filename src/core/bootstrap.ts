@@ -1,7 +1,7 @@
-import type { KaizenConfig, MarketplaceRef } from "../types/plugin.js";
+import type { KaizenConfig, MarketplaceRef, MarketplaceCatalog } from "../types/plugin.js";
 import { loadKaizenGlobalConfig } from "./kaizen-config.js";
-import { addMarketplace } from "./marketplace.js";
-import { parseRef } from "./ref-resolver.js";
+import { addMarketplace, readCatalog } from "./marketplace.js";
+import { parseRef, resolveRef } from "./ref-resolver.js";
 import { readLockfile } from "./lockfile.js";
 import { runUnifiedInstall } from "../commands/install.js";
 import { isInstalled } from "./plugin-manager.js";
@@ -45,13 +45,15 @@ export async function bootstrapMissingPlugins(
 
   // 2. Install missing plugins.
   const lockfile = readLockfile(opts.lockfilePath);
+  let catalogs: Record<string, MarketplaceCatalog> | undefined;
+
   for (const refStr of harness.plugins ?? []) {
     const parsed = parseRef(refStr);
 
     if (parsed.kind === "shorthand") {
       throw new Error(
         `harness plugin ref '${refStr}' is shorthand. ` +
-        `Harness plugin refs must be canonical '<marketplace>/<name>@<version>'.`,
+        `Harness plugin refs must be canonical '<marketplace>/<name>[@<version>]'.`,
       );
     }
 
@@ -67,9 +69,23 @@ export async function bootstrapMissingPlugins(
       marketplaceId = "official";
       name = parsed.name.replace(/^kaizen-plugin-/, "");
       version = undefined;
+      // resolveRef strips the same prefix from parsed.name independently; both strip the same prefix once.
     }
+
+    // Version-less ref: resolve against the catalog to get the concrete version
+    // so we can use the isInstalled short-circuit below.
     if (!version) {
-      throw new Error(`harness plugin ref '${refStr}' must include an explicit version`);
+      if (!catalogs) {
+        catalogs = {};
+        for (const m of global.marketplaces ?? []) {
+          try { catalogs[m.id] = await readCatalog(m.id); } catch { /* skip bad */ }
+        }
+      }
+      try {
+        version = resolveRef(parsed, catalogs).version;
+      } catch (e) {
+        throw new Error(`cannot resolve version for harness ref '${refStr}': ${(e as Error).message}`);
+      }
     }
 
     if (await isInstalled(marketplaceId, name, version)) continue;
