@@ -66,4 +66,25 @@ describe("bootstrapMissingPlugins", () => {
       { lockfilePath, trustLockfile: true, nonInteractive: true, allowUnscoped: false },
     )).rejects.toThrow(/not in lockfile/i);
   });
+
+  it("version-less ref installs latest version (1.0.0 from fixture catalog)", async () => {
+    await addMarketplace(upstream, { id: "m", local: true });
+    const lockfilePath = join(home, "permissions.lock");
+    const report = await bootstrapMissingPlugins(
+      { plugins: ["m/demo"], marketplaces: [] },
+      { lockfilePath, trustLockfile: false, nonInteractive: true, allowUnscoped: false },
+    );
+    expect(report.pluginsInstalled).toContain("m/demo");
+    expect(existsSync(pluginInstallDir("m", "demo", "1.0.0"))).toBe(true);
+  });
+
+  it("version-less ref skips reinstall on second bootstrap run", async () => {
+    await addMarketplace(upstream, { id: "m", local: true });
+    const lockfilePath = join(home, "permissions.lock");
+    const opts = { lockfilePath, trustLockfile: false, nonInteractive: true, allowUnscoped: false };
+    await bootstrapMissingPlugins({ plugins: ["m/demo"], marketplaces: [] }, opts);
+    expect(existsSync(pluginInstallDir("m", "demo", "1.0.0"))).toBe(true);
+    const report2 = await bootstrapMissingPlugins({ plugins: ["m/demo"], marketplaces: [] }, opts);
+    expect(report2.pluginsInstalled).toHaveLength(0);
+  });
 });
