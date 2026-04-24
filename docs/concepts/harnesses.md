@@ -19,7 +19,7 @@ entry in a marketplace catalog points at a versioned directory containing a
 kaizen --harness official/core-anthropic@0.1.0
 ```
 
-The ref format is `<marketplace-id>/<name>@<version>`. kaizen materializes the
+The ref format is `<marketplace-id>/<name>[@<version>]`. kaizen materializes the
 harness into `~/.kaizen/marketplaces/<id>/harnesses/<name>/kaizen.json` on first
 use, then loads it. Any marketplaces and plugins the harness references are
 bootstrapped automatically (with consent prompts unless `--non-interactive` /
@@ -53,7 +53,7 @@ kaizen --harness my-local-harness       # looks in .kaizen/harnesses/, then ~/.k
 
 Bare-name lookup does **not** scan `~/.kaizen/marketplaces/<id>/harnesses/`.
 To use a marketplace harness, reference it by its full ref
-(`<marketplace-id>/<name>@<version>`), either via `--harness` or via `extends`.
+(`<marketplace-id>/<name>[@<version>]`), either via `--harness` or via `extends`.
 
 ### URL harnesses are not supported
 
@@ -99,7 +99,7 @@ The `kaizen.json` lists plugins (by marketplace ref) and their config:
 }
 ```
 
-Plugin entries must be full marketplace refs (`<marketplace>/<name>@<version>`)
+Plugin entries must be marketplace refs (`<marketplace>/<name>[@<version>]`)
 for the harness to be portable. Bare short names only resolve against locally
 installed plugins and won't work for others.
 
@@ -113,7 +113,7 @@ Consumers then use:
 
 ```bash
 kaizen marketplace add <your-marketplace-url>
-kaizen --harness <your-marketplace-id>/<harness-name>@<version>
+kaizen --harness <your-marketplace-id>/<harness-name>[@<version>]
 ```
 
 For private or ad-hoc sharing, consumers can also drop the harness directory

@@ -136,7 +136,7 @@ async function loadPluginFromMarketplaceInstall(
 async function resolvePlugin(name: string): Promise<LoadedPlugin | null> {
   const isPath = name.startsWith("./") || name.startsWith("/") || name.startsWith("../");
 
-  // Canonical marketplace ref: "<id>/<name>@<version>" → marketplace install dir.
+  // Canonical marketplace ref: "<id>/<name>[@<version>]" → marketplace install dir.
   if (!isPath) {
     try {
       const parsed = parseRef(name);
@@ -157,7 +157,7 @@ async function resolvePlugin(name: string): Promise<LoadedPlugin | null> {
 
   warn(
     `Cannot find plugin '${name}'.\n` +
-    `  Install from marketplace: kaizen install <marketplace>/${name}@<version>\n` +
+    `  Install from marketplace: kaizen install <marketplace>/${name}[@<version>]\n` +
     `  Or reference a local path: "./path/to/plugin"`,
   );
   return null;

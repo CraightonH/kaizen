@@ -24,7 +24,7 @@ export const RESERVED_KEYS = new Set(["plugins", "extends"]);
 // Harness resolution
 //
 // Harnesses are resolved through the marketplace install path. A canonical
-// ref (`<marketplace>/<name>@<version>`) is materialized by cli.ts before
+// ref (`<marketplace>/<name>[@<version>]`) is materialized by cli.ts before
 // reaching this function; here we handle the resulting local paths and the
 // project/home fallback directories.
 // ---------------------------------------------------------------------------
@@ -62,13 +62,13 @@ export function resolveHarness(nameOrPath: string): ResolvedHarness {
   if (nameOrPath.startsWith("http://") || nameOrPath.startsWith("https://")) {
     fatal(
       `URL harnesses are not supported.\n` +
-      `Publish the harness in a marketplace and reference it as '<marketplace>/<name>@<version>'.`,
+      `Publish the harness in a marketplace and reference it as '<marketplace>/<name>[@<version>]'.`,
     );
   }
 
   fatal(
     `Harness '${nameOrPath}' not found.\n` +
-    `  Marketplace:    kaizen install <marketplace>/${nameOrPath}@<version>\n` +
+    `  Marketplace:    kaizen install <marketplace>/${nameOrPath}[@<version>]\n` +
     `  Project-scoped: .kaizen/harnesses/${nameOrPath}/kaizen.json\n` +
     `  Global:         ~/.kaizen/harnesses/${nameOrPath}/kaizen.json\n` +
     `  Path:           ./path/to/kaizen.json`,
@@ -128,7 +128,7 @@ export function resolveHarnessOrFatal(opts: {
   if (!ref) {
     fatal(
       `A harness is required.\n` +
-      `  kaizen --harness <marketplace>/<name>@<version>\n` +
+      `  kaizen --harness <marketplace>/<name>[@<version>]\n` +
       `  kaizen --harness ./path/to/harness/\n` +
       `  Set 'defaults.harness' in ~/.kaizen/kaizen.json\n` +
       `See docs/concepts/configuration.md.`,

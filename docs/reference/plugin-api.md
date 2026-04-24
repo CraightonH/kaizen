@@ -286,7 +286,7 @@ harness-authored providers.
 
 ```ts
 export interface KaizenConfig {
-  plugins: string[];           // canonical marketplace refs "<marketplace-id>/<name>@<version>"
+  plugins: string[];           // canonical marketplace refs "<marketplace-id>/<name>[@<version>]"
   extends?: string;            // harness to extend: marketplace ref or local path
   marketplaces?: MarketplaceRef[];
   [pluginName: string]: unknown;  // per-plugin config slices
