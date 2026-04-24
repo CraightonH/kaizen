@@ -11,12 +11,6 @@
 
 export const PLUGIN_API_VERSION = "3";
 
-/**
- * Type-only declarations live here. Runtime values that plugins need are
- * exposed via the `kaizen/types` virtual module (see `src/host-api.ts`
- * and `src/core/host-api-register.ts`). Internal kaizen code should
- * import runtime symbols from their owning modules, not from here.
- */
 
 export type { CtxFs, CtxNet, CtxExec, CtxIo, ExecOpts, ExecResult } from "../core/plugin-ctx-io.js";
 export type { SecretProvider } from "../core/secret-providers/types.js";
