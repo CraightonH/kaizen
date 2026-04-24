@@ -78,6 +78,15 @@ describe("bootstrapMissingPlugins", () => {
     expect(existsSync(pluginInstallDir("m", "demo", "1.0.0"))).toBe(true);
   });
 
+  it("skips local-path plugin refs without attempting install", async () => {
+    const lockfilePath = join(home, "permissions.lock");
+    const report = await bootstrapMissingPlugins(
+      { plugins: ["./some/local-plugin", "../other-plugin", "/abs/plugin"], marketplaces: [] },
+      { lockfilePath, trustLockfile: false, nonInteractive: true, allowUnscoped: false },
+    );
+    expect(report.pluginsInstalled).toHaveLength(0);
+  });
+
   it("version-less ref skips reinstall on second bootstrap run", async () => {
     await addMarketplace(upstream, { id: "m", local: true });
     const lockfilePath = join(home, "permissions.lock");
