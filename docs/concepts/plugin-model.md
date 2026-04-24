@@ -58,7 +58,7 @@ core stack — reaches a session through the **marketplace install path**.
 The high-level sequence when you run `kaizen --harness <something>`:
 
 1. **Resolution.** Each plugin ref in `kaizen.json` is either a canonical
-   `<marketplace>/<name>@<version>` or a legacy bare name. Canonical refs
+   `<marketplace>/<name>[@<version>]` or a legacy bare name. Canonical refs
    resolve against installed marketplace trees under
    `~/.kaizen/marketplaces/<id>/plugins/<name>@<version>/`; legacy names fall
    back through authored-plugin and npm directories.

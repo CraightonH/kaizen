@@ -159,7 +159,7 @@ harnesses — ones the user writes by hand.
 
 ### Plugin resolution order
 
-1. **Canonical marketplace ref** (`<marketplace>/<name>@<version>`):
+1. **Canonical marketplace ref** (`<marketplace>/<name>[@<version>]`):
    `~/.kaizen/marketplaces/<id>/plugins/<name>@<version>/`, loaded by absolute
    path.
 2. **Local path** (`./`, `../`, or `/`): loaded directly.
