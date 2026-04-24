@@ -48,6 +48,9 @@ export async function bootstrapMissingPlugins(
   let catalogs: Record<string, MarketplaceCatalog> | undefined;
 
   for (const refStr of harness.plugins ?? []) {
+    // Local-path plugins don't need marketplace install — resolvePlugin loads them directly.
+    if (refStr.startsWith("./") || refStr.startsWith("../") || refStr.startsWith("/")) continue;
+
     const parsed = parseRef(refStr);
 
     if (parsed.kind === "shorthand") {
