@@ -99,9 +99,11 @@ The `kaizen.json` lists plugins (by marketplace ref) and their config:
 }
 ```
 
-Plugin entries must be marketplace refs (`<marketplace>/<name>[@<version>]`)
-for the harness to be portable. Bare short names only resolve against locally
-installed plugins and won't work for others.
+Plugin entries may be marketplace refs (`<marketplace>/<name>[@<version>]`) or
+local paths (`./`, `../`, `/`). Local paths are loaded directly by the plugin
+manager and skipped during bootstrap install — useful for dev-time iteration on
+first-party plugins. Use marketplace refs for portable harnesses you intend to
+share.
 
 ## Sharing a harness
 
