@@ -16,7 +16,7 @@ resolves plugin and harness references against. It contains a
 `.kaizen/marketplace.json` catalog, optional in-tree `plugins/` and
 `harnesses/` directories, and whatever else you want to ship alongside.
 
-When a user runs `kaizen install <marketplace-id>/<plugin>@<version>`, kaizen
+When a user runs `kaizen install <marketplace-id>/<plugin>[@<version>]`, kaizen
 reads the marketplace catalog, resolves the version entry, and fetches the
 plugin source from the declared `source` (npm, tarball, or in-repo file).
 
@@ -108,7 +108,7 @@ message.
 
 Harness entries reference an in-tree `kaizen.json` via `path` (relative to the
 marketplace root). Every plugin ref inside a harness must be the canonical
-`<marketplace>/<name>@<version>` form — bare names are rejected.
+`<marketplace>/<name>[@<version>]` form — bare names are rejected.
 
 ## Validate
 
