@@ -97,7 +97,7 @@ Subcommands:
   config {show|get|set|set-secret}
 
 Flags:
-  --harness <ref>                       harness ref (marketplace/name@version)
+  --harness <ref>                       harness ref (marketplace/name[@version])
   --trust-lockfile                      reuse existing lockfile; no prompts
   --non-interactive                     refuse any prompt-requiring consent
   --allow-unscoped                      permit non-interactive UNSCOPED consent
@@ -514,8 +514,8 @@ if (subcommand === "plugin") {
     case "remove":
       console.error(
         `'kaizen plugin ${pluginSub}' has been removed.\n` +
-        `  Install a plugin:   kaizen install <marketplace>/<name>@<version>\n` +
-        `  Uninstall a plugin: kaizen uninstall <marketplace>/<name>@<version>`,
+        `  Install a plugin:   kaizen install <marketplace>/<name>[@<version>]\n` +
+        `  Uninstall a plugin: kaizen uninstall <marketplace>/<name>[@<version>]`,
       );
       process.exit(2);
       break;
@@ -599,7 +599,7 @@ function parseRunArgs(args: string[]): {
 const parsed = parseRunArgs(rawArgs);
 
 if (parsed.harness !== undefined && /^https?:\/\//i.test(parsed.harness)) {
-  fatal("raw URL harnesses are not supported — publish the harness in a marketplace and use --harness <id>/<name>@<version>");
+  fatal("raw URL harnesses are not supported — publish the harness in a marketplace and use --harness <id>/<name>[@<version>]");
 }
 
 const trustLockfile = rawArgs.includes("--trust-lockfile");

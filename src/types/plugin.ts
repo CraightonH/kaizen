@@ -236,7 +236,7 @@ export interface KaizenPlugin {
 // ---------------------------------------------------------------------------
 
 export interface KaizenConfig {
-  /** Canonical refs (`<marketplace>/<name>@<version>`) or legacy bare npm names. */
+  /** Canonical refs (`<marketplace>/<name>[@<version>]`) or legacy bare npm names. */
   plugins: string[];
   /**
    * Name of a built-in or installed harness to extend.
