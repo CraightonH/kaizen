@@ -3,14 +3,12 @@
  *
  * Exercises the actual install flow: seeds a tmp KAIZEN_HOME, registers
  * the sibling checkout as a local marketplace, installs a plugin through
- * the standard flow, loads it via the runtime loader, and asserts the
- * plugin's own `import "kaizen/types"` resolved via the host-api virtual
- * module (not via walking up into kaizen's source tree).
+ * the standard flow, and loads it via the runtime loader.
  *
  * Skips when the sibling repo is absent.
  */
 
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
@@ -20,20 +18,17 @@ import { loadPluginFromInstallDir } from "../core/plugin-loader.js";
 import {
   pluginInstallDir, harnessInstallDir, marketplaceRepoDir,
 } from "../core/kaizen-config.js";
-import { registerHostApi } from "../core/host-api-register.js";
 
 const SIBLING = resolve(process.cwd(), "..", "kaizen-official-plugins");
 
 // Skipped: kaizen-official-plugins still uses the pre-v0.2.0 API (ServiceToken,
 // ctx.registerService, manifest `capabilities`). This test re-enables once the
 // sibling repo is migrated — tracked in the service-registry-merge spec.
-describe.skip("kaizen-official-plugins e2e (through host-api virtual module)", () => {
+describe.skip("kaizen-official-plugins e2e", () => {
   if (!existsSync(SIBLING)) {
     it.skip("sibling kaizen-official-plugins repo not found — skipping e2e", () => {});
     return;
   }
-
-  beforeAll(() => { registerHostApi(); });
 
   let tmpHome: string;
   let originalOverride: string | undefined;

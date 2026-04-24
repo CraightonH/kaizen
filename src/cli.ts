@@ -20,13 +20,7 @@ import {
 import { runPluginConsent } from "./commands/plugin-consent.js";
 import { runPluginReview } from "./commands/plugin-review.js";
 import { runPluginAudit } from "./commands/plugin-audit.js";
-import { registerHostApi } from "./core/host-api-register.js";
 import { KaizenError } from "./core/errors.js";
-
-// Register the `kaizen/types` virtual module for plugin imports.
-// Must run before any dynamic plugin import (bootstrap, plugin dev,
-// capability list, tests, etc.).
-registerHostApi();
 
 // Top-level error handling: KaizenError is a user-facing error; print the
 // message and exit 1 without a stack trace. Anything else is a bug and
