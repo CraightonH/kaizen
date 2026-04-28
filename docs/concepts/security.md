@@ -98,7 +98,8 @@ marketplace: `~/.kaizen/marketplaces/<id>/harnesses/<name>/permissions.lock`). R
 Workflow:
 - `kaizen install <plugin>` — resolve, read manifest, run consent, write lockfile
 - `kaizen plugin review <plugin>` — diff declared manifest vs. lockfile
-- `kaizen plugin consent <plugin>` — re-consent after a version bump
+- `kaizen plugin consent <plugin> --harness <ref>` — re-consent a single plugin after a version bump
+- `kaizen plugin consent --all --harness <ref>` — bulk pre-consent all plugins in a harness non-interactively (CI/automation); grants scoped and unscoped tiers without prompting
 - `kaizen plugin audit` — list all lockfile entries; flag UNSCOPED
 
 ## Common pitfalls
