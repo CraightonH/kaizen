@@ -36,9 +36,14 @@ published by other plugins.
 const PLUGIN_API_VERSION: string;  // current value: "3"
 ```
 
-The semver major version of the plugin API. Core warns (but still loads) if a
-plugin's `apiVersion` major differs. Defined in
-[`src/types/plugin.ts`](../../src/types/plugin.ts).
+The major version of the plugin API as a bare string (e.g. `"3"`). Used
+internally to compare against the leading segment of a plugin's `apiVersion`
+field. Defined in [`src/types/plugin.ts`](../../src/types/plugin.ts).
+
+**Format note:** `PLUGIN_API_VERSION` is major-only by design — it is a
+comparison target, not a format template. Plugin manifests must use full semver
+(`"3.0.0"`); the validator rejects bare majors like `"3"`. Core warns (but
+still loads) when `plugin.apiVersion.split(".")[0]` differs from this constant.
 
 ---
 
