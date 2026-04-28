@@ -74,7 +74,7 @@ export async function runPluginConsentAll(args: {
         outcomes.push({ status: "refused", ref: refStr, reason: `interactive consent required (${decision.kind})` });
       }
     } catch (e) {
-      outcomes.push({ status: "refused", ref: refStr, reason: (e as Error).message });
+      outcomes.push({ status: "refused", ref: refStr, reason: e instanceof Error ? e.message : String(e) });
     }
   }
 
@@ -115,7 +115,7 @@ async function loadCatalogs(): Promise<Record<string, MarketplaceCatalog>> {
   const cfg = await loadKaizenGlobalConfig();
   const out: Record<string, MarketplaceCatalog> = {};
   for (const ref of cfg.marketplaces ?? []) {
-    try { out[ref.id] = await readCatalog(ref.id); } catch { /* skip bad */ }
+    try { out[ref.id] = await readCatalog(ref.id); } catch (e) { console.warn(`[kaizen] warn: could not load catalog '${ref.id}': ${(e as Error).message}`); }
   }
   return out;
 }
