@@ -23,7 +23,9 @@ The ref format is `<marketplace-id>/<name>[@<version>]`. kaizen materializes the
 harness into `~/.kaizen/marketplaces/<id>/harnesses/<name>/kaizen.json` on first
 use, then loads it. Any marketplaces and plugins the harness references are
 bootstrapped automatically (with consent prompts unless `--non-interactive` /
-`--trust-lockfile` is set).
+`--trust-lockfile` is set). For CI environments, run
+`kaizen plugin consent --all --harness <ref>` once to pre-consent every plugin
+in the harness before the first non-interactive run.
 
 Add marketplaces with `kaizen marketplace add <url>` before referencing their
 harnesses.

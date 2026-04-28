@@ -72,7 +72,7 @@ KAIZEN_FAKE_LOG="$btmp/log" PATH="$btmp/bin:$PATH" bash -c '
 ' _ "$INSTALLER" || fail "bootstrap errored"
 
 expected_market="kaizen marketplace add https://github.com/CraightonH/kaizen-official-plugins.git --id official"
-expected_install="kaizen install official/core-shell@1.0.0"
+expected_install="kaizen install official/minimum-shell"
 
 grep -Fxq "$expected_market" "$btmp/log" || fail "bootstrap did not run: $expected_market"
 grep -Fxq "$expected_install" "$btmp/log" || fail "bootstrap did not run: $expected_install"

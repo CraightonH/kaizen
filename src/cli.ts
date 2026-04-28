@@ -101,6 +101,7 @@ Notes:
   Pass --harness after the subcommand, or set defaults.harness in
   ~/.kaizen/kaizen.json to avoid passing it every time:
     kaizen plugin consent <name> --harness ./path/to/harness.json
+    kaizen plugin consent --all  --harness ./path/to/harness.json
   --allow-destructive                   enable destructive CLI tools
   --help, -h                            show this help
 
@@ -406,6 +407,8 @@ if (subcommand === "plugin") {
   // list/create/validate don't need an active harness; consent/review/audit do.
   const needsHarness = pluginSub === "consent" || pluginSub === "review" || pluginSub === "audit";
   let lockfilePath = "";
+  let resolvedHarnessConfig: import("./types/plugin.js").KaizenConfig | undefined;
+  let resolvedHarnessJsonPath = "";
   if (needsHarness) {
     const harnessIdx = rest.indexOf("--harness");
     let harnessArg = harnessIdx !== -1 ? rest[harnessIdx + 1] : undefined;
@@ -417,8 +420,22 @@ if (subcommand === "plugin") {
       const { looksLikeHarnessRef, materializeHarnessRef } = await import("./core/kaizen-config.js");
       if (looksLikeHarnessRef(harnessArg)) harnessArg = await materializeHarnessRef(harnessArg);
     }
-    const { kaizenJsonPath } = resolveHarnessOrFatal(harnessArg !== undefined ? { harness: harnessArg } : {});
+    const { kaizenJsonPath, config } = resolveHarnessOrFatal(
+      harnessArg !== undefined ? { harness: harnessArg } : {},
+    );
     lockfilePath = deriveLockfilePath(kaizenJsonPath);
+    resolvedHarnessConfig = config;
+    resolvedHarnessJsonPath = kaizenJsonPath;
+  }
+
+  if (pluginSub === "consent" && rest.includes("--all")) {
+    const { runPluginConsentAll } = await import("./commands/plugin-consent-all.js");
+    const code = await runPluginConsentAll({
+      harnessConfig: resolvedHarnessConfig!,
+      harnessJsonPath: resolvedHarnessJsonPath,
+      lockfilePath,
+    });
+    process.exit(code);
   }
 
   if (pluginSub === "consent" && name) {
