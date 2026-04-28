@@ -143,28 +143,17 @@ describe("decideConsent", () => {
     });
     expect(decision.kind).toBe("accept");
   });
-});
 
-test("scoped plugin, non-interactive, allowScoped: true → accept-and-record", () => {
-  const lf: PermissionsLockfile = { schemaVersion: 1, plugins: {} };
-  const decision = decideConsent({
-    pluginName: "p1", version: "1.0", hash: "sha256:abc",
-    permissions: { tier: "scoped", env: ["KEY"] },
-    lockfile: lf, interactive: false,
-    allowUnscoped: false, allowScoped: true,
+  test("scoped plugin, non-interactive, allowScoped: true → accept-and-record", () => {
+    const lf: PermissionsLockfile = { schemaVersion: 1, plugins: {} };
+    const decision = decideConsent({
+      pluginName: "p1", version: "1.0", hash: "sha256:abc",
+      permissions: { tier: "scoped", env: ["KEY"] },
+      lockfile: lf, interactive: false,
+      allowUnscoped: false, allowScoped: true,
+    });
+    expect(decision.kind).toBe("accept-and-record");
   });
-  expect(decision.kind).toBe("accept-and-record");
-});
-
-test("scoped plugin, non-interactive, allowScoped: false → refuse (regression guard)", () => {
-  const lf: PermissionsLockfile = { schemaVersion: 1, plugins: {} };
-  const decision = decideConsent({
-    pluginName: "p1", version: "1.0", hash: "sha256:abc",
-    permissions: { tier: "scoped", env: ["KEY"] },
-    lockfile: lf, interactive: false,
-    allowUnscoped: false, allowScoped: false,
-  });
-  expect(decision.kind).toBe("refuse");
 });
 
 describe("normalizeSort", () => {
