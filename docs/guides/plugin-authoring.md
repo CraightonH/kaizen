@@ -172,6 +172,49 @@ For the full surface — `SecretsContext`, `CtxFs`, `CtxNet`, `CtxExec`,
 event semantics — see
 [`reference/host-api.md`](../reference/host-api.md).
 
+### Setup-start closure pattern {#setup-start-closure}
+
+`ctx.on()`, `ctx.defineService()`, `ctx.provideService()`, and
+`ctx.consumeService()` are **`setup()`-only**. Calling any of them in
+`start()` throws at runtime. This is a common surprise for driver plugins
+that need to react to events emitted during the session loop — the natural
+instinct is to register the handler next to the code that uses it, but
+that code lives in `start()`.
+
+The solution is a module-level (or closure-captured) mutable ref shared
+between `setup()` and `start()`:
+
+```ts
+// Shared ref — lives outside both lifecycle methods.
+const cancelController = { current: null as AbortController | null };
+
+const plugin: KaizenPlugin = {
+  name: "my-driver",
+  driver: true,
+
+  async setup(ctx) {
+    // Register here, even though the AbortController doesn't exist yet.
+    ctx.on("turn:cancel", () => cancelController.current?.abort());
+  },
+
+  async start(ctx) {
+    // Create the controller and expose it via the shared ref.
+    const ac = new AbortController();
+    cancelController.current = ac;
+
+    try {
+      // ... session loop that uses ac.signal
+    } finally {
+      cancelController.current = null;
+    }
+  },
+};
+```
+
+The same pattern applies to any state the handler needs from `start()`:
+allocate a mutable container in module scope, populate it at the start of
+`start()`, and clear it in a `finally` block.
+
 ## Publishing types {#publishing-types}
 
 When your plugin provides a service, consumers need your types at compile time

@@ -162,6 +162,12 @@ Method semantics:
 - `useService` — returns the registered implementation by reference. Throws
   if the service has no provider. Valid only during `RUNNING` (not inside
   `setup()`; providers may not have registered yet).
+- `on` — registers an event handler. **Must be called in `setup()`, not
+  `start()`**; throws `Cannot register event handlers after initialization.`
+  if called later. If a driver plugin needs to react to events during its
+  session loop, register the handler in `setup()` and share state via a
+  closure — see [the closure pattern](#setup-start-closure) in
+  `plugin-authoring.md`.
 - `emit` calls all handlers serially in initialization order, returns every
   handler's return value (including `undefined`), and logs-and-continues on
   handler throw. Emitting an undefined event warns but never blocks.
