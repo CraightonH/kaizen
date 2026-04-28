@@ -1,6 +1,6 @@
 {
   "name": "kaizen",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Platform for LLM harnesses",
   "type": "module",
   "module": "src/cli.ts",
