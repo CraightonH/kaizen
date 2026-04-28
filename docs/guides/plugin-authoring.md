@@ -339,6 +339,14 @@ Checks (see `src/commands/plugin-validate.ts` for the full list):
   enforcement).
 - `*.test.ts` file present; `README.md` present.
 
+> **What the sandbox enforces today:** The enforcer gates module imports and
+> calls made through `ctx.fs` / `ctx.net` / `ctx.exec`. It does **not** filter
+> Node.js globals. `process.cwd()`, `process.env`, `process.platform`,
+> `os.homedir()`, and similar ambient values are accessible to plugins of any
+> tier. `tier` currently signals intent and controls which `ctx.*` grants are
+> available — it is not a hard runtime cap on globals. A future release may
+> tighten this; for now, treat global access as unrestricted.
+
 Exit code is `0` on pass (possibly with warnings), `1` on any failure. Common
 fixes:
 
