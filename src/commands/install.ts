@@ -19,6 +19,7 @@ export interface UnifiedInstallArgs {
   ref: string;
   lockfilePath: string;
   allowUnscoped: boolean;
+  allowScoped?: boolean;
   nonInteractive: boolean;
 }
 
@@ -67,7 +68,7 @@ export async function runUnifiedInstall(args: UnifiedInstallArgs): Promise<numbe
     version, hash, permissions, lockfile,
     interactive: !args.nonInteractive && process.stdin.isTTY === true,
     allowUnscoped: args.allowUnscoped,
-    allowScoped: false,
+    allowScoped: args.allowScoped ?? false,
   });
 
   const canonical = `${resolved.marketplaceId}/${resolved.entry.name}@${resolved.version}`;
