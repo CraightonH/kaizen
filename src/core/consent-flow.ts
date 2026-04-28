@@ -51,7 +51,7 @@ export function decideConsent(input: ConsentInput): ConsentDecision {
   if (tier === "scoped") {
     return input.interactive
       ? { kind: "prompt-scoped", entry: nowEntry }
-      : { kind: "refuse", reason: `plugin '${input.pluginName}' requires SCOPED-tier consent. Run interactively or pre-consent with 'kaizen plugin consent ${input.pluginName}'.` };
+      : { kind: "refuse", reason: `plugin '${input.pluginName}' requires SCOPED-tier consent. Run interactively, or pre-consent with: kaizen plugin consent ${input.pluginName} --harness <harness-path>` };
   }
 
   // tier === "unscoped"

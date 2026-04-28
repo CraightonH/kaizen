@@ -95,6 +95,12 @@ Flags:
   --trust-lockfile                      reuse existing lockfile; no prompts
   --non-interactive                     refuse any prompt-requiring consent
   --allow-unscoped                      permit non-interactive UNSCOPED consent
+
+Notes:
+  'plugin consent|review|audit' require a harness to locate the lockfile.
+  Pass --harness after the subcommand, or set defaults.harness in
+  ~/.kaizen/kaizen.json to avoid passing it every time:
+    kaizen plugin consent <name> --harness ./path/to/harness.json
   --allow-destructive                   enable destructive CLI tools
   --help, -h                            show this help
 
@@ -399,7 +405,21 @@ if (subcommand === "plugin") {
 
   // list/create/validate don't need an active harness; consent/review/audit do.
   const needsHarness = pluginSub === "consent" || pluginSub === "review" || pluginSub === "audit";
-  const lockfilePath = needsHarness ? deriveLockfilePath(resolveHarnessJsonPath({})) : "";
+  let lockfilePath = "";
+  if (needsHarness) {
+    const harnessIdx = rest.indexOf("--harness");
+    let harnessArg = harnessIdx !== -1 ? rest[harnessIdx + 1] : undefined;
+    if (!harnessArg) {
+      const globalCfg = await loadKaizenGlobalConfig();
+      harnessArg = globalCfg.defaults?.harness;
+    }
+    if (harnessArg) {
+      const { looksLikeHarnessRef, materializeHarnessRef } = await import("./core/kaizen-config.js");
+      if (looksLikeHarnessRef(harnessArg)) harnessArg = await materializeHarnessRef(harnessArg);
+    }
+    const { kaizenJsonPath } = resolveHarnessOrFatal(harnessArg !== undefined ? { harness: harnessArg } : {});
+    lockfilePath = deriveLockfilePath(kaizenJsonPath);
+  }
 
   if (pluginSub === "consent" && name) {
     const code = await runPluginConsent({
