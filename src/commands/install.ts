@@ -67,6 +67,7 @@ export async function runUnifiedInstall(args: UnifiedInstallArgs): Promise<numbe
     version, hash, permissions, lockfile,
     interactive: !args.nonInteractive && process.stdin.isTTY === true,
     allowUnscoped: args.allowUnscoped,
+    allowScoped: false,
   });
 
   const canonical = `${resolved.marketplaceId}/${resolved.entry.name}@${resolved.version}`;

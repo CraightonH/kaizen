@@ -342,6 +342,7 @@ export class PluginManager {
       lockfile: lf,
       interactive: !this.options.nonInteractive && process.stdin.isTTY === true,
       allowUnscoped: this.options.allowUnscoped,
+      allowScoped: false,
     });
 
     switch (decision.kind) {

@@ -19,7 +19,7 @@ describe("decideConsent", () => {
     const decision = decideConsent({
       pluginName: "p1", version: "1.0", hash: "sha256:abc",
       permissions: BASE_MANIFEST, lockfile: lf, interactive: false,
-      allowUnscoped: false,
+      allowUnscoped: false, allowScoped: false,
     });
     expect(decision.kind).toBe("accept");
   });
@@ -38,7 +38,7 @@ describe("decideConsent", () => {
     const decision = decideConsent({
       pluginName: "p1", version: "1.0", hash: "sha256:new",
       permissions: BASE_MANIFEST, lockfile: lf, interactive: false,
-      allowUnscoped: false,
+      allowUnscoped: false, allowScoped: false,
     });
     expect(decision.kind).toBe("refuse");
     if (decision.kind === "refuse") expect(decision.reason).toMatch(/hash/i);
@@ -58,7 +58,7 @@ describe("decideConsent", () => {
     const decision = decideConsent({
       pluginName: "p1", version: "1.0", hash: "sha256:abc",
       permissions: BASE_MANIFEST, lockfile: lf, interactive: false,
-      allowUnscoped: false,
+      allowUnscoped: false, allowScoped: false,
     });
     expect(decision.kind).toBe("refuse");
     if (decision.kind === "refuse") expect(decision.reason).toMatch(/permission/i);
@@ -69,7 +69,7 @@ describe("decideConsent", () => {
       pluginName: "p1", version: "1.0", hash: "sha256:abc",
       permissions: { tier: "trusted" },
       lockfile: { schemaVersion: 1, plugins: {} },
-      interactive: false, allowUnscoped: false,
+      interactive: false, allowUnscoped: false, allowScoped: false,
     });
     expect(decision.kind).toBe("accept-and-record");
   });
@@ -79,7 +79,7 @@ describe("decideConsent", () => {
       pluginName: "p1", version: "1.0", hash: "sha256:abc",
       permissions: BASE_MANIFEST,
       lockfile: { schemaVersion: 1, plugins: {} },
-      interactive: false, allowUnscoped: false,
+      interactive: false, allowUnscoped: false, allowScoped: false,
     });
     expect(decision.kind).toBe("refuse");
     if (decision.kind === "refuse") expect(decision.reason).toMatch(/consent/i);
@@ -90,7 +90,7 @@ describe("decideConsent", () => {
       pluginName: "p1", version: "1.0", hash: "sha256:abc",
       permissions: BASE_MANIFEST,
       lockfile: { schemaVersion: 1, plugins: {} },
-      interactive: true, allowUnscoped: false,
+      interactive: true, allowUnscoped: false, allowScoped: false,
     });
     expect(decision.kind).toBe("prompt-scoped");
     if (decision.kind === "prompt-scoped") {
@@ -104,7 +104,7 @@ describe("decideConsent", () => {
       pluginName: "p1", version: "1.0", hash: "sha256:abc",
       permissions: { tier: "unscoped" },
       lockfile: { schemaVersion: 1, plugins: {} },
-      interactive: true, allowUnscoped: true,
+      interactive: true, allowUnscoped: true, allowScoped: false,
     });
     expect(decision.kind).toBe("prompt-unscoped");
     if (decision.kind === "prompt-unscoped") {
@@ -118,7 +118,7 @@ describe("decideConsent", () => {
       pluginName: "p1", version: "1.0", hash: "sha256:abc",
       permissions: { tier: "unscoped" },
       lockfile: { schemaVersion: 1, plugins: {} },
-      interactive: false, allowUnscoped: false,
+      interactive: false, allowUnscoped: false, allowScoped: false,
     });
     expect(decision.kind).toBe("refuse");
     if (decision.kind === "refuse") expect(decision.reason).toMatch(/unscoped/i);
@@ -139,10 +139,32 @@ describe("decideConsent", () => {
     const decision = decideConsent({
       pluginName: "p1", version: "1.0", hash: "sha256:abc",
       permissions: { tier: "scoped", env: ["A", "B"] },
-      lockfile: lf, interactive: false, allowUnscoped: false,
+      lockfile: lf, interactive: false, allowUnscoped: false, allowScoped: false,
     });
     expect(decision.kind).toBe("accept");
   });
+});
+
+test("scoped plugin, non-interactive, allowScoped: true → accept-and-record", () => {
+  const lf: PermissionsLockfile = { schemaVersion: 1, plugins: {} };
+  const decision = decideConsent({
+    pluginName: "p1", version: "1.0", hash: "sha256:abc",
+    permissions: { tier: "scoped", env: ["KEY"] },
+    lockfile: lf, interactive: false,
+    allowUnscoped: false, allowScoped: true,
+  });
+  expect(decision.kind).toBe("accept-and-record");
+});
+
+test("scoped plugin, non-interactive, allowScoped: false → refuse (regression guard)", () => {
+  const lf: PermissionsLockfile = { schemaVersion: 1, plugins: {} };
+  const decision = decideConsent({
+    pluginName: "p1", version: "1.0", hash: "sha256:abc",
+    permissions: { tier: "scoped", env: ["KEY"] },
+    lockfile: lf, interactive: false,
+    allowUnscoped: false, allowScoped: false,
+  });
+  expect(decision.kind).toBe("refuse");
 });
 
 describe("normalizeSort", () => {
