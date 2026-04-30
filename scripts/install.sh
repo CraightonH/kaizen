@@ -83,6 +83,35 @@ verify_checksum() {
   [ "$expected" = "$actual" ] || die "checksum mismatch for ${name} (expected ${expected}, got ${actual})"
 }
 
+# Ensure bun is available so plugin runtime deps can be resolved at install
+# time. Idempotent and best-effort: a failure here warns and continues, never
+# aborts the kaizen installer.
+#
+# Opt out by setting KAIZEN_NO_BUN=1.
+ensure_bun() {
+  if [ "${KAIZEN_NO_BUN:-0}" = "1" ]; then
+    info "Skipping bun install (KAIZEN_NO_BUN=1)."
+    return 0
+  fi
+
+  if command -v bun >/dev/null 2>&1; then
+    info "bun already installed: $(command -v bun)"
+    return 0
+  fi
+  if [ -x "$HOME/.bun/bin/bun" ]; then
+    info "bun found at ~/.bun/bin/bun"
+    return 0
+  fi
+
+  info "Installing bun (required for plugin dependency resolution)..."
+  if curl -fsSL https://bun.sh/install | bash; then
+    green "  ✓ bun installed"
+  else
+    red "  ! bun install failed; install manually: curl -fsSL https://bun.sh/install | bash"
+    return 0
+  fi
+}
+
 # Register the official marketplace and install the default harness. Plugin
 # resolution is deferred to the binary — kaizen auto-installs a harness's
 # plugins on first run via src/core/bootstrap.ts. Each step is best-effort:
@@ -199,6 +228,9 @@ main() {
   else
     info "~/.kaizen/kaizen.json already exists, skipping init."
   fi
+
+  echo ""
+  ensure_bun
 
   echo ""
   bootstrap

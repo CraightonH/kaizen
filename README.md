@@ -38,11 +38,17 @@ on your `PATH`:
 curl -fsSL https://raw.githubusercontent.com/CraightonH/kaizen/master/scripts/install.sh | INSTALL_DIR=$HOME/.local/bin bash
 ```
 
+The installer also ensures [Bun](https://bun.sh) is present (used to resolve
+plugin runtime dependencies at install time). Set `KAIZEN_NO_BUN=1` to skip
+this step if you already manage bun yourself.
+
 Environment overrides:
 
 - `KAIZEN_HOME` — marketplace/state dir (default `~/.kaizen`)
 - `INSTALL_DIR` — binary install dir (default `/usr/local/bin`)
 - `KAIZEN_REPO` — GitHub repo to pull releases from (default `CraightonH/kaizen`)
+- `KAIZEN_NO_BUN=1` — skip auto-installing Bun
+- `KAIZEN_NO_BOOTSTRAP=1` — skip seeding the `official` marketplace
 
 ## Concepts
 

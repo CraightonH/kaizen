@@ -432,6 +432,33 @@ manifest) so kaizen can validate user-supplied values. Secret keys additionally
 go in `plugin.config.secrets`. See [`reference/plugin-api.md`](../reference/plugin-api.md)
 for the full `config` field shape.
 
+## Runtime dependencies
+
+If your plugin imports any runtime npm package (e.g., `react`, `ink`, `zod`),
+declare it under `dependencies` in your `package.json`. Kaizen will resolve
+those dependencies automatically when the plugin is installed by running
+`bun install --production` in the install dir.
+
+**Best practices:**
+
+- **Commit your `bun.lock`** (or other lockfile) for reproducible installs.
+  Without a lockfile, two users installing "the same plugin version" can get
+  different transitive deps based on when they install.
+- **Keep build-only tools in `devDependencies`.** TypeScript, bundlers,
+  test runners, type packages — none of these need to land on user machines
+  at plugin install time.
+- **Postinstall lifecycle scripts are disabled by Bun by default.** If your
+  plugin (or one of its deps) needs to run a postinstall script — e.g., a
+  package with a native binding — declare the dep in `trustedDependencies`
+  in your `package.json`. See [Bun's lifecycle scripts docs](https://bun.com/docs/cli/install#trusted-dependencies).
+- **Prefer pure-JS or `optionalDependencies`-distributed native packages.**
+  Modern packages (`esbuild`, `lightningcss`, recent `sharp`) ship platform
+  binaries via `optionalDependencies` and install reliably without a build
+  step.
+
+If `package.json` has no `dependencies` field, no install step runs — your
+plugin is copied into place and that's it.
+
 ## Next steps
 
 Once your plugin validates, publish it:
