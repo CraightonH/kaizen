@@ -110,7 +110,7 @@ bootstrap() {
     return 0
   fi
 
-  local default_harness="official/minimum-shell"
+  local default_harness="official/claude-wrapper"
   info "Installing default harness ${default_harness}..."
   if kaizen install "$default_harness"; then
     green "  ✓ ${default_harness} installed"
