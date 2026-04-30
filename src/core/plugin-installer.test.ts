@@ -329,4 +329,49 @@ describe("bundlePlugin", () => {
     await expect(bundlePluginForTesting(target, "broken", "1.0.0")).rejects.toThrow(/bun build failed/);
     expect(existsSync(target)).toBe(false);
   }, 30_000);
+
+  it("passes kaizen.bundleExternals as --external flags to bun build", async () => {
+    // Fake bun executable that records argv and writes a stub bundle.
+    const fakeBun = join(target, "fake-bun.sh");
+    const argLog = join(target, "args.log");
+    writeFileSync(
+      fakeBun,
+      `#!/bin/sh
+echo "$@" > ${JSON.stringify(argLog)}
+# argv: build --target=bun --outfile=<...> [--external X]... <entry>
+# Find --outfile=<path> and create the file.
+for a in "$@"; do
+  case "$a" in
+    --outfile=*)
+      out="\${a#--outfile=}"
+      mkdir -p "$(dirname "$out")"
+      echo "// stub" > "$out"
+      ;;
+  esac
+done
+exit 0
+`,
+    );
+    chmodSync(fakeBun, 0o755);
+
+    writeFileSync(
+      join(target, "package.json"),
+      JSON.stringify({
+        name: "with-ext",
+        version: "1.0.0",
+        type: "module",
+        main: "index.js",
+        kaizen: { bundleExternals: ["react-devtools-core", "fsevents"] },
+      }),
+    );
+    writeFileSync(join(target, "index.js"), "export default { name: 'x', apiVersion: '2', setup(){} };");
+
+    await bundlePluginForTesting(target, "with-ext", "1.0.0", () => fakeBun);
+
+    const argv = readFileSync(argLog, "utf8");
+    expect(argv).toContain("--external react-devtools-core");
+    expect(argv).toContain("--external fsevents");
+    expect(argv).toContain("--target=bun");
+    expect(existsSync(join(target, "dist", "index.js"))).toBe(true);
+  });
 });
