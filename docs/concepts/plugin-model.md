@@ -71,8 +71,14 @@ The high-level sequence when you run `kaizen --harness <something>`:
    persist in the harness's `permissions.lock` (see `docs/concepts/harnesses.md`).
 4. **Setup.** Plugins are topologically sorted by their declared dependencies
    and each `setup(ctx)` runs in order. After all `setup()` calls complete,
-   core validates that every consumed service has a provider, then calls
-   `start(ctx)` on the single session driver.
+   core validates that every consumed service has a provider.
+5. **Ready.** After every plugin's `setup()` resolves, core calls
+   `onReady(ctx)` on each plugin in topological order. Core state is
+   `RUNNING`, so `useService()` is legal. Setup-only APIs (`on`,
+   `defineService`, `provideService`, `consumeService`, `defineEvent`)
+   are not. Errors are fatal. Optional — plugins that do not need
+   `RUNNING`-phase wiring may omit it.
+6. **Start.** Core calls `start(ctx)` on the single session driver.
 
 Exact loader mechanics — the compiled-binary `createRequire` anchor, package
 shape requirements, the dep-resolution walk for plugin-internal imports —
