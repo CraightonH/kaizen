@@ -285,6 +285,54 @@ describe("readBundleExternals", () => {
   });
 });
 
+describe("installPlugin — bundling", () => {
+  it("produces dist/index.js and removes node_modules after a deps-free file install", async () => {
+    const pluginSrc = join(upstream, "plugins", "trivial");
+    mkdirSync(pluginSrc, { recursive: true });
+    writeFileSync(
+      join(pluginSrc, "package.json"),
+      JSON.stringify({ name: "trivial", version: "1.0.0", type: "module", main: "index.js" }),
+    );
+    writeFileSync(
+      join(pluginSrc, "index.js"),
+      "export default { name: 'trivial', apiVersion: '2', setup(){} };",
+    );
+
+    await installPlugin("m", "trivial", "1.0.0", { type: "file", path: "plugins/trivial" });
+
+    const target = pluginInstallDir("m", "trivial", "1.0.0");
+    expect(existsSync(join(target, "dist", "index.js"))).toBe(true);
+    expect(existsSync(join(target, "node_modules"))).toBe(false);
+    expect(existsSync(join(target, "index.js"))).toBe(true);
+    expect(existsSync(join(target, "package.json"))).toBe(true);
+  }, 30_000);
+
+  it("produces dist/index.js and removes node_modules after a with-deps file install", async () => {
+    const pluginSrc = join(upstream, "plugins", "with-deps");
+    mkdirSync(pluginSrc, { recursive: true });
+    writeFileSync(
+      join(pluginSrc, "package.json"),
+      JSON.stringify({
+        name: "with-deps",
+        version: "1.0.0",
+        type: "module",
+        main: "index.js",
+        dependencies: { "is-odd": "3.0.1" },
+      }),
+    );
+    writeFileSync(
+      join(pluginSrc, "index.js"),
+      "import isOdd from 'is-odd'; export default { name: 'with-deps', apiVersion: '2', setup(){ isOdd(1); } };",
+    );
+
+    await installPlugin("m", "with-deps", "1.0.0", { type: "file", path: "plugins/with-deps" });
+
+    const target = pluginInstallDir("m", "with-deps", "1.0.0");
+    expect(existsSync(join(target, "dist", "index.js"))).toBe(true);
+    expect(existsSync(join(target, "node_modules"))).toBe(false);
+  }, 60_000);
+});
+
 describe("bundlePlugin", () => {
   let target: string;
   beforeEach(() => {

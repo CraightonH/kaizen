@@ -31,6 +31,7 @@ export async function installPlugin(
   }
 
   await installDeps(target, name, version);
+  await bundlePlugin(target, name, version);
 }
 
 /**
