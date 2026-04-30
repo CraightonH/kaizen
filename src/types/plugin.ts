@@ -252,6 +252,11 @@ export interface KaizenConfig {
   extends?: string;
   /** Informational marketplaces a harness expects; consumed by --harness bootstrap. */
   marketplaces?: MarketplaceRef[];
+  /**
+   * Per-harness env allow-list. Same syntax as KaizenDefaults.env_allowlist.
+   * If present, takes precedence over the user-level value at runtime.
+   */
+  env_allowlist?: string[];
   [pluginName: string]: unknown;
 }
 
@@ -341,6 +346,13 @@ export interface KaizenDefaults {
   harness?: string;
   /** Per-plugin config overrides. Keyed by plugin name. Values are plugin-specific objects. */
   plugin_config?: Record<string, Record<string, unknown>>;
+  /**
+   * Env vars that bypass tier-based env.get gating, regardless of plugin tier.
+   * Entries are exact names ("PATH") or trailing-* prefixes ("LC_*").
+   * If absent, the built-in DEFAULT_ENV_ALLOWLIST is used. An explicit []
+   * means "no allow-list; gate everything."
+   */
+  env_allowlist?: string[];
 }
 
 export interface KaizenGlobalConfig {
