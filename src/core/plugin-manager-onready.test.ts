@@ -251,4 +251,29 @@ describe("PluginManager.initialize calls onReady()", () => {
     expect(bridge.defineEvtErr).toMatch(/after initialization/i);
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
+
+  test("a throw from onReady is fatal", async () => {
+    const driverDir = writePlugin({
+      name: "driver",
+      driver: true,
+      hasStart: true,
+      startBody: `/* no-op */`,
+    });
+    const badDir = writePlugin({
+      name: "bad",
+      hasOnReady: true,
+      onReadyBody: `throw new Error("onReady kaboom");`,
+    });
+
+    const { eventBus, serviceRegistry } = makeRegistries();
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: [badDir, driverDir] },
+      eventBus, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+
+    await expect(manager.initialize()).rejects.toThrow(/onReady\(\) failed.*onReady kaboom/);
+  });
 });
