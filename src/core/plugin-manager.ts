@@ -457,6 +457,26 @@ export class PluginManager {
       if (!claimedKeys.has(key)) warn(`Unknown config key '${key}'. No plugin claimed it.`);
     }
 
+    // PASS 4: invoke onReady() on every loaded plugin in topo order.
+    // Flips each plugin's state to RUNNING so useService() is legal.
+    // Setup-only APIs (on/defineService/provideService/consumeService/defineEvent)
+    // remain forbidden — same gating as start().
+    for (const plugin of sorted) {
+      const record = this.plugins.get(plugin.name);
+      if (!record || record.entry.status !== "loaded") continue;
+      if (!record.stateRef || !record.ctx) continue;
+      record.stateRef.current = "RUNNING";
+      if (typeof plugin.onReady !== "function") continue;
+      try {
+        await runInPluginScope(plugin.name, async () => {
+          await plugin.onReady!(record.ctx!);
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        fatal(`Plugin '${plugin.name}' onReady() failed: ${msg}`);
+      }
+    }
+
     // Resolve driver — the one plugin with `driver: true`.
     // Core's single cross-plugin contract: call start() on the session driver.
     const driverNames: string[] = [];
