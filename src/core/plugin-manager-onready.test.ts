@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { PluginManager } from "./plugin-manager.js";
+import { runHarness } from "./index.js";
 import { EventBus } from "./event-bus.js";
 import { ServiceRegistry } from "./service-registry.js";
 import { PermissionEnforcer } from "./permission-enforcer.js";
@@ -275,5 +276,38 @@ describe("PluginManager.initialize calls onReady()", () => {
     );
 
     await expect(manager.initialize()).rejects.toThrow(/onReady\(\) failed.*onReady kaboom/);
+  });
+
+  test("driver.start() runs after every plugin's onReady", async () => {
+    const bridgeKey = `__kz_onready_before_start_${Date.now()}_${Math.random()}__`;
+    (globalThis as Record<string, unknown>)[bridgeKey] = { calls: [] as string[] };
+
+    const driverDir = writePlugin({
+      name: "driver",
+      driver: true,
+      hasOnReady: true,
+      onReadyBody: `globalThis[${JSON.stringify(bridgeKey)}].calls.push("driver:onReady");`,
+      hasStart: true,
+      startBody: `globalThis[${JSON.stringify(bridgeKey)}].calls.push("driver:start");`,
+    });
+    const peerDir = writePlugin({
+      name: "peer",
+      hasOnReady: true,
+      onReadyBody: `globalThis[${JSON.stringify(bridgeKey)}].calls.push("peer:onReady");`,
+    });
+
+    const lockfilePath = join(mkdtempSync(join(tmpdir(), "kaizen-test-lock-")), "permissions.lock");
+    await runHarness({
+      kaizenConfig: { plugins: [peerDir, driverDir] },
+      lockfilePath,
+    });
+
+    const bridge = (globalThis as Record<string, { calls: string[] }>)[bridgeKey]!;
+    const startIdx = bridge.calls.indexOf("driver:start");
+    const peerOnReadyIdx = bridge.calls.indexOf("peer:onReady");
+    const driverOnReadyIdx = bridge.calls.indexOf("driver:onReady");
+    expect(startIdx).toBeGreaterThan(peerOnReadyIdx);
+    expect(startIdx).toBeGreaterThan(driverOnReadyIdx);
+    delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
 });
