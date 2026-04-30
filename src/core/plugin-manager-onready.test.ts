@@ -113,4 +113,46 @@ describe("PluginManager.initialize calls onReady()", () => {
     expect(bridge.calls.sort()).toEqual(["consumer", "driver"]);
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
+
+  test("onReady runs in topological order (provider before consumer)", async () => {
+    const bridgeKey = `__kz_onready_topo_${Date.now()}_${Math.random()}__`;
+    (globalThis as Record<string, unknown>)[bridgeKey] = { calls: [] as string[] };
+
+    const driverDir = writePlugin({
+      name: "driver",
+      driver: true,
+      hasStart: true,
+      startBody: `/* no-op */`,
+    });
+    const providerDir = writePlugin({
+      name: "provider",
+      provides: ["provider:thing"],
+      setupBody: `ctx.defineService("provider:thing", { schema: {} }); ctx.provideService("provider:thing", { ok: true });`,
+      hasOnReady: true,
+      onReadyBody: `globalThis[${JSON.stringify(bridgeKey)}].calls.push("provider");`,
+    });
+    const consumerDir = writePlugin({
+      name: "consumer",
+      consumes: ["provider:thing"],
+      hasOnReady: true,
+      onReadyBody: `globalThis[${JSON.stringify(bridgeKey)}].calls.push("consumer");`,
+    });
+
+    const { eventBus, serviceRegistry } = makeRegistries();
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: [consumerDir, providerDir, driverDir] },
+      eventBus, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+    await manager.initialize();
+
+    const bridge = (globalThis as Record<string, { calls: string[] }>)[bridgeKey]!;
+    const providerIdx = bridge.calls.indexOf("provider");
+    const consumerIdx = bridge.calls.indexOf("consumer");
+    expect(providerIdx).toBeGreaterThanOrEqual(0);
+    expect(consumerIdx).toBeGreaterThan(providerIdx);
+    delete (globalThis as Record<string, unknown>)[bridgeKey];
+  });
 });
