@@ -217,6 +217,18 @@ export interface KaizenPlugin {
   setup(ctx: PluginContext): Promise<void>;
   start?(ctx: PluginContext): Promise<void>;
   /**
+   * Optional `RUNNING`-phase wiring hook. Called once per loaded plugin in
+   * topological order after every `setup()` resolves and before
+   * `driver.start()` is invoked. `useService()` is legal here; setup-only
+   * APIs (`on`, `defineService`, `provideService`, `consumeService`,
+   * `defineEvent`) are not. Throwing is fatal.
+   *
+   * Use this for non-driver plugins that need to call `useService()` against
+   * a peer's service. The driver's `start()` retains its "session loop"
+   * meaning and is unaffected.
+   */
+  onReady?(ctx: PluginContext): Promise<void> | void;
+  /**
    * Called during unload, before events/services/permissions are deregistered.
    * Use to close resources opened in setup() or start() (readline interfaces,
    * network listeners, timers, file watchers). Errors are logged but do not

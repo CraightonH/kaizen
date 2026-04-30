@@ -60,7 +60,10 @@ kaizen run
   │   │   └─ defineService / provideService / consumeService / defineEvent / on
   │   └─ service validation (exactly-one-provider check, exactly-one-driver check)
   │
-  ├─ READY → core calls driver.start(ctx)
+  ├─ READY → core calls onReady(ctx) on each plugin in topo order (optional hook)
+  │   │  state flips to RUNNING for each plugin before its onReady runs;
+  │   │  useService() is legal here, setup-only APIs still throw.
+  │   └─ then core calls driver.start(ctx)
   │
   ├─ RUNNING (driven by the session-driver plugin)
   │   │  Everything in this phase — reading user input, calling an LLM,
@@ -92,6 +95,12 @@ INITIALIZING → READY → RUNNING → CLOSED
 `defineService`, `provideService`, `consumeService`, `defineEvent`, and `on`
 are only valid during `INITIALIZING` (inside `setup()`). `useService` is only
 valid during `RUNNING`. Calling them outside their allowed state throws.
+
+After all `setup()` calls resolve, core invokes the optional `onReady(ctx)`
+hook on every loaded plugin in topological order. `onReady` runs with core
+state `RUNNING` — `useService()` is legal — and is the canonical place for
+non-driver `RUNNING`-phase wiring. The driver's `start()` runs after every
+`onReady` returns.
 
 ## Plugin initialization order
 

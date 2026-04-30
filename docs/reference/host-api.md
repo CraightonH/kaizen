@@ -156,6 +156,55 @@ composite. Note that `ctx.secrets` and `ctx.log` are **not** part of
 
 ---
 
+## Plugin lifecycle methods
+
+Defined on `KaizenPlugin` (the default export of a plugin). See
+[`plugin-model.md`](../concepts/plugin-model.md#lifecycle) for phase semantics.
+
+#### `setup(ctx: PluginContext): Promise<void>`
+
+Required. Called once during `INITIALIZING` in topological order. Use for
+`defineService`, `provideService`, `consumeService`, `defineEvent`, `on`.
+`useService()` is **not** legal here — it throws.
+
+#### `start?(ctx: PluginContext): Promise<void>`
+
+Driver-only. Called once on the single plugin with `driver: true` after every
+`onReady` returns. Owns the session loop. `useService()` is legal; setup-only
+APIs throw.
+
+#### `onReady?(ctx: PluginContext): Promise<void> | void`
+
+Optional `RUNNING`-phase wiring hook. Core invokes it once per loaded plugin
+in topological order (same edges as `setup()`), after every `setup()` resolves
+and before `driver.start()` is invoked.
+
+**Phase legality during `onReady`:**
+
+| API | Legal? |
+| --- | --- |
+| `ctx.useService` | yes |
+| `ctx.emit` | yes |
+| `ctx.fs` / `ctx.net` / `ctx.exec` / `ctx.secrets` | yes |
+| `ctx.on` | no (setup-only) |
+| `ctx.defineService` | no (setup-only) |
+| `ctx.provideService` | no (setup-only) |
+| `ctx.consumeService` | no (setup-only) |
+| `ctx.defineEvent` | no (setup-only) |
+
+A throw from `onReady` is fatal. Plugins that do not need `RUNNING`-phase
+wiring may omit it. See the [authoring guide][on-ready] for usage.
+
+[on-ready]: ../guides/plugin-authoring.md#on-ready
+
+#### `stop?(ctx: PluginContext): Promise<void>`
+
+Optional. Called during unload, before events/services/permissions are
+deregistered. Use to close resources opened in `setup()` or `start()`. Errors
+are logged but do not prevent deregistration.
+
+---
+
 ## Type-only exports
 
 The following are TypeScript types only (stripped at runtime). Import them

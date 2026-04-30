@@ -215,6 +215,55 @@ The same pattern applies to any state the handler needs from `start()`:
 allocate a mutable container in module scope, populate it at the start of
 `start()`, and clear it in a `finally` block.
 
+### Non-driver `RUNNING`-phase wiring with `onReady` {#on-ready}
+
+`useService()` is `RUNNING`-only — it throws if called from `setup()`. This is
+straightforward for the driver (do it in `start()`) but used to be awkward for
+non-driver plugins, since core only invokes `start()` on the driver. The
+`onReady(ctx)` hook closes that gap.
+
+`onReady` is an optional plugin method. Core invokes it once per loaded plugin,
+in topological order (same edges as `setup()`), after every `setup()` resolves
+and before `driver.start()` is invoked. Inside `onReady`, `useService()` is
+legal; the same setup-only APIs that are forbidden in `start()` (`ctx.on`,
+`provideService`, `consumeService`, `defineService`, `defineEvent`) are
+forbidden here.
+
+```ts
+const plugin: KaizenPlugin = {
+  name: "my-consumer",
+  services: { consumes: ["peer:thing"] },
+
+  async setup(ctx) {
+    // setup-only wiring goes here
+  },
+
+  async onReady(ctx) {
+    // RUNNING-phase wiring: legal to call useService now.
+    const peer = ctx.useService<PeerThing>("peer:thing");
+    peer.onSomething(() => {
+      // …
+    });
+  },
+};
+```
+
+A throw from `onReady` is fatal — the harness aborts with the same shape as a
+`setup()` failure. `onReady` runs exactly once during the initial harness boot;
+hot-reload (`PluginManager.reload`) does not re-invoke it.
+
+The driver may also define `onReady` for the same purpose. `start()` retains
+its "session loop" meaning and is unaffected.
+
+#### When to still use the events pattern
+
+`onReady` solves the "I need `useService()` legality" problem. Cross-plugin
+coordination that depends on another plugin's *runtime* state — e.g. waiting
+until the driver's session loop has actually started — still belongs in an
+event handshake. Define a vocabulary event in a shared events plugin, have
+the driver emit it during `start()`, and subscribe to it in `setup()` of any
+plugin that needs to react.
+
 ## Publishing types {#publishing-types}
 
 When your plugin provides a service, consumers need your types at compile time

@@ -281,10 +281,15 @@ function topoSort(plugins: KaizenPlugin[]): KaizenPlugin[] {
 // PluginManager
 // ---------------------------------------------------------------------------
 
+interface StateRef {
+  current: CoreState;
+}
+
 interface PluginRecord {
   plugin: KaizenPlugin;
   entry: PluginEntry;
   ctx?: PluginContext;
+  stateRef?: StateRef;
 }
 
 export class PluginManager {
@@ -407,7 +412,7 @@ export class PluginManager {
       const critical = isCritical(plugin, this.serviceRegistry);
       const rPath = resolvedPathMap.get(plugin.name) ?? null;
       try {
-        const ctx = await this.setupPlugin(plugin, rPath);
+        const { ctx, stateRef } = await this.setupPlugin(plugin, rPath);
         loadedNames.add(plugin.name);
         this.plugins.set(plugin.name, {
           plugin,
@@ -418,6 +423,7 @@ export class PluginManager {
             status: "loaded",
           },
           ctx,
+          stateRef,
         });
         debug(`Plugin '${plugin.name}' initialized.`);
       } catch (err) {
@@ -449,6 +455,26 @@ export class PluginManager {
     const claimedKeys = new Set(["plugins", "extends", ...loadedNames]);
     for (const key of Object.keys(this.config)) {
       if (!claimedKeys.has(key)) warn(`Unknown config key '${key}'. No plugin claimed it.`);
+    }
+
+    // PASS 4: invoke onReady() on every loaded plugin in topo order.
+    // Flips each plugin's state to RUNNING so useService() is legal.
+    // Setup-only APIs (on/defineService/provideService/consumeService/defineEvent)
+    // remain forbidden — same gating as start().
+    for (const plugin of sorted) {
+      const record = this.plugins.get(plugin.name);
+      if (!record || record.entry.status !== "loaded") continue;
+      if (!record.stateRef || !record.ctx) continue;
+      record.stateRef.current = "RUNNING";
+      if (typeof plugin.onReady !== "function") continue;
+      try {
+        await runInPluginScope(plugin.name, async () => {
+          await plugin.onReady!(record.ctx!);
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        fatal(`Plugin '${plugin.name}' onReady() failed: ${msg}`);
+      }
     }
 
     // Resolve driver — the one plugin with `driver: true`.
@@ -512,7 +538,7 @@ export class PluginManager {
       this.serviceRegistry.consume(resolveCapName(raw, aliases), plugin.name);
     }
     try {
-      const ctx = await this.setupPlugin(plugin, resolvedPath);
+      const { ctx, stateRef } = await this.setupPlugin(plugin, resolvedPath);
       this.plugins.set(name, {
         plugin,
         entry: {
@@ -522,6 +548,7 @@ export class PluginManager {
           status: "loaded",
         },
         ctx,
+        stateRef,
       });
       try {
         this.serviceRegistry.validateAll();
@@ -627,7 +654,7 @@ export class PluginManager {
   // Internal setup
   // --------------------------------------------------------------------------
 
-  private async setupPlugin(plugin: KaizenPlugin, resolvedPath: string | null = null): Promise<PluginContext> {
+  private async setupPlugin(plugin: KaizenPlugin, resolvedPath: string | null = null): Promise<{ ctx: PluginContext; stateRef: StateRef }> {
     // Register the plugin's permission manifest (defaults to trusted).
     this.enforcer.register(plugin.name, plugin.permissions ?? { tier: "trusted" });
     // Scan imports after registration so check() has the manifest.
@@ -673,7 +700,7 @@ export class PluginManager {
     // Build secrets context for this plugin
     const secretsCtx = createSecretsContext(this.secretsRegistry, plugin.name, secretRefs);
 
-    let pluginState: CoreState = "INITIALIZING";
+    const stateRef: StateRef = { current: "INITIALIZING" };
     const ctx = createPluginContext(
       plugin.name,
       pluginConfig,
@@ -681,12 +708,12 @@ export class PluginManager {
       this.eventBus,
       this.serviceRegistry,
       this.enforcer,
-      () => pluginState,
+      () => stateRef.current,
       this.getPublicApi(),
       this.getLifecycleApi(),
     );
     await runInPluginScope(plugin.name, async () => { await plugin.setup(ctx); });
-    pluginState = "READY";
+    stateRef.current = "READY";
 
     // After setup, check if this plugin provided a secret provider
     // (core-secrets calls ctx.provideService(SECRETS_PROVIDER_SERVICE, provider))
@@ -697,7 +724,7 @@ export class PluginManager {
       // Plugin didn't register a secret provider — that's fine
     }
 
-    return ctx;
+    return { ctx, stateRef };
   }
 
   private scanAndCheckImports(pluginName: string, resolvedPath: string): void {
