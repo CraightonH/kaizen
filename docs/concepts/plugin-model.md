@@ -164,7 +164,7 @@ declare what they need. Every plugin picks a tier.
 
 | Tier | What it can touch | Install UX |
 |------|-------------------|------------|
-| **trusted** | Only `ctx.*`. No filesystem, network, env, exec, or cross-plugin event subscription. | Silent |
+| **trusted** | Only `ctx.*`, plus an OS-infrastructure env-var allow-list (`PATH`, `HOME`, locale, tmpdirs, …) for stdlib calls. No filesystem, network, app/secret env, exec, or cross-plugin event subscription. | Silent |
 | **scoped** | External resources you enumerate: fs paths, hosts, env vars, binaries, event subscriptions. | UAC shows grant list |
 | **unscoped** | Raw Node access. Runs the user shell, dynamic spawn, native modules. | Typed confirmation required |
 
