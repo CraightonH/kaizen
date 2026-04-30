@@ -72,7 +72,7 @@ KAIZEN_FAKE_LOG="$btmp/log" PATH="$btmp/bin:$PATH" bash -c '
 ' _ "$INSTALLER" || fail "bootstrap errored"
 
 expected_market="kaizen marketplace add https://github.com/CraightonH/kaizen-official-plugins.git --id official"
-expected_install="kaizen install official/minimum-shell"
+expected_install="kaizen install official/claude-wrapper"
 
 grep -Fxq "$expected_market" "$btmp/log" || fail "bootstrap did not run: $expected_market"
 grep -Fxq "$expected_install" "$btmp/log" || fail "bootstrap did not run: $expected_install"
@@ -88,5 +88,89 @@ KAIZEN_NO_BOOTSTRAP=1 KAIZEN_FAKE_LOG="$btmp/log" PATH="$btmp/bin:$PATH" bash -c
 ' _ "$INSTALLER" || fail "bootstrap with KAIZEN_NO_BOOTSTRAP errored"
 [ ! -s "$btmp/log" ] || fail "bootstrap ran commands when KAIZEN_NO_BOOTSTRAP=1"
 pass "KAIZEN_NO_BOOTSTRAP=1 skips bootstrap"
+
+# --- Test: ensure_bun no-ops when bun on PATH ---------------------------------
+out="$(bash -c '
+  set -euo pipefail
+  # Stub PATH with a fake bun.
+  tmp="$(mktemp -d)"
+  cat > "$tmp/bun" <<EOF
+#!/bin/sh
+exit 0
+EOF
+  chmod +x "$tmp/bun"
+  PATH="$tmp:$PATH" HOME="$tmp" KAIZEN_NO_BUN=0
+  export PATH HOME KAIZEN_NO_BUN
+  # shellcheck source=/dev/null
+  source "$1"
+  ensure_bun
+  rm -rf "$tmp"
+' _ "$INSTALLER" 2>&1)" || fail "ensure_bun (PATH hit) errored: $out"
+
+echo "$out" | grep -q "bun already installed" || fail "ensure_bun (PATH hit) did not detect bun on PATH: $out"
+pass "ensure_bun no-ops when bun on PATH"
+
+# --- Test: ensure_bun no-ops when ~/.bun/bin/bun exists -----------------------
+out="$(bash -c '
+  set -euo pipefail
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/.bun/bin"
+  cat > "$tmp/.bun/bin/bun" <<EOF
+#!/bin/sh
+exit 0
+EOF
+  chmod +x "$tmp/.bun/bin/bun"
+  # Empty PATH so command -v bun fails.
+  PATH="/nonexistent-empty-path" HOME="$tmp"
+  export PATH HOME
+  # shellcheck source=/dev/null
+  source "$1"
+  ensure_bun
+  /bin/rm -rf "$tmp"
+' _ "$INSTALLER" 2>&1)" || fail "ensure_bun (~/.bun fallback) errored: $out"
+
+echo "$out" | grep -q "bun found at ~/.bun/bin/bun" || fail "ensure_bun did not detect ~/.bun/bin/bun: $out"
+pass "ensure_bun no-ops when ~/.bun/bin/bun exists"
+
+# --- Test: KAIZEN_NO_BUN=1 skips ensure_bun ----------------------------------
+out="$(bash -c '
+  set -euo pipefail
+  tmp="$(mktemp -d)"
+  PATH="/nonexistent-empty-path" HOME="$tmp" KAIZEN_NO_BUN=1
+  export PATH HOME KAIZEN_NO_BUN
+  # shellcheck source=/dev/null
+  source "$1"
+  ensure_bun
+  /bin/rm -rf "$tmp"
+' _ "$INSTALLER" 2>&1)" || fail "ensure_bun (NO_BUN) errored: $out"
+
+echo "$out" | grep -q "Skipping bun install (KAIZEN_NO_BUN=1)" || fail "KAIZEN_NO_BUN=1 was not respected: $out"
+pass "ensure_bun skipped via KAIZEN_NO_BUN=1"
+
+# --- Test: ensure_bun installer failure does not abort -----------------------
+out="$(bash -c '
+  set -euo pipefail
+  tmp="$(mktemp -d)"
+  # Stub: an empty PATH dir + a failing curl shadow.
+  stub="$tmp/stub"
+  mkdir -p "$stub"
+  cat > "$stub/curl" <<EOF
+#!/bin/sh
+exit 1
+EOF
+  chmod +x "$stub/curl"
+  PATH="$stub" HOME="$tmp"
+  export PATH HOME
+  # shellcheck source=/dev/null
+  source "$1"
+  # Should not abort despite curl failing.
+  ensure_bun
+  echo "AFTER_ENSURE_BUN"
+  /bin/rm -rf "$tmp"
+' _ "$INSTALLER" 2>&1)" || fail "ensure_bun (failure path) aborted the script: $out"
+
+echo "$out" | grep -q "AFTER_ENSURE_BUN" || fail "ensure_bun failure aborted execution: $out"
+echo "$out" | grep -q "bun install failed" || fail "ensure_bun did not warn on failure: $out"
+pass "ensure_bun installer failure does not abort"
 
 echo "OK"
