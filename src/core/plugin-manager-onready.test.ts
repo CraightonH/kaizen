@@ -200,4 +200,55 @@ describe("PluginManager.initialize calls onReady()", () => {
     expect(bridge.ok).toBe(true);
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
+
+  test("setup-only APIs throw inside onReady", async () => {
+    const bridgeKey = `__kz_onready_gating_${Date.now()}_${Math.random()}__`;
+    (globalThis as Record<string, unknown>)[bridgeKey] = {
+      provideErr: null as string | null,
+      onErr: null as string | null,
+      consumeErr: null as string | null,
+      defineSvcErr: null as string | null,
+      defineEvtErr: null as string | null,
+    };
+
+    const driverDir = writePlugin({
+      name: "driver",
+      driver: true,
+      hasStart: true,
+      startBody: `/* no-op */`,
+    });
+    const pluginDir = writePlugin({
+      name: "p",
+      hasOnReady: true,
+      onReadyBody: `
+        const b = globalThis[${JSON.stringify(bridgeKey)}];
+        try { ctx.provideService("p:x", {}); } catch (e) { b.provideErr = e.message; }
+        try { ctx.on("evt", () => {}); } catch (e) { b.onErr = e.message; }
+        try { ctx.consumeService("other:thing"); } catch (e) { b.consumeErr = e.message; }
+        try { ctx.defineService("p:y", { schema: {} }); } catch (e) { b.defineSvcErr = e.message; }
+        try { ctx.defineEvent("p:evt"); } catch (e) { b.defineEvtErr = e.message; }
+      `,
+    });
+
+    const { eventBus, serviceRegistry } = makeRegistries();
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: [pluginDir, driverDir] },
+      eventBus, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+    await manager.initialize();
+
+    const bridge = (globalThis as Record<string, {
+      provideErr: string | null; onErr: string | null; consumeErr: string | null;
+      defineSvcErr: string | null; defineEvtErr: string | null;
+    }>)[bridgeKey]!;
+    expect(bridge.provideErr).toMatch(/after initialization/i);
+    expect(bridge.onErr).toMatch(/after initialization/i);
+    expect(bridge.consumeErr).toMatch(/after initialization/i);
+    expect(bridge.defineSvcErr).toMatch(/after initialization/i);
+    expect(bridge.defineEvtErr).toMatch(/after initialization/i);
+    delete (globalThis as Record<string, unknown>)[bridgeKey];
+  });
 });
