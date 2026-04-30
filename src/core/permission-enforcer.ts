@@ -1,5 +1,6 @@
 import type { PluginPermissions, PermissionOp } from "../types/plugin.js";
 import { PermissionError } from "./errors.js";
+import { DEFAULT_ENV_ALLOWLIST, envAllowed } from "./env-allowlist.js";
 
 export type EnforcerMode = "enforce" | "log-only" | "observe";
 
@@ -36,12 +37,14 @@ const FORBIDDEN_IMPORTS_NON_UNSCOPED = new Set<string>([
 
 export class PermissionEnforcer {
   private mode: EnforcerMode;
+  private readonly envAllowList: string[];
   private readonly manifests = new Map<string, PluginPermissions>();
   private readonly listeners: DenialListener[] = [];
   private readonly checkListeners: CheckListener[] = [];
 
-  constructor(opts: { mode: EnforcerMode }) {
+  constructor(opts: { mode: EnforcerMode; envAllowList?: string[] }) {
     this.mode = opts.mode;
+    this.envAllowList = opts.envAllowList ?? DEFAULT_ENV_ALLOWLIST;
   }
 
   setMode(mode: EnforcerMode): void { this.mode = mode; }
@@ -84,6 +87,9 @@ export class PermissionEnforcer {
         ? `module '${op.module}' is forbidden in tier '${tier}'`
         : null;
     }
+
+    // Allow-listed env reads bypass tier checks entirely.
+    if (op.kind === "env.get" && envAllowed(this.envAllowList, op.name)) return null;
 
     if (tier === "trusted") return `tier 'trusted' permits no external ops (attempted ${op.kind})`;
 
