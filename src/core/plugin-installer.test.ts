@@ -317,4 +317,16 @@ describe("bundlePlugin", () => {
     expect(existsSync(join(target, "index.js"))).toBe(true);
     expect(existsSync(join(target, "package.json"))).toBe(true);
   }, 30_000);
+
+  it("rolls back target and includes stderr when bun build fails", async () => {
+    writeFileSync(
+      join(target, "package.json"),
+      JSON.stringify({ name: "broken", version: "1.0.0", type: "module", main: "index.js" }),
+    );
+    // Syntax error: unterminated string.
+    writeFileSync(join(target, "index.js"), "export default { broken: 'oops");
+
+    await expect(bundlePluginForTesting(target, "broken", "1.0.0")).rejects.toThrow(/bun build failed/);
+    expect(existsSync(target)).toBe(false);
+  }, 30_000);
 });
