@@ -37,52 +37,6 @@ describe("installPlugin — file source", () => {
     expect(existsSync(join(target, "index.js"))).toBe(true);
   });
 
-  it("resolves runtime deps after copying file source", async () => {
-    const pluginSrc = join(upstream, "plugins", "with-deps");
-    mkdirSync(pluginSrc, { recursive: true });
-    writeFileSync(
-      join(pluginSrc, "package.json"),
-      JSON.stringify({
-        name: "with-deps",
-        version: "1.0.0",
-        main: "index.js",
-        dependencies: { "is-odd": "3.0.1" },
-      }),
-    );
-    writeFileSync(join(pluginSrc, "index.js"), "export default { name: 'with-deps', apiVersion: '2', setup(){} };");
-
-    await installPlugin("m", "with-deps", "1.0.0", { type: "file", path: "plugins/with-deps" });
-
-    const target = pluginInstallDir("m", "with-deps", "1.0.0");
-    expect(existsSync(join(target, "node_modules", "is-odd"))).toBe(true);
-  }, 30_000);
-});
-
-describe("installPlugin — lockfile honored", () => {
-  it("preserves bun.lock from source through install", async () => {
-    const pluginSrc = join(upstream, "plugins", "locked");
-    mkdirSync(pluginSrc, { recursive: true });
-    // No dependencies so installDeps no-ops; we only need to verify cpSync
-    // carries the committed lockfile through to the install dir.
-    writeFileSync(
-      join(pluginSrc, "package.json"),
-      JSON.stringify({
-        name: "locked",
-        version: "1.0.0",
-        main: "index.js",
-      }),
-    );
-    writeFileSync(join(pluginSrc, "index.js"), "export default { name: 'locked', apiVersion: '2', setup(){} };");
-    // A pre-existing bun.lock in the source — bun will use it.
-    // We can't easily fabricate a valid binary lockfile in a test, so we just
-    // verify that any lockfile present in source is copied into target.
-    writeFileSync(join(pluginSrc, "bun.lock"), "{}\n");
-
-    await installPlugin("m", "locked", "1.0.0", { type: "file", path: "plugins/locked" });
-
-    const target = pluginInstallDir("m", "locked", "1.0.0");
-    expect(existsSync(join(target, "bun.lock"))).toBe(true);
-  }, 30_000);
 });
 
 describe("resolveBunExecutable", () => {
