@@ -71,4 +71,57 @@ describe("sandbox-bootstrap", () => {
     });
     resetSandboxForTesting();
   });
+
+  test("trusted plugin reads allow-listed PATH via proxy", async () => {
+    const enforcer = new PermissionEnforcer({ mode: "enforce" }); // default allow-list
+    initializeSandbox(enforcer);
+    enforcer.register("p_allow", { tier: "trusted" });
+    process.env.PATH ??= "/usr/bin";
+    await runInPluginScope("p_allow", async () => {
+      expect(typeof process.env.PATH).toBe("string");
+      expect(process.env.PATH!.length).toBeGreaterThan(0);
+    });
+    resetSandboxForTesting();
+  });
+
+  test("trusted plugin sees undefined for non-allow-listed secret", async () => {
+    const enforcer = new PermissionEnforcer({ mode: "enforce" });
+    initializeSandbox(enforcer);
+    enforcer.register("p_secret", { tier: "trusted" });
+    process.env.AWS_TEST_SECRET = "shh";
+    await runInPluginScope("p_secret", async () => {
+      expect(process.env.AWS_TEST_SECRET).toBeUndefined();
+    });
+    delete process.env.AWS_TEST_SECRET;
+    resetSandboxForTesting();
+  });
+
+  test("'in' check respects allow-list", async () => {
+    const enforcer = new PermissionEnforcer({ mode: "enforce" });
+    initializeSandbox(enforcer);
+    enforcer.register("p_in", { tier: "trusted" });
+    process.env.PATH ??= "/usr/bin";
+    process.env.AWS_TEST_SECRET = "shh";
+    await runInPluginScope("p_in", async () => {
+      expect("PATH" in process.env).toBe(true);
+      expect("AWS_TEST_SECRET" in process.env).toBe(false);
+    });
+    delete process.env.AWS_TEST_SECRET;
+    resetSandboxForTesting();
+  });
+
+  test("Object.keys excludes non-allow-listed secret", async () => {
+    const enforcer = new PermissionEnforcer({ mode: "enforce" });
+    initializeSandbox(enforcer);
+    enforcer.register("p_keys", { tier: "trusted" });
+    process.env.PATH ??= "/usr/bin";
+    process.env.AWS_TEST_SECRET = "shh";
+    await runInPluginScope("p_keys", async () => {
+      const keys = Object.keys(process.env);
+      expect(keys).toContain("PATH");
+      expect(keys).not.toContain("AWS_TEST_SECRET");
+    });
+    delete process.env.AWS_TEST_SECRET;
+    resetSandboxForTesting();
+  });
 });

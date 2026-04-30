@@ -3,6 +3,7 @@ import { join } from "path";
 import { homedir } from "os";
 import type { KaizenConfig } from "../types/plugin.js";
 import { fatal } from "./errors.js";
+import { validateEnvAllowList } from "./env-allowlist.js";
 
 // ---------------------------------------------------------------------------
 // Well-known paths
@@ -105,6 +106,13 @@ function parseAndValidateHarness(path: string, label: string): KaizenConfig {
   validateHarnessConfig(config, path);
   if (!config["plugins"]) fatal(`Harness '${label}' kaizen.json is missing 'plugins'.`);
   if (!Array.isArray(config["plugins"])) fatal(`Harness '${label}' kaizen.json 'plugins' must be an array.`);
+  if (config["env_allowlist"] !== undefined) {
+    try {
+      validateEnvAllowList(config["env_allowlist"], `${path}: env_allowlist`);
+    } catch (e) {
+      fatal(e instanceof Error ? e.message : String(e));
+    }
+  }
   return config as KaizenConfig;
 }
 

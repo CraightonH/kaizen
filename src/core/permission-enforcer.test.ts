@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { PermissionEnforcer } from "./permission-enforcer.js";
 import { PermissionError } from "./errors.js";
+import { DEFAULT_ENV_ALLOWLIST } from "./env-allowlist.js";
 
 describe("PermissionEnforcer", () => {
   test("unregistered plugin denied", () => {
@@ -137,5 +138,63 @@ describe("PermissionEnforcer", () => {
     const e = new PermissionEnforcer({ mode: "observe" });
     e.register("p1", { tier: "trusted" });
     expect(() => e.check("p1", { kind: "fs.read", path: "x" })).not.toThrow();
+  });
+});
+
+describe("PermissionEnforcer — env allow-list", () => {
+  test("trusted plugin: allow-listed env permitted", () => {
+    const e = new PermissionEnforcer({ mode: "enforce" });
+    e.register("p", { tier: "trusted" });
+    expect(() =>
+      e.check("p", { kind: "env.get", name: "PATH" }),
+    ).not.toThrow();
+  });
+
+  test("trusted plugin: non-allow-listed env denied", () => {
+    const e = new PermissionEnforcer({ mode: "enforce" });
+    e.register("p", { tier: "trusted" });
+    expect(() =>
+      e.check("p", { kind: "env.get", name: "AWS_SECRET" }),
+    ).toThrow(/tier 'trusted' permits no external ops/);
+  });
+
+  test("trusted plugin + empty allow-list: PATH denied", () => {
+    const e = new PermissionEnforcer({ mode: "enforce", envAllowList: [] });
+    e.register("p", { tier: "trusted" });
+    expect(() =>
+      e.check("p", { kind: "env.get", name: "PATH" }),
+    ).toThrow(/tier 'trusted' permits no external ops/);
+  });
+
+  test("scoped plugin: declared env grants still permitted", () => {
+    const e = new PermissionEnforcer({ mode: "enforce" });
+    e.register("p", { tier: "scoped", env: ["DB_URL"] });
+    expect(() => e.check("p", { kind: "env.get", name: "DB_URL" })).not.toThrow();
+    expect(() => e.check("p", { kind: "env.get", name: "PATH" })).not.toThrow();
+    expect(() => e.check("p", { kind: "env.get", name: "OTHER" })).toThrow(/not in env grants/);
+  });
+
+  test("scoped plugin + custom allow-list replaces default", () => {
+    const e = new PermissionEnforcer({ mode: "enforce", envAllowList: ["MY_*"] });
+    e.register("p", { tier: "scoped" });
+    expect(() => e.check("p", { kind: "env.get", name: "MY_FOO" })).not.toThrow();
+    expect(() => e.check("p", { kind: "env.get", name: "PATH" })).toThrow(/not in env grants/);
+  });
+
+  test("unscoped plugin: all env permitted regardless of allow-list", () => {
+    const e = new PermissionEnforcer({ mode: "enforce", envAllowList: [] });
+    e.register("p", { tier: "unscoped" });
+    expect(() => e.check("p", { kind: "env.get", name: "PATH" })).not.toThrow();
+    expect(() => e.check("p", { kind: "env.get", name: "AWS_SECRET" })).not.toThrow();
+  });
+
+  test("default constructor uses DEFAULT_ENV_ALLOWLIST", () => {
+    const e = new PermissionEnforcer({ mode: "enforce" });
+    e.register("p", { tier: "trusted" });
+    for (const name of ["PATH", "HOME", "TMPDIR", "LANG"]) {
+      expect(() => e.check("p", { kind: "env.get", name })).not.toThrow();
+    }
+    expect(() => e.check("p", { kind: "env.get", name: "LC_ALL" })).not.toThrow();
+    expect(DEFAULT_ENV_ALLOWLIST).toContain("LC_*");
   });
 });

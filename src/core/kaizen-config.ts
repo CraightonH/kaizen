@@ -6,6 +6,7 @@ import { parseRef, resolveRef } from "./ref-resolver.js";
 import { readCatalog } from "./marketplace.js";
 import { installHarness } from "./plugin-installer.js";
 import { fatal } from "./errors.js";
+import { validateEnvAllowList } from "./env-allowlist.js";
 
 /** Test hook: KAIZEN_HOME_OVERRIDE redirects `~/.kaizen` for a single process. */
 export function kaizenHome(): string {
@@ -45,7 +46,7 @@ const ALLOWED_TOP_LEVEL_KEYS = new Set([
   "marketplaces",
   "marketplaceUpdateTTL",
 ]);
-const ALLOWED_DEFAULTS_KEYS = new Set(["harness", "plugin_config"]);
+const ALLOWED_DEFAULTS_KEYS = new Set(["harness", "plugin_config", "env_allowlist"]);
 
 export async function loadKaizenGlobalConfig(): Promise<KaizenGlobalConfig> {
   const path = kaizenHomeConfigPath();
@@ -112,6 +113,9 @@ export async function loadKaizenGlobalConfig(): Promise<KaizenGlobalConfig> {
           throw new Error(`${path}: 'defaults.plugin_config.${name}' must be an object.`);
         }
       }
+    }
+    if (defaults.env_allowlist !== undefined) {
+      validateEnvAllowList(defaults.env_allowlist, `${path}: defaults.env_allowlist`);
     }
   }
 

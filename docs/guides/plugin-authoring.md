@@ -431,13 +431,25 @@ Checks (see `src/commands/plugin-validate.ts` for the full list):
   enforcement).
 - `*.test.ts` file present; `README.md` present.
 
-> **What the sandbox enforces today:** The enforcer gates module imports and
-> calls made through `ctx.fs` / `ctx.net` / `ctx.exec`. It does **not** filter
-> Node.js globals. `process.cwd()`, `process.env`, `process.platform`,
-> `os.homedir()`, and similar ambient values are accessible to plugins of any
-> tier. `tier` currently signals intent and controls which `ctx.*` grants are
-> available — it is not a hard runtime cap on globals. A future release may
-> tighten this; for now, treat global access as unrestricted.
+> **What the sandbox enforces today:** The enforcer gates module imports,
+> calls through `ctx.fs` / `ctx.net` / `ctx.exec`, and reads from
+> `process.env`. A built-in allow-list of OS-infrastructure variables —
+> `PATH`, `HOME`, `USER`, locale (`LC_*`, `LANG`), tmpdirs (`TMPDIR`,
+> `TEMP`, `TMP`), and similar — passes through under any tier so that
+> stdlib calls such as `child_process.spawn`, `os.homedir()`, and
+> `os.tmpdir()` work without elevating tiers. Variables outside the
+> allow-list follow tier rules: `unscoped` reads anything, `scoped` reads
+> names declared in `env: [...]`, `trusted` reads only allow-listed
+> names.
+>
+> Override the allow-list via `defaults.env_allowlist` in
+> `~/.kaizen/kaizen.json` (user-level) or `env_allowlist` in a harness's
+> `kaizen.json` (harness-level; takes precedence). An explicit `[]` means
+> "gate everything; no passthrough." Entries are exact names (`"PATH"`)
+> or trailing-`*` prefixes (`"LC_*"`).
+>
+> `process.cwd()`, `process.platform`, `os.platform()`, and similar
+> non-env globals are not filtered.
 
 Exit code is `0` on pass (possibly with warnings), `1` on any failure. Common
 fixes:

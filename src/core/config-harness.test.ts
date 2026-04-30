@@ -75,6 +75,37 @@ describe("resolveHarnessOrFatal", () => {
     expect(config.plugins).toEqual(["x"]);
   });
 
+  test("rejects invalid env_allowlist in harness kaizen.json", () => {
+    const dir = join(tmp, ".kaizen", "harnesses", "bad");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "kaizen.json"),
+      JSON.stringify({ plugins: [], env_allowlist: ["BAD*ENTRY"] }),
+    );
+    expect(() => resolveHarnessOrFatal({ harness: "bad" })).toThrow(/BAD\*ENTRY/);
+  });
+
+  test("accepts valid env_allowlist in harness kaizen.json", () => {
+    const dir = join(tmp, ".kaizen", "harnesses", "good");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "kaizen.json"),
+      JSON.stringify({ plugins: [], env_allowlist: ["PATH", "LC_*"] }),
+    );
+    const { config } = resolveHarnessOrFatal({ harness: "good" });
+    expect(config.env_allowlist).toEqual(["PATH", "LC_*"]);
+  });
+
+  test("rejects non-array env_allowlist in harness kaizen.json", () => {
+    const dir = join(tmp, ".kaizen", "harnesses", "bad2");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "kaizen.json"),
+      JSON.stringify({ plugins: [], env_allowlist: "PATH" }),
+    );
+    expect(() => resolveHarnessOrFatal({ harness: "bad2" })).toThrow(/must be an array/);
+  });
+
   test("harness plugins are returned unchanged (no project-config overlay)", () => {
     const dir = join(tmp, ".kaizen", "harnesses", "official");
     mkdirSync(dir, { recursive: true });

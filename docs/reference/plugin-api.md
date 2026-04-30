@@ -295,6 +295,7 @@ export interface KaizenConfig {
   plugins: string[];           // marketplace refs "<marketplace-id>/<name>[@<version>]" or local paths ("./", "../", "/")
   extends?: string;            // harness to extend: marketplace ref or local path
   marketplaces?: MarketplaceRef[];
+  env_allowlist?: string[];    // per-harness env-var allow-list; takes precedence over user defaults.env_allowlist
   [pluginName: string]: unknown;  // per-plugin config slices
 }
 ```
@@ -305,6 +306,7 @@ export interface KaizenConfig {
 export interface KaizenDefaults {
   harness?: string;                                    // default harness ref
   plugin_config?: Record<string, Record<string, unknown>>;  // per-plugin overrides
+  env_allowlist?: string[];                            // env-var allow-list; entries are exact names ("PATH") or trailing-* prefixes ("LC_*")
 }
 
 export interface KaizenGlobalConfig {
