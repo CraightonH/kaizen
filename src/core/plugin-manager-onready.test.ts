@@ -310,4 +310,26 @@ describe("PluginManager.initialize calls onReady()", () => {
     expect(startIdx).toBeGreaterThan(driverOnReadyIdx);
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
+
+  test("plugins without onReady() initialize without error", async () => {
+    const driverDir = writePlugin({
+      name: "driver",
+      driver: true,
+      hasStart: true,
+      startBody: `/* no-op */`,
+    });
+    const plainDir = writePlugin({ name: "plain" });
+
+    const { eventBus, serviceRegistry } = makeRegistries();
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: [plainDir, driverDir] },
+      eventBus, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+
+    await expect(manager.initialize()).resolves.toBeDefined();
+    expect(manager.list().map((e) => e.name).sort()).toEqual(["driver", "plain"]);
+  });
 });
