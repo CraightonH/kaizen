@@ -520,6 +520,70 @@ those dependencies automatically when the plugin is installed by running
 If `package.json` has no `dependencies` field, no install step runs — your
 plugin is copied into place and that's it.
 
+## Bundling {#bundling}
+
+After `bun install --production` completes, kaizen runs `bun build --target=bun`
+to produce `<install-dir>/dist/index.js`. The plugin loader prefers this bundle
+over the raw entry point. Once the build succeeds, `node_modules/` and any bun
+lockfile are removed from the install directory — source files (`package.json`,
+`README.md`, `index.tsx`, etc.) stay on disk for inspection.
+
+**Why bundling is required.** The compiled `kaizen` binary cannot resolve
+`node_modules/` at runtime or transform JSX/TypeScript at import time. A bundle
+produces a self-contained ESM module that loads from the binary without further
+resolution.
+
+### Declaring externals (`kaizen.bundleExternals`) {#bundle-externals}
+
+Some transitive dependencies conditionally import packages you don't want
+bundled — for example, `ink`'s `devtools.js` pulls in `react-devtools-core`.
+When bun encounters such an import it will try to bundle it, which fails if the
+package is absent or incompatible.
+
+Declare these externals in your `package.json` under a top-level `kaizen` key:
+
+```json
+{
+  "name": "claude-tui",
+  "version": "0.2.0",
+  "type": "module",
+  "main": "index.tsx",
+  "dependencies": { "ink": "^7.0.1", "react": "^19.2.0" },
+  "kaizen": {
+    "bundleExternals": ["react-devtools-core"]
+  }
+}
+```
+
+`bundleExternals` is a `string[]`. Each entry is passed verbatim to
+`bun build --external <entry>`. Kaizen does not curate or validate the list —
+it is your responsibility to declare only what you need.
+
+### Dynamic imports {#dynamic-imports}
+
+Avoid eval'd or string-concatenated dynamic imports of bare specifiers.
+`import("./foo.js")` and `import(varHoldingAbsolutePath)` survive bundling;
+`` import(`some-pkg-${version}`) `` will not.
+
+### Local-path plugins {#local-path-bundling}
+
+Local-path plugins (`./path/to/plugin`) are **not** bundled. They load via the
+raw entry, which only works under uncompiled `bun src/cli.ts`. Use local-path
+plugins for development; publish to a marketplace for any other use.
+
+### The `kaizen.*` namespace {#kaizen-namespace}
+
+The `kaizen` key in `package.json` is reserved for plugin-side static metadata
+that kaizen needs to read before importing the plugin entry. `bundleExternals`
+is the first field in this namespace; additional fields may be added in future
+releases.
+
+### Upgrading from ≤ 0.3.2 {#upgrading}
+
+Plugins installed under kaizen ≤ 0.3.2 do not have a `dist/index.js`. Run
+`kaizen install <ref>` again to regenerate the bundle layout. `installPlugin`
+is idempotent, so re-installing is safe.
+
 ## Next steps
 
 Once your plugin validates, publish it:
