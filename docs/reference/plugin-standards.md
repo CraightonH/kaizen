@@ -18,6 +18,24 @@ This document is the canonical reference for kaizen plugin authors. Every rule i
 - [required] **`README.md`** at the package root documenting install, configuration, and permissions
 - [guideline] **`CHANGELOG.md`** tracking version history and breaking changes
 
+### `kaizen` namespace in package.json
+
+The top-level `kaizen` key in `package.json` is reserved for kaizen-specific static metadata. Currently one field is defined:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `kaizen.bundleExternals` | `string[]` | Packages passed verbatim to `bun build --external` at install time. Use when a transitive dependency conditionally imports a package you don't want bundled. Missing or empty means no externals. Kaizen does not validate or curate the list. |
+
+```json
+{
+  "kaizen": {
+    "bundleExternals": ["react-devtools-core"]
+  }
+}
+```
+
+See [Declaring externals](../guides/plugin-authoring.md#bundle-externals) in the plugin-authoring guide.
+
 ### Example package.json
 
 ```json

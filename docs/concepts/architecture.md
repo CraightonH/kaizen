@@ -197,7 +197,9 @@ All marketplace data lives under `~/.kaizen/` (or `$KAIZEN_HOME_OVERRIDE` in tes
       plugins/
         <name>@<version>/                  # installed plugin bits
           package.json
-          index.mjs
+          index.tsx                        # source kept for inspection
+          dist/
+            index.js                       # bundle; loader prefers this
       harnesses/
         <name>/
           kaizen.json                      # installed harness config
@@ -217,7 +219,7 @@ All paths are computed by `src/core/kaizen-config.ts` — never hardcode `~/.kai
 
 ### Third-party plugin loading
 
-Marketplace plugins are imported by **absolute path** from their install directory — there is no `node_modules` involvement. `src/core/plugin-loader.ts` reads `package.json` for the entry point and calls dynamic `import(absolutePath)`.
+Marketplace plugins are imported by **absolute path** from their install directory — there is no `node_modules` involvement. At install time `installPlugin` runs `bun build --target=bun` to produce `<install-dir>/dist/index.js`; `node_modules/` is removed after a successful build. The loader (`loadPluginFromMarketplaceInstall` in `plugin-manager.ts`) prefers `dist/index.js` when present and falls back to `pkg.module ?? pkg.main ?? "index.js"` otherwise. See [Bundling](../guides/plugin-authoring.md#bundling) for authoring details.
 
 ### Key modules
 

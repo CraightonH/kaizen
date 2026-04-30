@@ -14,8 +14,9 @@ If you're building a plugin or marketplace, work through these in order:
 4. [How do I use the host API (secrets, config, events)?](reference/host-api.md)
 5. [How do I declare services and dependencies?](concepts/plugin-model.md#services)
 6. [How do I test my plugin locally?](guides/plugin-authoring.md#testing)
-7. [How do I validate it?](guides/plugin-authoring.md#validate)
-8. [How do I publish to a marketplace?](guides/marketplace-authoring.md)
+7. [How do I handle runtime deps, JSX, and bundling?](guides/plugin-authoring.md#bundling)
+8. [How do I validate it?](guides/plugin-authoring.md#validate)
+9. [How do I publish to a marketplace?](guides/marketplace-authoring.md)
 
 A link that leads to a missing or incomplete section is a known documentation
 gap. Open an issue or check `docs/superpowers/specs/` for in-progress work.
