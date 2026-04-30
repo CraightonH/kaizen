@@ -110,7 +110,7 @@ describe("PluginManager.initialize calls onReady()", () => {
 
     await manager.initialize();
 
-    const bridge = (globalThis as Record<string, { calls: string[] }>)[bridgeKey]!;
+    const bridge = (globalThis as unknown as Record<string, { calls: string[] }>)[bridgeKey]!;
     expect(bridge.calls.sort()).toEqual(["consumer", "driver"]);
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
@@ -149,7 +149,7 @@ describe("PluginManager.initialize calls onReady()", () => {
     );
     await manager.initialize();
 
-    const bridge = (globalThis as Record<string, { calls: string[] }>)[bridgeKey]!;
+    const bridge = (globalThis as unknown as Record<string, { calls: string[] }>)[bridgeKey]!;
     const providerIdx = bridge.calls.indexOf("provider");
     const consumerIdx = bridge.calls.indexOf("consumer");
     expect(providerIdx).toBeGreaterThanOrEqual(0);
@@ -196,7 +196,7 @@ describe("PluginManager.initialize calls onReady()", () => {
     );
     await manager.initialize();
 
-    const bridge = (globalThis as Record<string, { ok: boolean; error: string | null }>)[bridgeKey]!;
+    const bridge = (globalThis as unknown as Record<string, { ok: boolean; error: string | null }>)[bridgeKey]!;
     expect(bridge.error).toBeNull();
     expect(bridge.ok).toBe(true);
     delete (globalThis as Record<string, unknown>)[bridgeKey];
@@ -241,7 +241,7 @@ describe("PluginManager.initialize calls onReady()", () => {
     );
     await manager.initialize();
 
-    const bridge = (globalThis as Record<string, {
+    const bridge = (globalThis as unknown as Record<string, {
       provideErr: string | null; onErr: string | null; consumeErr: string | null;
       defineSvcErr: string | null; defineEvtErr: string | null;
     }>)[bridgeKey]!;
@@ -302,7 +302,7 @@ describe("PluginManager.initialize calls onReady()", () => {
       lockfilePath,
     });
 
-    const bridge = (globalThis as Record<string, { calls: string[] }>)[bridgeKey]!;
+    const bridge = (globalThis as unknown as Record<string, { calls: string[] }>)[bridgeKey]!;
     const startIdx = bridge.calls.indexOf("driver:start");
     const peerOnReadyIdx = bridge.calls.indexOf("peer:onReady");
     const driverOnReadyIdx = bridge.calls.indexOf("driver:onReady");
