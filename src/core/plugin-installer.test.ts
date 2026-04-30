@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, chmodSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { installPlugin, installHarness, resolveBunExecutable, installDepsForTesting, readBundleExternalsForTesting } from "./plugin-installer.js";
+import { installPlugin, installHarness, resolveBunExecutable, installDepsForTesting, readBundleExternalsForTesting, bundlePluginForTesting } from "./plugin-installer.js";
 import { pluginInstallDir, harnessInstallDir, marketplaceRepoDir } from "./kaizen-config.js";
 
 let home: string;
@@ -283,4 +283,38 @@ describe("readBundleExternals", () => {
       kaizen: { bundleExternals: ["ok", 42, null, "also-ok"] },
     })).toEqual(["ok", "also-ok"]);
   });
+});
+
+describe("bundlePlugin", () => {
+  let target: string;
+  beforeEach(() => {
+    target = mkdtempSync(join(tmpdir(), "kz-bundle-"));
+  });
+  afterEach(() => {
+    rmSync(target, { recursive: true, force: true });
+  });
+
+  it("produces dist/index.js for a deps-free plugin and removes node_modules/lockfiles", async () => {
+    writeFileSync(
+      join(target, "package.json"),
+      JSON.stringify({ name: "trivial", version: "1.0.0", type: "module", main: "index.js" }),
+    );
+    writeFileSync(
+      join(target, "index.js"),
+      "export default { name: 'trivial', apiVersion: '2', setup(){} };",
+    );
+    // Pretend a previous installDeps left these behind.
+    mkdirSync(join(target, "node_modules"), { recursive: true });
+    writeFileSync(join(target, "node_modules", "marker"), "");
+    writeFileSync(join(target, "bun.lock"), "{}\n");
+
+    await bundlePluginForTesting(target, "trivial", "1.0.0");
+
+    expect(existsSync(join(target, "dist", "index.js"))).toBe(true);
+    expect(existsSync(join(target, "node_modules"))).toBe(false);
+    expect(existsSync(join(target, "bun.lock"))).toBe(false);
+    // Source survives.
+    expect(existsSync(join(target, "index.js"))).toBe(true);
+    expect(existsSync(join(target, "package.json"))).toBe(true);
+  }, 30_000);
 });
