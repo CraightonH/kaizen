@@ -98,6 +98,18 @@ export function resolveBunExecutable(): string | null {
   return null;
 }
 
+function readBundleExternals(pkg: unknown): string[] {
+  if (typeof pkg !== "object" || pkg === null) return [];
+  const kz = (pkg as Record<string, unknown>)["kaizen"];
+  if (typeof kz !== "object" || kz === null || Array.isArray(kz)) return [];
+  const list = (kz as Record<string, unknown>)["bundleExternals"];
+  if (!Array.isArray(list)) return [];
+  return list.filter((x): x is string => typeof x === "string");
+}
+
+// Test-only export. Not part of the public API.
+export const readBundleExternalsForTesting = readBundleExternals;
+
 /**
  * If `target` contains a package.json with non-empty runtime dependencies,
  * run `bun install --production` in it. Otherwise no-op.

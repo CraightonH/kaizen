@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, chmodSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { installPlugin, installHarness, resolveBunExecutable, installDepsForTesting } from "./plugin-installer.js";
+import { installPlugin, installHarness, resolveBunExecutable, installDepsForTesting, readBundleExternalsForTesting } from "./plugin-installer.js";
 import { pluginInstallDir, harnessInstallDir, marketplaceRepoDir } from "./kaizen-config.js";
 
 let home: string;
@@ -249,5 +249,38 @@ describe("installHarness", () => {
 
     const target = join(harnessInstallDir("m", "anthropic-default"), "kaizen.json");
     expect(JSON.parse(readFileSync(target, "utf8"))).toEqual(doc);
+  });
+});
+
+describe("readBundleExternals", () => {
+  it("returns [] when kaizen field is missing", () => {
+    expect(readBundleExternalsForTesting({ name: "x", version: "1" })).toEqual([]);
+  });
+
+  it("returns [] when kaizen.bundleExternals is missing", () => {
+    expect(readBundleExternalsForTesting({ kaizen: {} })).toEqual([]);
+  });
+
+  it("returns the array verbatim when well-formed", () => {
+    expect(readBundleExternalsForTesting({
+      kaizen: { bundleExternals: ["react-devtools-core", "fsevents"] },
+    })).toEqual(["react-devtools-core", "fsevents"]);
+  });
+
+  it("returns [] when kaizen is not an object", () => {
+    expect(readBundleExternalsForTesting({ kaizen: "nope" })).toEqual([]);
+    expect(readBundleExternalsForTesting({ kaizen: null })).toEqual([]);
+    expect(readBundleExternalsForTesting({ kaizen: ["a"] })).toEqual([]);
+  });
+
+  it("returns [] when bundleExternals is not an array", () => {
+    expect(readBundleExternalsForTesting({ kaizen: { bundleExternals: "react" } })).toEqual([]);
+    expect(readBundleExternalsForTesting({ kaizen: { bundleExternals: { a: 1 } } })).toEqual([]);
+  });
+
+  it("filters non-string entries", () => {
+    expect(readBundleExternalsForTesting({
+      kaizen: { bundleExternals: ["ok", 42, null, "also-ok"] },
+    })).toEqual(["ok", "also-ok"]);
   });
 });
