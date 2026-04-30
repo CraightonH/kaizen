@@ -1,7 +1,7 @@
 # Design: `onReady` plugin lifecycle hook
 
 **Date:** 2026-04-29
-**Status:** Proposed
+**Status:** Implemented
 **Issue:** [#63](https://github.com/CraightonH/kaizen/issues/63)
 
 ## Problem
