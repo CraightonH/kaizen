@@ -171,4 +171,32 @@ describe("loadKaizenGlobalConfig validation", () => {
     const cfg = await loadKaizenGlobalConfig();
     expect(cfg).toEqual({});
   });
+
+  it("env_allowlist: absent is left undefined", async () => {
+    writeCfg({ defaults: { harness: "official/x@1.0.0" } });
+    const cfg = await loadKaizenGlobalConfig();
+    expect(cfg.defaults?.env_allowlist).toBeUndefined();
+  });
+
+  it("env_allowlist: valid array passes through", async () => {
+    writeCfg({ defaults: { env_allowlist: ["PATH", "LC_*"] } });
+    const cfg = await loadKaizenGlobalConfig();
+    expect(cfg.defaults?.env_allowlist).toEqual(["PATH", "LC_*"]);
+  });
+
+  it("env_allowlist: empty array preserved (not normalized)", async () => {
+    writeCfg({ defaults: { env_allowlist: [] } });
+    const cfg = await loadKaizenGlobalConfig();
+    expect(cfg.defaults?.env_allowlist).toEqual([]);
+  });
+
+  it("env_allowlist: invalid entry rejected with offender named", async () => {
+    writeCfg({ defaults: { env_allowlist: ["FOO*BAR"] } });
+    await expect(loadKaizenGlobalConfig()).rejects.toThrow(/FOO\*BAR/);
+  });
+
+  it("env_allowlist: non-array rejected", async () => {
+    writeCfg({ defaults: { env_allowlist: "PATH" } });
+    await expect(loadKaizenGlobalConfig()).rejects.toThrow(/must be an array/);
+  });
 });
