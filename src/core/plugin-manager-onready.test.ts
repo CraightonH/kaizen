@@ -155,4 +155,49 @@ describe("PluginManager.initialize calls onReady()", () => {
     expect(consumerIdx).toBeGreaterThan(providerIdx);
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
+
+  test("useService() is legal inside onReady", async () => {
+    const bridgeKey = `__kz_onready_useservice_${Date.now()}_${Math.random()}__`;
+    (globalThis as Record<string, unknown>)[bridgeKey] = { ok: false, error: null as string | null };
+
+    const driverDir = writePlugin({
+      name: "driver",
+      driver: true,
+      hasStart: true,
+      startBody: `/* no-op */`,
+    });
+    const providerDir = writePlugin({
+      name: "provider",
+      provides: ["provider:thing"],
+      setupBody: `ctx.defineService("provider:thing", { schema: {} }); ctx.provideService("provider:thing", { value: 42 });`,
+    });
+    const consumerDir = writePlugin({
+      name: "consumer",
+      consumes: ["provider:thing"],
+      hasOnReady: true,
+      onReadyBody: `
+        try {
+          const svc = ctx.useService("provider:thing");
+          globalThis[${JSON.stringify(bridgeKey)}].ok = svc.value === 42;
+        } catch (e) {
+          globalThis[${JSON.stringify(bridgeKey)}].error = e.message;
+        }
+      `,
+    });
+
+    const { eventBus, serviceRegistry } = makeRegistries();
+    const { enforcer, auditLog, lockfilePath, options } = makeSandboxStubs();
+    const manager = new PluginManager(
+      { plugins: [providerDir, consumerDir, driverDir] },
+      eventBus, serviceRegistry,
+      enforcer, auditLog,
+      lockfilePath, options,
+    );
+    await manager.initialize();
+
+    const bridge = (globalThis as Record<string, { ok: boolean; error: string | null }>)[bridgeKey]!;
+    expect(bridge.error).toBeNull();
+    expect(bridge.ok).toBe(true);
+    delete (globalThis as Record<string, unknown>)[bridgeKey];
+  });
 });
