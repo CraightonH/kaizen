@@ -482,3 +482,60 @@ describe("isInstalled(marketplaceId, name, version)", () => {
     expect(await isInstalled("m", "demo", "1.0.0")).toBe(true);
   });
 });
+
+describe("loadPluginFromMarketplaceInstall — bundle preference", () => {
+  let home: string;
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), "kz-pm-"));
+    process.env.KAIZEN_HOME_OVERRIDE = home;
+  });
+  afterEach(() => {
+    rmSync(home, { recursive: true, force: true });
+    delete process.env.KAIZEN_HOME_OVERRIDE;
+  });
+
+  it("prefers dist/index.js when present, ignores raw entry", async () => {
+    const { sep } = await import("path");
+    const target = pluginInstallDir("m", "preferbundle", "1.0.0");
+    mkdirSync(target, { recursive: true });
+    writeFileSync(
+      join(target, "package.json"),
+      JSON.stringify({ name: "preferbundle", version: "1.0.0", type: "module", main: "index.js" }),
+    );
+    // Raw entry exports a sentinel that should NOT be loaded.
+    writeFileSync(
+      join(target, "index.js"),
+      "export default { name: 'WRONG', apiVersion: '2', setup(){} };",
+    );
+    // Bundle exports the correct sentinel.
+    mkdirSync(join(target, "dist"));
+    writeFileSync(
+      join(target, "dist", "index.js"),
+      "export default { name: 'preferbundle', apiVersion: '2', setup(){} };",
+    );
+
+    const { loadPluginFromMarketplaceInstallForTesting } = await import("./plugin-manager.js");
+    const loaded = await loadPluginFromMarketplaceInstallForTesting("m", "preferbundle", "1.0.0", "preferbundle");
+    expect(loaded?.plugin.name).toBe("preferbundle");
+    expect(loaded?.resolvedPath).toContain(`dist${sep}index.js`);
+  });
+
+  it("falls back to pkg.module/pkg.main when no dist/index.js", async () => {
+    const target = pluginInstallDir("m", "fallback", "1.0.0");
+    mkdirSync(target, { recursive: true });
+    writeFileSync(
+      join(target, "package.json"),
+      JSON.stringify({ name: "fallback", version: "1.0.0", type: "module", main: "index.js" }),
+    );
+    writeFileSync(
+      join(target, "index.js"),
+      "export default { name: 'fallback', apiVersion: '2', setup(){} };",
+    );
+
+    const { loadPluginFromMarketplaceInstallForTesting } = await import("./plugin-manager.js");
+    const loaded = await loadPluginFromMarketplaceInstallForTesting("m", "fallback", "1.0.0", "fallback");
+    expect(loaded?.plugin.name).toBe("fallback");
+    expect(loaded?.resolvedPath).toMatch(/index\.js$/);
+    expect(loaded?.resolvedPath).not.toContain("dist");
+  });
+});
