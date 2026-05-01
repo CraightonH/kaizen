@@ -210,9 +210,15 @@ async function bundlePlugin(
     );
   }
 
-  rmSync(join(target, "node_modules"), { recursive: true, force: true });
-  rmSync(join(target, "bun.lockb"), { force: true });
-  rmSync(join(target, "bun.lock"), { force: true });
+  // Externals are deliberately not in the bundle, so the bundle imports them
+  // by bare specifier at load time. That requires node_modules to remain on
+  // disk. If no externals are declared, drop node_modules so the install dir
+  // is a self-contained bundle.
+  if (externals.length === 0) {
+    rmSync(join(target, "node_modules"), { recursive: true, force: true });
+    rmSync(join(target, "bun.lockb"), { force: true });
+    rmSync(join(target, "bun.lock"), { force: true });
+  }
 }
 
 // Test-only export. Not part of the public API.
