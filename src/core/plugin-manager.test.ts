@@ -481,4 +481,16 @@ describe("isInstalled(marketplaceId, name, version)", () => {
     writeFileSync(join(dir, "package.json"), "{}");
     expect(await isInstalled("m", "demo", "1.0.0")).toBe(true);
   });
+  it("returns false when deps declared but node_modules missing", async () => {
+    const dir = pluginInstallDir("m", "demo", "1.0.0");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ dependencies: { foo: "1.0.0" } }));
+    expect(await isInstalled("m", "demo", "1.0.0")).toBe(false);
+  });
+  it("returns true when deps declared and node_modules present", async () => {
+    const dir = pluginInstallDir("m", "demo", "1.0.0");
+    mkdirSync(join(dir, "node_modules"), { recursive: true });
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ dependencies: { foo: "1.0.0" } }));
+    expect(await isInstalled("m", "demo", "1.0.0")).toBe(true);
+  });
 });
