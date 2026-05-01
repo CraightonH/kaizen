@@ -528,48 +528,12 @@ over the raw entry point. Once the build succeeds, `node_modules/` and any bun
 lockfile are removed from the install directory — source files (`package.json`,
 `README.md`, `index.tsx`, etc.) stay on disk for inspection.
 
-When `kaizen.bundleExternals` is non-empty, `node_modules/` is **preserved**
-post-build. Externals are imports the bundle deliberately leaves as bare
-specifiers, so the runtime needs them on disk to resolve. The lockfile is also
-preserved in that case.
-
 **Why bundling is required.** The compiled `kaizen` binary cannot resolve
 `node_modules/` at runtime or transform JSX/TypeScript at import time. A bundle
 produces a self-contained ESM module that loads from the binary without further
-resolution.
-
-### Declaring externals (`kaizen.bundleExternals`) {#bundle-externals}
-
-Some transitive dependencies conditionally import packages you don't want
-bundled — for example, `ink`'s `devtools.js` pulls in `react-devtools-core`.
-When bun encounters such an import it will try to bundle it, which fails if the
-package is absent or incompatible.
-
-Declare these externals in your `package.json` under a top-level `kaizen` key:
-
-```json
-{
-  "name": "claude-tui",
-  "version": "0.2.0",
-  "type": "module",
-  "main": "index.tsx",
-  "dependencies": { "ink": "^7.0.1", "react": "^19.2.0" },
-  "kaizen": {
-    "bundleExternals": ["react-devtools-core"]
-  }
-}
-```
-
-`bundleExternals` is a `string[]`. Each entry is passed verbatim to
-`bun build --external <entry>`. Kaizen does not curate or validate the list —
-it is your responsibility to declare only what you need.
-
-Anything you list here must be resolvable from disk at runtime: include it
-(directly or transitively) in your `dependencies`, since `node_modules/` is
-preserved when externals are declared. If a transitive dep pulls in a package
-you can't easily install (e.g., `ink` → `react-devtools-core`, which is
-gated behind `import.meta.resolve`), the missing-package case still works —
-externals just need to fail-soft at the consumer's call site.
+resolution. Every transitive dep your plugin actually executes must be bundled
+inline — there is no escape hatch for "leave this as a bare-specifier import."
+Bundles can get large; that is the cost of running in the compiled binary.
 
 ### Dynamic imports {#dynamic-imports}
 
@@ -582,13 +546,6 @@ Avoid eval'd or string-concatenated dynamic imports of bare specifiers.
 Local-path plugins (`./path/to/plugin`) are **not** bundled. They load via the
 raw entry, which only works under uncompiled `bun src/cli.ts`. Use local-path
 plugins for development; publish to a marketplace for any other use.
-
-### The `kaizen.*` namespace {#kaizen-namespace}
-
-The `kaizen` key in `package.json` is reserved for plugin-side static metadata
-that kaizen needs to read before importing the plugin entry. `bundleExternals`
-is the first field in this namespace; additional fields may be added in future
-releases.
 
 ### Upgrading from ≤ 0.3.2 {#upgrading}
 

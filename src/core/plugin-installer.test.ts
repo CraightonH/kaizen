@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, chmodSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { installPlugin, installHarness, resolveBunExecutable, installDepsForTesting, readBundleExternalsForTesting, bundlePluginForTesting } from "./plugin-installer.js";
+import { installPlugin, installHarness, resolveBunExecutable, installDepsForTesting, bundlePluginForTesting } from "./plugin-installer.js";
 import { pluginInstallDir, harnessInstallDir, marketplaceRepoDir } from "./kaizen-config.js";
 
 let home: string;
@@ -206,39 +206,6 @@ describe("installHarness", () => {
   });
 });
 
-describe("readBundleExternals", () => {
-  it("returns [] when kaizen field is missing", () => {
-    expect(readBundleExternalsForTesting({ name: "x", version: "1" })).toEqual([]);
-  });
-
-  it("returns [] when kaizen.bundleExternals is missing", () => {
-    expect(readBundleExternalsForTesting({ kaizen: {} })).toEqual([]);
-  });
-
-  it("returns the array verbatim when well-formed", () => {
-    expect(readBundleExternalsForTesting({
-      kaizen: { bundleExternals: ["react-devtools-core", "fsevents"] },
-    })).toEqual(["react-devtools-core", "fsevents"]);
-  });
-
-  it("returns [] when kaizen is not an object", () => {
-    expect(readBundleExternalsForTesting({ kaizen: "nope" })).toEqual([]);
-    expect(readBundleExternalsForTesting({ kaizen: null })).toEqual([]);
-    expect(readBundleExternalsForTesting({ kaizen: ["a"] })).toEqual([]);
-  });
-
-  it("returns [] when bundleExternals is not an array", () => {
-    expect(readBundleExternalsForTesting({ kaizen: { bundleExternals: "react" } })).toEqual([]);
-    expect(readBundleExternalsForTesting({ kaizen: { bundleExternals: { a: 1 } } })).toEqual([]);
-  });
-
-  it("filters non-string entries", () => {
-    expect(readBundleExternalsForTesting({
-      kaizen: { bundleExternals: ["ok", 42, null, "also-ok"] },
-    })).toEqual(["ok", "also-ok"]);
-  });
-});
-
 describe("installPlugin — bundling", () => {
   it("produces dist/index.js and removes node_modules after a deps-free file install", async () => {
     const pluginSrc = join(upstream, "plugins", "trivial");
@@ -332,90 +299,4 @@ describe("bundlePlugin", () => {
     expect(existsSync(target)).toBe(false);
   }, 30_000);
 
-  it("passes kaizen.bundleExternals as --external flags to bun build", async () => {
-    // Fake bun executable that records argv and writes a stub bundle.
-    const fakeBun = join(target, "fake-bun.sh");
-    const argLog = join(target, "args.log");
-    writeFileSync(
-      fakeBun,
-      `#!/bin/sh
-echo "$@" > ${JSON.stringify(argLog)}
-# argv: build --target=bun --outfile=<...> [--external X]... <entry>
-# Find --outfile=<path> and create the file.
-for a in "$@"; do
-  case "$a" in
-    --outfile=*)
-      out="\${a#--outfile=}"
-      mkdir -p "$(dirname "$out")"
-      echo "// stub" > "$out"
-      ;;
-  esac
-done
-exit 0
-`,
-    );
-    chmodSync(fakeBun, 0o755);
-
-    writeFileSync(
-      join(target, "package.json"),
-      JSON.stringify({
-        name: "with-ext",
-        version: "1.0.0",
-        type: "module",
-        main: "index.js",
-        kaizen: { bundleExternals: ["react-devtools-core", "fsevents"] },
-      }),
-    );
-    writeFileSync(join(target, "index.js"), "export default { name: 'x', apiVersion: '2', setup(){} };");
-
-    await bundlePluginForTesting(target, "with-ext", "1.0.0", () => fakeBun);
-
-    const argv = readFileSync(argLog, "utf8");
-    expect(argv).toContain("--external react-devtools-core");
-    expect(argv).toContain("--external fsevents");
-    expect(argv).toContain("--target=bun");
-    expect(existsSync(join(target, "dist", "index.js"))).toBe(true);
-  });
-
-  it("preserves node_modules when bundleExternals is non-empty", async () => {
-    // Same fake-bun stub strategy as the externals-arg test.
-    const fakeBun = join(target, "fake-bun.sh");
-    writeFileSync(
-      fakeBun,
-      `#!/bin/sh
-for a in "$@"; do
-  case "$a" in
-    --outfile=*)
-      out="\${a#--outfile=}"
-      mkdir -p "$(dirname "$out")"
-      echo "// stub" > "$out"
-      ;;
-  esac
-done
-exit 0
-`,
-    );
-    chmodSync(fakeBun, 0o755);
-
-    writeFileSync(
-      join(target, "package.json"),
-      JSON.stringify({
-        name: "with-ext",
-        version: "1.0.0",
-        type: "module",
-        main: "index.js",
-        kaizen: { bundleExternals: ["react-devtools-core"] },
-      }),
-    );
-    writeFileSync(join(target, "index.js"), "export default { name: 'x', apiVersion: '2', setup(){} };");
-    mkdirSync(join(target, "node_modules", "react-devtools-core"), { recursive: true });
-    writeFileSync(join(target, "node_modules", "react-devtools-core", "package.json"), "{}");
-    writeFileSync(join(target, "bun.lock"), "{}\n");
-
-    await bundlePluginForTesting(target, "with-ext", "1.0.0", () => fakeBun);
-
-    expect(existsSync(join(target, "dist", "index.js"))).toBe(true);
-    expect(existsSync(join(target, "node_modules", "react-devtools-core"))).toBe(true);
-    expect(existsSync(join(target, "bun.lock"))).toBe(true);
-  });
 });
