@@ -3,31 +3,52 @@ import { ServiceRegistry } from "./service-registry.js";
 
 describe("ServiceRegistry", () => {
   describe("define", () => {
-    it("accepts a well-prefixed name", () => {
+    it("accepts a name prefixed with the plugin's own name", () => {
       const reg = new ServiceRegistry();
       reg.define("owner:thing", "owner", { description: "ok" });
       expect(reg.getSpec("owner:thing")).toEqual({ description: "ok" });
     });
 
-    it("rejects a name that doesn't start with the plugin's prefix", () => {
+    it("accepts a shared-namespace name (definer prefix need not match plugin name)", () => {
       const reg = new ServiceRegistry();
-      expect(() => reg.define("other:thing", "owner", { description: "x" })).toThrow(
-        /must be prefixed with plugin name 'owner'/,
+      reg.define("llm:complete", "openai-llm", { description: "shared contract" });
+      expect(reg.getSpec("llm:complete")).toEqual({ description: "shared contract" });
+    });
+
+    it("accepts a name with no colon prefix", () => {
+      const reg = new ServiceRegistry();
+      reg.define("thing", "owner", { description: "x" });
+      expect(reg.getSpec("thing")).toEqual({ description: "x" });
+    });
+
+    it("rejects an empty name", () => {
+      const reg = new ServiceRegistry();
+      expect(() => reg.define("", "owner", { description: "x" })).toThrow(
+        /Service name '' is invalid/,
       );
     });
 
-    it("rejects a name with no prefix", () => {
+    it("rejects a name containing whitespace", () => {
       const reg = new ServiceRegistry();
-      expect(() => reg.define("thing", "owner", { description: "x" })).toThrow(
-        /must be prefixed with plugin name 'owner'/,
+      expect(() => reg.define("owner: bad", "owner", { description: "x" })).toThrow(
+        /must be non-empty and contain no whitespace/,
       );
     });
 
-    it("keeps the first definition and warns on duplicate", () => {
+    it("throws when a different plugin tries to redefine an existing service", () => {
+      const reg = new ServiceRegistry();
+      reg.define("llm:complete", "openai-llm", { description: "first" });
+      expect(() =>
+        reg.define("llm:complete", "anthropic-llm", { description: "second" }),
+      ).toThrow(/already defined by plugin 'openai-llm'.*'anthropic-llm' cannot redefine/s);
+    });
+
+    it("throws when the same plugin redefines a service", () => {
       const reg = new ServiceRegistry();
       reg.define("owner:x", "owner", { description: "first" });
-      reg.define("owner:x", "owner", { description: "second" });
-      expect(reg.getSpec("owner:x")).toEqual({ description: "first" });
+      expect(() => reg.define("owner:x", "owner", { description: "second" })).toThrow(
+        /already defined by plugin 'owner'/,
+      );
     });
   });
 

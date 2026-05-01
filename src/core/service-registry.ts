@@ -1,5 +1,4 @@
 import type { ServiceSpec } from "../types/plugin.js";
-import { warn } from "./errors.js";
 
 export interface ServiceEntry {
   name: string;
@@ -24,16 +23,19 @@ export class ServiceRegistry {
   private readonly consumers = new Map<string, Set<string>>();
 
   define(name: string, pluginName: string, spec: ServiceSpec): void {
-    const colon = name.indexOf(":");
-    if (colon < 0 || name.slice(0, colon) !== pluginName) {
+    if (name.length === 0 || name.includes(" ")) {
       throw new Error(
-        `Service '${name}' must be prefixed with plugin name '${pluginName}' ` +
-        `(e.g. '${pluginName}:...').`,
+        `Service name '${name}' is invalid: must be non-empty and contain no whitespace.`,
       );
     }
-    if (this.entries.has(name)) {
-      warn(`Service '${name}' already defined. Ignoring duplicate from '${pluginName}'.`);
-      return;
+    const existing = this.entries.get(name);
+    if (existing) {
+      throw new Error(
+        `Service '${name}' is already defined by plugin '${existing.definedBy}'; ` +
+        `plugin '${pluginName}' cannot redefine it. ` +
+        `If both plugins implement the same contract, only one should defineService(); ` +
+        `the other should provideService() against the existing definition.`,
+      );
     }
     this.entries.set(name, {
       name, spec, definedBy: pluginName,

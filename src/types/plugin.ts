@@ -83,7 +83,7 @@ export interface PluginServices {
 export interface PluginContext {
   // --- Service registry ----------------------------------------------------
 
-  /** Declare a service. Only valid during INITIALIZING (setup()). Name must be prefixed with the calling plugin's name. */
+  /** Declare a service. Only valid during INITIALIZING (setup()). Service names are global; redefining a name another plugin already defined throws. Convention is `<owner>:<service>`, but any unique non-empty token (no whitespace) is accepted. */
   defineService(name: string, spec: ServiceSpec): void;
 
   /** Provide an implementation for a previously-defined service. Only valid during INITIALIZING. */

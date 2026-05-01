@@ -441,23 +441,29 @@ describe("PluginManager service validation", () => {
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
 
-  test("owner-prefix mismatch throws during setup (plugin flagged as failed when not critical)", async () => {
+  test("duplicate defineService across plugins throws during setup (second plugin flagged as failed when not critical)", async () => {
     const regs = baseRegistries();
     const lifeDir = writePlugin({ name: "core-driver", driver: true, hasStart: true });
-    const badDir = writePlugin({
-      name: "bad",
+    const firstDir = writePlugin({
+      name: "first",
       services: { provides: [] },
-      setupBody: `ctx.defineService("someoneElse:thing", { description: "" });`,
+      setupBody: `ctx.defineService("shared:thing", { description: "first" });`,
+    });
+    const secondDir = writePlugin({
+      name: "second",
+      services: { provides: [] },
+      setupBody: `ctx.defineService("shared:thing", { description: "second" });`,
     });
     const manager = new PluginManager(
-      { plugins: [badDir, lifeDir] },
+      { plugins: [firstDir, secondDir, lifeDir] },
       regs.eventBus, regs.serviceRegistry,
       regs.enforcer, regs.auditLog,
       regs.lockfilePath, regs.options,
     );
     await manager.initialize();
     const entries = manager.list();
-    expect(entries.find((e) => e.name === "bad")?.status).toBe("failed");
+    expect(entries.find((e) => e.name === "first")?.status).not.toBe("failed");
+    expect(entries.find((e) => e.name === "second")?.status).toBe("failed");
   });
 });
 
