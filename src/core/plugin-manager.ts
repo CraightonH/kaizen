@@ -49,7 +49,18 @@ export function findPackageRoot(startPath: string): string {
 export async function isInstalled(
   marketplaceId: string, name: string, version: string,
 ): Promise<boolean> {
-  return existsSync(join(pluginInstallDir(marketplaceId, name, version), "package.json"));
+  const dir = pluginInstallDir(marketplaceId, name, version);
+  const pkgPath = join(dir, "package.json");
+  if (!existsSync(pkgPath)) return false;
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { dependencies?: Record<string, string> };
+    if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
+      return existsSync(join(dir, "node_modules"));
+    }
+  } catch {
+    // Malformed package.json — treat as installed; loader will surface the real error.
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------
