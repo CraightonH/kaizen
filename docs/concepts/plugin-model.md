@@ -63,8 +63,11 @@ The high-level sequence when you run `kaizen --harness <something>`:
    `~/.kaizen/marketplaces/<id>/plugins/<name>@<version>/`; legacy names fall
    back through authored-plugin and npm directories.
 2. **Install.** If a referenced plugin version isn't on disk yet, the
-   installer materializes it from its source (file, tarball, or npm) into
-   the marketplace install tree.
+   installer materializes it from its source (file, tarball, or npm),
+   installs runtime dependencies via `bun install --production` if declared,
+   then bundles the plugin to `dist/index.js` with `bun build --target=bun`.
+   `node_modules/` is removed after a successful bundle; source files stay on
+   disk. See [Bundling](../guides/plugin-authoring.md#bundling).
 3. **Consent.** Before a new plugin runs, kaizen reads its declared
    permissions and either accepts silently (TRUSTED), prompts with a grant
    list (SCOPED), or requires typed confirmation (UNSCOPED). Decisions

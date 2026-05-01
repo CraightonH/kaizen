@@ -31,6 +31,7 @@ export async function installPlugin(
   }
 
   await installDeps(target, name, version);
+  await bundlePlugin(target, name, version);
 }
 
 /**
@@ -98,6 +99,18 @@ export function resolveBunExecutable(): string | null {
   return null;
 }
 
+function readBundleExternals(pkg: unknown): string[] {
+  if (typeof pkg !== "object" || pkg === null) return [];
+  const kz = (pkg as Record<string, unknown>)["kaizen"];
+  if (typeof kz !== "object" || kz === null || Array.isArray(kz)) return [];
+  const list = (kz as Record<string, unknown>)["bundleExternals"];
+  if (!Array.isArray(list)) return [];
+  return list.filter((x): x is string => typeof x === "string");
+}
+
+// Test-only export. Not part of the public API.
+export const readBundleExternalsForTesting = readBundleExternals;
+
 /**
  * If `target` contains a package.json with non-empty runtime dependencies,
  * run `bun install --production` in it. Otherwise no-op.
@@ -152,3 +165,55 @@ async function installDeps(
 
 // Test-only export. Not part of the public API.
 export const installDepsForTesting = installDeps;
+
+async function bundlePlugin(
+  target: string,
+  name: string,
+  version: string,
+  bunResolver: () => string | null = resolveBunExecutable,
+): Promise<void> {
+  const pkgPath = join(target, "package.json");
+  if (!existsSync(pkgPath)) return;
+
+  let pkg: { main?: string; module?: string };
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+  } catch {
+    return;
+  }
+
+  const entry = pkg.module ?? pkg.main ?? "index.js";
+  const entryPath = join(target, entry);
+  const outFile = join(target, "dist", "index.js");
+  const externals = readBundleExternals(pkg);
+
+  const bun = bunResolver();
+  if (!bun) {
+    throw new Error(
+      `plugin '${name}@${version}' could not be bundled: bun is not on PATH or at ~/.bun/bin/bun.\n` +
+      `Install bun: curl -fsSL https://bun.sh/install | bash`,
+    );
+  }
+
+  const cmd = [bun, "build", "--target=bun", `--outfile=${outFile}`];
+  for (const ext of externals) cmd.push("--external", ext);
+  cmd.push(entryPath);
+
+  const proc = Bun.spawnSync({ cmd, cwd: target, stdout: "pipe", stderr: "pipe" });
+
+  if (proc.exitCode !== 0) {
+    const stderr = proc.stderr ? new TextDecoder().decode(proc.stderr) : "";
+    rmSync(target, { recursive: true, force: true });
+    throw new Error(
+      `bun build failed for plugin '${name}@${version}' at ${target}\n` +
+      stderr.split("\n").map((l) => `  ${l}`).join("\n"),
+    );
+  }
+
+  rmSync(join(target, "node_modules"), { recursive: true, force: true });
+  rmSync(join(target, "bun.lockb"), { force: true });
+  rmSync(join(target, "bun.lock"), { force: true });
+}
+
+// Test-only export. Not part of the public API.
+export const bundlePluginForTesting = bundlePlugin;

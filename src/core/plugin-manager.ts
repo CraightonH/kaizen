@@ -52,6 +52,8 @@ export async function isInstalled(
   const dir = pluginInstallDir(marketplaceId, name, version);
   const pkgPath = join(dir, "package.json");
   if (!existsSync(pkgPath)) return false;
+  // Bundled plugins drop node_modules; presence of dist/index.js means installed.
+  if (existsSync(join(dir, "dist", "index.js"))) return true;
   try {
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { dependencies?: Record<string, string> };
     if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
@@ -123,9 +125,20 @@ async function loadPluginFromMarketplaceInstall(
   const dir = pluginInstallDir(marketplaceId, pluginName, version);
   const pkgPath = join(dir, "package.json");
   if (!existsSync(pkgPath)) return null;
-  const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { main?: string; module?: string };
-  const entry = pkg.module ?? pkg.main ?? "index.js";
-  const abs = join(dir, entry);
+
+  // Prefer the bundled output produced by installPlugin(). Falls through to the
+  // raw entry for two cases: pre-bundle-era installs on disk, and uncompiled
+  // `bun src/cli.ts` against a freshly checked-out plugin without a build step.
+  const bundlePath = join(dir, "dist", "index.js");
+  let abs: string;
+  if (existsSync(bundlePath)) {
+    abs = bundlePath;
+  } else {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { main?: string; module?: string };
+    const entry = pkg.module ?? pkg.main ?? "index.js";
+    abs = join(dir, entry);
+  }
+
   try {
     const mod = (await import(abs)) as { default?: unknown };
     const plugin = mod.default;
@@ -143,6 +156,9 @@ async function loadPluginFromMarketplaceInstall(
     return null;
   }
 }
+
+// Test-only export. Not part of the public API.
+export const loadPluginFromMarketplaceInstallForTesting = loadPluginFromMarketplaceInstall;
 
 async function resolvePlugin(name: string): Promise<LoadedPlugin | null> {
   const isPath = name.startsWith("./") || name.startsWith("/") || name.startsWith("../");

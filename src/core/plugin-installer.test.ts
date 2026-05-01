@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, chmodSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { installPlugin, installHarness, resolveBunExecutable, installDepsForTesting } from "./plugin-installer.js";
+import { installPlugin, installHarness, resolveBunExecutable, installDepsForTesting, readBundleExternalsForTesting, bundlePluginForTesting } from "./plugin-installer.js";
 import { pluginInstallDir, harnessInstallDir, marketplaceRepoDir } from "./kaizen-config.js";
 
 let home: string;
@@ -37,52 +37,6 @@ describe("installPlugin — file source", () => {
     expect(existsSync(join(target, "index.js"))).toBe(true);
   });
 
-  it("resolves runtime deps after copying file source", async () => {
-    const pluginSrc = join(upstream, "plugins", "with-deps");
-    mkdirSync(pluginSrc, { recursive: true });
-    writeFileSync(
-      join(pluginSrc, "package.json"),
-      JSON.stringify({
-        name: "with-deps",
-        version: "1.0.0",
-        main: "index.js",
-        dependencies: { "is-odd": "3.0.1" },
-      }),
-    );
-    writeFileSync(join(pluginSrc, "index.js"), "export default { name: 'with-deps', apiVersion: '2', setup(){} };");
-
-    await installPlugin("m", "with-deps", "1.0.0", { type: "file", path: "plugins/with-deps" });
-
-    const target = pluginInstallDir("m", "with-deps", "1.0.0");
-    expect(existsSync(join(target, "node_modules", "is-odd"))).toBe(true);
-  }, 30_000);
-});
-
-describe("installPlugin — lockfile honored", () => {
-  it("preserves bun.lock from source through install", async () => {
-    const pluginSrc = join(upstream, "plugins", "locked");
-    mkdirSync(pluginSrc, { recursive: true });
-    // No dependencies so installDeps no-ops; we only need to verify cpSync
-    // carries the committed lockfile through to the install dir.
-    writeFileSync(
-      join(pluginSrc, "package.json"),
-      JSON.stringify({
-        name: "locked",
-        version: "1.0.0",
-        main: "index.js",
-      }),
-    );
-    writeFileSync(join(pluginSrc, "index.js"), "export default { name: 'locked', apiVersion: '2', setup(){} };");
-    // A pre-existing bun.lock in the source — bun will use it.
-    // We can't easily fabricate a valid binary lockfile in a test, so we just
-    // verify that any lockfile present in source is copied into target.
-    writeFileSync(join(pluginSrc, "bun.lock"), "{}\n");
-
-    await installPlugin("m", "locked", "1.0.0", { type: "file", path: "plugins/locked" });
-
-    const target = pluginInstallDir("m", "locked", "1.0.0");
-    expect(existsSync(join(target, "bun.lock"))).toBe(true);
-  }, 30_000);
 });
 
 describe("resolveBunExecutable", () => {
@@ -249,5 +203,177 @@ describe("installHarness", () => {
 
     const target = join(harnessInstallDir("m", "anthropic-default"), "kaizen.json");
     expect(JSON.parse(readFileSync(target, "utf8"))).toEqual(doc);
+  });
+});
+
+describe("readBundleExternals", () => {
+  it("returns [] when kaizen field is missing", () => {
+    expect(readBundleExternalsForTesting({ name: "x", version: "1" })).toEqual([]);
+  });
+
+  it("returns [] when kaizen.bundleExternals is missing", () => {
+    expect(readBundleExternalsForTesting({ kaizen: {} })).toEqual([]);
+  });
+
+  it("returns the array verbatim when well-formed", () => {
+    expect(readBundleExternalsForTesting({
+      kaizen: { bundleExternals: ["react-devtools-core", "fsevents"] },
+    })).toEqual(["react-devtools-core", "fsevents"]);
+  });
+
+  it("returns [] when kaizen is not an object", () => {
+    expect(readBundleExternalsForTesting({ kaizen: "nope" })).toEqual([]);
+    expect(readBundleExternalsForTesting({ kaizen: null })).toEqual([]);
+    expect(readBundleExternalsForTesting({ kaizen: ["a"] })).toEqual([]);
+  });
+
+  it("returns [] when bundleExternals is not an array", () => {
+    expect(readBundleExternalsForTesting({ kaizen: { bundleExternals: "react" } })).toEqual([]);
+    expect(readBundleExternalsForTesting({ kaizen: { bundleExternals: { a: 1 } } })).toEqual([]);
+  });
+
+  it("filters non-string entries", () => {
+    expect(readBundleExternalsForTesting({
+      kaizen: { bundleExternals: ["ok", 42, null, "also-ok"] },
+    })).toEqual(["ok", "also-ok"]);
+  });
+});
+
+describe("installPlugin — bundling", () => {
+  it("produces dist/index.js and removes node_modules after a deps-free file install", async () => {
+    const pluginSrc = join(upstream, "plugins", "trivial");
+    mkdirSync(pluginSrc, { recursive: true });
+    writeFileSync(
+      join(pluginSrc, "package.json"),
+      JSON.stringify({ name: "trivial", version: "1.0.0", type: "module", main: "index.js" }),
+    );
+    writeFileSync(
+      join(pluginSrc, "index.js"),
+      "export default { name: 'trivial', apiVersion: '2', setup(){} };",
+    );
+
+    await installPlugin("m", "trivial", "1.0.0", { type: "file", path: "plugins/trivial" });
+
+    const target = pluginInstallDir("m", "trivial", "1.0.0");
+    expect(existsSync(join(target, "dist", "index.js"))).toBe(true);
+    expect(existsSync(join(target, "node_modules"))).toBe(false);
+    expect(existsSync(join(target, "index.js"))).toBe(true);
+    expect(existsSync(join(target, "package.json"))).toBe(true);
+  }, 30_000);
+
+  it("produces dist/index.js and removes node_modules after a with-deps file install", async () => {
+    const pluginSrc = join(upstream, "plugins", "with-deps");
+    mkdirSync(pluginSrc, { recursive: true });
+    writeFileSync(
+      join(pluginSrc, "package.json"),
+      JSON.stringify({
+        name: "with-deps",
+        version: "1.0.0",
+        type: "module",
+        main: "index.js",
+        dependencies: { "is-odd": "3.0.1" },
+      }),
+    );
+    writeFileSync(
+      join(pluginSrc, "index.js"),
+      "import isOdd from 'is-odd'; export default { name: 'with-deps', apiVersion: '2', setup(){ isOdd(1); } };",
+    );
+
+    await installPlugin("m", "with-deps", "1.0.0", { type: "file", path: "plugins/with-deps" });
+
+    const target = pluginInstallDir("m", "with-deps", "1.0.0");
+    expect(existsSync(join(target, "dist", "index.js"))).toBe(true);
+    expect(existsSync(join(target, "node_modules"))).toBe(false);
+  }, 60_000);
+});
+
+describe("bundlePlugin", () => {
+  let target: string;
+  beforeEach(() => {
+    target = mkdtempSync(join(tmpdir(), "kz-bundle-"));
+  });
+  afterEach(() => {
+    rmSync(target, { recursive: true, force: true });
+  });
+
+  it("produces dist/index.js for a deps-free plugin and removes node_modules/lockfiles", async () => {
+    writeFileSync(
+      join(target, "package.json"),
+      JSON.stringify({ name: "trivial", version: "1.0.0", type: "module", main: "index.js" }),
+    );
+    writeFileSync(
+      join(target, "index.js"),
+      "export default { name: 'trivial', apiVersion: '2', setup(){} };",
+    );
+    // Pretend a previous installDeps left these behind.
+    mkdirSync(join(target, "node_modules"), { recursive: true });
+    writeFileSync(join(target, "node_modules", "marker"), "");
+    writeFileSync(join(target, "bun.lock"), "{}\n");
+
+    await bundlePluginForTesting(target, "trivial", "1.0.0");
+
+    expect(existsSync(join(target, "dist", "index.js"))).toBe(true);
+    expect(existsSync(join(target, "node_modules"))).toBe(false);
+    expect(existsSync(join(target, "bun.lock"))).toBe(false);
+    // Source survives.
+    expect(existsSync(join(target, "index.js"))).toBe(true);
+    expect(existsSync(join(target, "package.json"))).toBe(true);
+  }, 30_000);
+
+  it("rolls back target and includes stderr when bun build fails", async () => {
+    writeFileSync(
+      join(target, "package.json"),
+      JSON.stringify({ name: "broken", version: "1.0.0", type: "module", main: "index.js" }),
+    );
+    // Syntax error: unterminated string.
+    writeFileSync(join(target, "index.js"), "export default { broken: 'oops");
+
+    await expect(bundlePluginForTesting(target, "broken", "1.0.0")).rejects.toThrow(/bun build failed/);
+    expect(existsSync(target)).toBe(false);
+  }, 30_000);
+
+  it("passes kaizen.bundleExternals as --external flags to bun build", async () => {
+    // Fake bun executable that records argv and writes a stub bundle.
+    const fakeBun = join(target, "fake-bun.sh");
+    const argLog = join(target, "args.log");
+    writeFileSync(
+      fakeBun,
+      `#!/bin/sh
+echo "$@" > ${JSON.stringify(argLog)}
+# argv: build --target=bun --outfile=<...> [--external X]... <entry>
+# Find --outfile=<path> and create the file.
+for a in "$@"; do
+  case "$a" in
+    --outfile=*)
+      out="\${a#--outfile=}"
+      mkdir -p "$(dirname "$out")"
+      echo "// stub" > "$out"
+      ;;
+  esac
+done
+exit 0
+`,
+    );
+    chmodSync(fakeBun, 0o755);
+
+    writeFileSync(
+      join(target, "package.json"),
+      JSON.stringify({
+        name: "with-ext",
+        version: "1.0.0",
+        type: "module",
+        main: "index.js",
+        kaizen: { bundleExternals: ["react-devtools-core", "fsevents"] },
+      }),
+    );
+    writeFileSync(join(target, "index.js"), "export default { name: 'x', apiVersion: '2', setup(){} };");
+
+    await bundlePluginForTesting(target, "with-ext", "1.0.0", () => fakeBun);
+
+    const argv = readFileSync(argLog, "utf8");
+    expect(argv).toContain("--external react-devtools-core");
+    expect(argv).toContain("--external fsevents");
+    expect(argv).toContain("--target=bun");
+    expect(existsSync(join(target, "dist", "index.js"))).toBe(true);
   });
 });
