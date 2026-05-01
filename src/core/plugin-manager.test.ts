@@ -493,6 +493,13 @@ describe("isInstalled(marketplaceId, name, version)", () => {
     writeFileSync(join(dir, "package.json"), JSON.stringify({ dependencies: { foo: "1.0.0" } }));
     expect(await isInstalled("m", "demo", "1.0.0")).toBe(true);
   });
+  it("returns true when bundled (dist/index.js) even if node_modules absent", async () => {
+    const dir = pluginInstallDir("m", "demo", "1.0.0");
+    mkdirSync(join(dir, "dist"), { recursive: true });
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ dependencies: { foo: "1.0.0" } }));
+    writeFileSync(join(dir, "dist", "index.js"), "export default {};");
+    expect(await isInstalled("m", "demo", "1.0.0")).toBe(true);
+  });
 });
 
 describe("loadPluginFromMarketplaceInstall — bundle preference", () => {

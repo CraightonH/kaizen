@@ -52,6 +52,8 @@ export async function isInstalled(
   const dir = pluginInstallDir(marketplaceId, name, version);
   const pkgPath = join(dir, "package.json");
   if (!existsSync(pkgPath)) return false;
+  // Bundled plugins drop node_modules; presence of dist/index.js means installed.
+  if (existsSync(join(dir, "dist", "index.js"))) return true;
   try {
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { dependencies?: Record<string, string> };
     if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
