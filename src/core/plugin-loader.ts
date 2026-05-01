@@ -12,9 +12,17 @@ export async function loadPluginFromInstallDir(
   }
   const pkgPath = join(dir, "package.json");
   if (!existsSync(pkgPath)) throw new Error(`no package.json at ${dir}`);
-  const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { main?: string; module?: string };
-  const entry = pkg.module ?? pkg.main ?? "index.js";
-  const abs = isAbsolute(entry) ? entry : join(dir, entry);
+  // Prefer the bundled output produced by installPlugin(). Falls back to the raw
+  // entry for pre-bundle-era installs and uncompiled-cli local development.
+  const bundlePath = join(dir, "dist", "index.js");
+  let abs: string;
+  if (existsSync(bundlePath)) {
+    abs = bundlePath;
+  } else {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { main?: string; module?: string };
+    const entry = pkg.module ?? pkg.main ?? "index.js";
+    abs = isAbsolute(entry) ? entry : join(dir, entry);
+  }
 
   const mod = (await import(abs)) as { default?: KaizenPlugin };
   if (!mod.default || typeof mod.default !== "object") {
