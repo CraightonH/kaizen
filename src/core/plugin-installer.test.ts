@@ -376,4 +376,46 @@ exit 0
     expect(argv).toContain("--target=bun");
     expect(existsSync(join(target, "dist", "index.js"))).toBe(true);
   });
+
+  it("preserves node_modules when bundleExternals is non-empty", async () => {
+    // Same fake-bun stub strategy as the externals-arg test.
+    const fakeBun = join(target, "fake-bun.sh");
+    writeFileSync(
+      fakeBun,
+      `#!/bin/sh
+for a in "$@"; do
+  case "$a" in
+    --outfile=*)
+      out="\${a#--outfile=}"
+      mkdir -p "$(dirname "$out")"
+      echo "// stub" > "$out"
+      ;;
+  esac
+done
+exit 0
+`,
+    );
+    chmodSync(fakeBun, 0o755);
+
+    writeFileSync(
+      join(target, "package.json"),
+      JSON.stringify({
+        name: "with-ext",
+        version: "1.0.0",
+        type: "module",
+        main: "index.js",
+        kaizen: { bundleExternals: ["react-devtools-core"] },
+      }),
+    );
+    writeFileSync(join(target, "index.js"), "export default { name: 'x', apiVersion: '2', setup(){} };");
+    mkdirSync(join(target, "node_modules", "react-devtools-core"), { recursive: true });
+    writeFileSync(join(target, "node_modules", "react-devtools-core", "package.json"), "{}");
+    writeFileSync(join(target, "bun.lock"), "{}\n");
+
+    await bundlePluginForTesting(target, "with-ext", "1.0.0", () => fakeBun);
+
+    expect(existsSync(join(target, "dist", "index.js"))).toBe(true);
+    expect(existsSync(join(target, "node_modules", "react-devtools-core"))).toBe(true);
+    expect(existsSync(join(target, "bun.lock"))).toBe(true);
+  });
 });
