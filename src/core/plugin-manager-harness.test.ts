@@ -97,4 +97,30 @@ describe("PluginContext.harness", () => {
     expect(bridge.setup).toEqual({});
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
+
+  test("runHarness forwards harness opt to driver ctx", async () => {
+    const { runHarness } = await import("./index.js");
+    const bridgeKey = `__kz_harness_runharness_${Date.now()}_${Math.random()}__`;
+    (globalThis as Record<string, unknown>)[bridgeKey] = {};
+    const driverDir = writeProbePlugin("driver", bridgeKey);
+
+    const lockfilePath = join(
+      mkdtempSync(join(tmpdir(), "kaizen-test-lock-")),
+      "permissions.lock",
+    );
+
+    await runHarness({
+      kaizenConfig: { plugins: [driverDir] },
+      lockfilePath,
+      enforcer: new PermissionEnforcer({ mode: "log-only" }),
+      harness: { jsonPath: "/abs/path/kaizen.json", ref: "x/y@1.0.0" },
+    });
+
+    const bridge = (globalThis as Record<string, { start: unknown }>)[bridgeKey]!;
+    expect(bridge.start).toEqual({
+      jsonPath: "/abs/path/kaizen.json",
+      ref: "x/y@1.0.0",
+    });
+    delete (globalThis as Record<string, unknown>)[bridgeKey];
+  });
 });
