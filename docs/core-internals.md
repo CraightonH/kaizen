@@ -25,7 +25,7 @@ them as services; consumer plugins obtain them via `ctx.useService`.
 `src/core/index.ts` is the single public entry point for the runtime:
 
 ```typescript
-await bootstrap(kaizenConfig, lockfilePath);
+await bootstrap(kaizenConfig, lockfilePath, harness?);
 ```
 
 `lockfilePath` is required — callers derive it from the resolved harness's
@@ -33,9 +33,29 @@ await bootstrap(kaizenConfig, lockfilePath);
 `src/core/lockfile-path.ts`. There is no `process.cwd()` fallback and no
 environment-variable override.
 
+`harness` is optional and supplies raw identity metadata that surfaces on
+every plugin's `ctx.harness` (see
+[`reference/plugin-api.md`](reference/plugin-api.md#plugincontext-setup-argument)).
+Both inner fields are individually optional; omit the arg entirely (default
+`{}`) when no metadata is known:
+
+```typescript
+await bootstrap(kaizenConfig, lockfilePath, {
+  jsonPath: harnessJsonPath,           // absolute path to the resolved kaizen.json
+  ref: userSuppliedRef,                // user-facing ref string (e.g. "official/openai-compatible@1.2.3")
+});
+```
+
+`bootstrap()` is a convenience wrapper around `runHarness(opts)`. Embedders
+that need to inject a `PermissionEnforcer` should call `runHarness` directly:
+
+```typescript
+await runHarness({ kaizenConfig, lockfilePath, harness, enforcer });
+```
+
 1. Creates `EventBus`, `ServiceRegistry`.
 2. Calls `loadPlugins()` → returns `{ driver, state }`.
-3. Creates a `PluginContext` for the driver plugin.
+3. Creates a `PluginContext` for the driver plugin (populates `ctx.harness`).
 4. Sets state to `RUNNING`.
 5. Calls `driver.start(ctx)` — control passes to the driver plugin.
 6. Sets state to `CLOSED` in a `finally` block.
