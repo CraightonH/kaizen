@@ -22,10 +22,12 @@ export function createPluginContext(
   getState: () => CoreState,
   pluginManagerPublicApi: PluginManagerPublicApi,
   pluginManagerLifecycleApi: PluginManagerLifecycleApi,
+  harness: { jsonPath?: string; ref?: string } = {},
 ): PluginContext {
   const io = createCtxIo(pluginName, enforcer);
   return {
     config: pluginConfig,
+    harness,
 
     log(msg: string): void {
       console.log(`[${pluginName}] ${msg}`);

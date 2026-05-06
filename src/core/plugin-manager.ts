@@ -335,6 +335,7 @@ export class PluginManager {
     private readonly lockfilePath: string,
     private readonly options: { trustLockfile: boolean; allowUnscoped: boolean; nonInteractive: boolean },
     private readonly globalConfig?: KaizenGlobalConfig,
+    private readonly harness: { jsonPath?: string; ref?: string } = {},
   ) {
     // Wire denial listener → audit log.
     this.enforcer.onDenial((r) => this.auditLog.record(r));
@@ -738,6 +739,7 @@ export class PluginManager {
       () => stateRef.current,
       this.getPublicApi(),
       this.getLifecycleApi(),
+      this.harness,
     );
     await runInPluginScope(plugin.name, async () => { await plugin.setup(ctx); });
     stateRef.current = "READY";
