@@ -7,6 +7,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { bootstrap } from "./core/index.js";
+import type { HarnessIdentity } from "./types/plugin.js";
 import { resolveHarnessOrFatal, KAIZEN_HOME, KAIZEN_HOME_CONFIG } from "./core/config.js";
 import { loadKaizenGlobalConfig, kaizenHome, kaizenHomeConfigPath } from "./core/kaizen-config.js";
 import { fatal, warn } from "./core/errors.js";
@@ -691,7 +692,7 @@ if (parsed.prompt) {
   }
 }
 
-const harness: import("./types/plugin.js").HarnessIdentity = {};
+const harness: HarnessIdentity = {};
 if (harnessJsonPath) harness.jsonPath = harnessJsonPath;
 if (harnessRef !== undefined) harness.ref = harnessRef;
 
