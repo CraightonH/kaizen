@@ -80,6 +80,18 @@ export interface PluginServices {
 // Plugin context — passed to setup() and start()
 // ---------------------------------------------------------------------------
 
+/**
+ * Raw metadata about the harness a plugin is loaded under. Both fields are
+ * individually optional. See `PluginContext.harness` for usage and absence
+ * scenarios.
+ */
+export interface HarnessIdentity {
+  /** Absolute path to the resolved harness JSON, if bootstrapped from a file. */
+  jsonPath?: string;
+  /** The ref the user passed (`--harness <ref>` or `defaults.harness`), if any. */
+  ref?: string;
+}
+
 export interface PluginContext {
   /**
    * Raw metadata about the harness this plugin was loaded under. Both inner
@@ -90,12 +102,7 @@ export interface PluginContext {
    * — typically by preferring `jsonPath` over `ref` and falling back to a
    * literal default when both are absent.
    */
-  harness: {
-    /** Absolute path to the resolved harness JSON, if bootstrapped from a file. */
-    jsonPath?: string;
-    /** The ref the user passed (`--harness <ref>` or `defaults.harness`), if any. */
-    ref?: string;
-  };
+  harness: HarnessIdentity;
 
   // --- Service registry ----------------------------------------------------
 
