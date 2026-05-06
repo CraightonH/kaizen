@@ -1,6 +1,6 @@
 import { join } from "path";
 import { randomUUID } from "crypto";
-import type { KaizenConfig } from "../types/plugin.js";
+import type { KaizenConfig, HarnessIdentity } from "../types/plugin.js";
 import { EventBus } from "./event-bus.js";
 import { ServiceRegistry } from "./service-registry.js";
 import { PluginManager } from "./plugin-manager.js";
@@ -33,13 +33,14 @@ interface InitializedSystem {
 export interface InitializePluginSystemOpts {
   lockfilePath: string;
   injectedEnforcer?: PermissionEnforcer;
+  harness?: HarnessIdentity;
 }
 
 export async function initializePluginSystem(
   kaizenConfig: KaizenConfig,
   opts: InitializePluginSystemOpts,
 ): Promise<InitializedSystem> {
-  const { lockfilePath, injectedEnforcer } = opts;
+  const { lockfilePath, injectedEnforcer, harness = {} } = opts;
   const eventBus = new EventBus();
   const serviceRegistry = new ServiceRegistry();
 
@@ -67,6 +68,8 @@ export async function initializePluginSystem(
     eventBus, serviceRegistry,
     enforcer, auditLog,
     lockfilePath, { trustLockfile, allowUnscoped, nonInteractive },
+    undefined, // globalConfig
+    harness,
   );
   const { driver } = await manager.initialize();
   return {
@@ -79,12 +82,14 @@ export interface RunHarnessOpts {
   kaizenConfig: KaizenConfig;
   lockfilePath: string;
   enforcer?: PermissionEnforcer;
+  harness?: HarnessIdentity;
 }
 
 export async function runHarness(opts: RunHarnessOpts): Promise<void> {
-  const { kaizenConfig, lockfilePath, enforcer: injectedEnforcer } = opts;
+  const { kaizenConfig, lockfilePath, enforcer: injectedEnforcer, harness = {} } = opts;
   const init: InitializePluginSystemOpts = {
     lockfilePath,
+    harness,
     ...(injectedEnforcer !== undefined ? { injectedEnforcer } : {}),
   };
   const {
@@ -97,6 +102,7 @@ export async function runHarness(opts: RunHarnessOpts): Promise<void> {
   const ctx = createPluginContext(
     driver.name, driverConfig, secretsCtx, eventBus, serviceRegistry,
     enforcer, () => "RUNNING", manager.getPublicApi(), manager.getLifecycleApi(),
+    harness,
   );
 
   try {
@@ -109,8 +115,12 @@ export async function runHarness(opts: RunHarnessOpts): Promise<void> {
   }
 }
 
-export async function bootstrap(kaizenConfig: KaizenConfig, lockfilePath: string): Promise<void> {
-  return runHarness({ kaizenConfig, lockfilePath });
+export async function bootstrap(
+  kaizenConfig: KaizenConfig,
+  lockfilePath: string,
+  harness: HarnessIdentity = {},
+): Promise<void> {
+  return runHarness({ kaizenConfig, lockfilePath, harness });
 }
 
 /**

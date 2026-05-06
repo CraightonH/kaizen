@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from "fs";
 import { dirname, join } from "path";
 import { pathToFileURL } from "url";
-import type { KaizenPlugin, KaizenConfig, KaizenGlobalConfig, PluginEntry, PluginManagerPublicApi, PluginManagerLifecycleApi, PluginContext } from "../types/plugin.js";
+import type { KaizenPlugin, KaizenConfig, KaizenGlobalConfig, PluginEntry, PluginManagerPublicApi, PluginManagerLifecycleApi, PluginContext, HarnessIdentity } from "../types/plugin.js";
 import { PLUGIN_API_VERSION } from "../types/plugin.js";
 import { mergePluginConfig, separateSecrets, applyEnvOverrides } from "./config-merge.js";
 import { validateConfig, validateSchemaItself } from "./config-validator.js";
@@ -335,6 +335,7 @@ export class PluginManager {
     private readonly lockfilePath: string,
     private readonly options: { trustLockfile: boolean; allowUnscoped: boolean; nonInteractive: boolean },
     private readonly globalConfig?: KaizenGlobalConfig,
+    private readonly harness: HarnessIdentity = {},
   ) {
     // Wire denial listener → audit log.
     this.enforcer.onDenial((r) => this.auditLog.record(r));
@@ -738,6 +739,7 @@ export class PluginManager {
       () => stateRef.current,
       this.getPublicApi(),
       this.getLifecycleApi(),
+      this.harness,
     );
     await runInPluginScope(plugin.name, async () => { await plugin.setup(ctx); });
     stateRef.current = "READY";

@@ -1,4 +1,4 @@
-import type { PluginContext, PluginManagerPublicApi, PluginManagerLifecycleApi, SecretsContext } from "../types/plugin.js";
+import type { PluginContext, PluginManagerPublicApi, PluginManagerLifecycleApi, SecretsContext, HarnessIdentity } from "../types/plugin.js";
 import type { EventBus } from "./event-bus.js";
 import type { ServiceRegistry } from "./service-registry.js";
 import type { PermissionEnforcer } from "./permission-enforcer.js";
@@ -22,10 +22,12 @@ export function createPluginContext(
   getState: () => CoreState,
   pluginManagerPublicApi: PluginManagerPublicApi,
   pluginManagerLifecycleApi: PluginManagerLifecycleApi,
+  harness: HarnessIdentity = {},
 ): PluginContext {
   const io = createCtxIo(pluginName, enforcer);
   return {
     config: pluginConfig,
+    harness,
 
     log(msg: string): void {
       console.log(`[${pluginName}] ${msg}`);

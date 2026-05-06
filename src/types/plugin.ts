@@ -80,7 +80,30 @@ export interface PluginServices {
 // Plugin context — passed to setup() and start()
 // ---------------------------------------------------------------------------
 
+/**
+ * Raw metadata about the harness a plugin is loaded under. Both fields are
+ * individually optional. See `PluginContext.harness` for usage and absence
+ * scenarios.
+ */
+export interface HarnessIdentity {
+  /** Absolute path to the resolved harness JSON, if bootstrapped from a file. */
+  jsonPath?: string;
+  /** The ref the user passed (`--harness <ref>` or `defaults.harness`), if any. */
+  ref?: string;
+}
+
 export interface PluginContext {
+  /**
+   * Raw metadata about the harness this plugin was loaded under. Both inner
+   * fields may be absent (e.g. programmatic `runHarness()` without a file on
+   * disk, or `kaizen` invoked from a directory containing `kaizen.json` with
+   * no `--harness` ref). Kaizen does not derive a canonical `name`. Plugins
+   * that need a stable namespacing key derive one from these inputs themselves
+   * — typically by preferring `jsonPath` over `ref` and falling back to a
+   * literal default when both are absent.
+   */
+  harness: HarnessIdentity;
+
   // --- Service registry ----------------------------------------------------
 
   /** Declare a service. Only valid during INITIALIZING (setup()). Service names are global; redefining a name another plugin already defined throws. Convention is `<owner>:<service>`, but any unique non-empty token (no whitespace) is accepted. */

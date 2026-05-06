@@ -7,6 +7,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { bootstrap } from "./core/index.js";
+import type { HarnessIdentity } from "./types/plugin.js";
 import { resolveHarnessOrFatal, KAIZEN_HOME, KAIZEN_HOME_CONFIG } from "./core/config.js";
 import { loadKaizenGlobalConfig, kaizenHome, kaizenHomeConfigPath } from "./core/kaizen-config.js";
 import { fatal, warn } from "./core/errors.js";
@@ -646,6 +647,9 @@ if (harnessArg === undefined) {
   harnessArg = globalCfgForHarness.defaults?.harness;
 }
 
+// Capture the user-facing ref BEFORE materialization replaces it with a path.
+const harnessRef = harnessArg;
+
 // Materialize a marketplace-ref --harness to a concrete path.
 if (harnessArg !== undefined && looksLikeHarnessRef(harnessArg)) {
   harnessArg = await materializeHarnessRef(harnessArg);
@@ -688,4 +692,8 @@ if (parsed.prompt) {
   }
 }
 
-await bootstrap(kaizenConfig, lockfilePath);
+const harness: HarnessIdentity = {};
+if (harnessJsonPath) harness.jsonPath = harnessJsonPath;
+if (harnessRef !== undefined) harness.ref = harnessRef;
+
+await bootstrap(kaizenConfig, lockfilePath, harness);
