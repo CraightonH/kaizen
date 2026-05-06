@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { PluginManager } from "./plugin-manager.js";
+import { runHarness } from "./index.js";
 import { EventBus } from "./event-bus.js";
 import { ServiceRegistry } from "./service-registry.js";
 import { PermissionEnforcer } from "./permission-enforcer.js";
@@ -98,9 +99,8 @@ describe("PluginContext.harness", () => {
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
 
-  test("runHarness forwards harness opt to driver ctx", async () => {
-    const { runHarness } = await import("./index.js");
-    const bridgeKey = `__kz_harness_runharness_${Date.now()}_${Math.random()}__`;
+  test("runHarness forwards harness opt across all lifecycle phases", async () => {
+    const bridgeKey = `__kz_harness_e2e_${Date.now()}_${Math.random()}__`;
     (globalThis as Record<string, unknown>)[bridgeKey] = {};
     const driverDir = writeProbePlugin("driver", bridgeKey);
 
@@ -109,18 +109,19 @@ describe("PluginContext.harness", () => {
       "permissions.lock",
     );
 
+    const expected = { jsonPath: "/abs/path/kaizen.json", ref: "x/y@1.0.0" };
+
     await runHarness({
       kaizenConfig: { plugins: [driverDir] },
       lockfilePath,
       enforcer: new PermissionEnforcer({ mode: "log-only" }),
-      harness: { jsonPath: "/abs/path/kaizen.json", ref: "x/y@1.0.0" },
+      harness: expected,
     });
 
-    const bridge = (globalThis as Record<string, { start: unknown }>)[bridgeKey]!;
-    expect(bridge.start).toEqual({
-      jsonPath: "/abs/path/kaizen.json",
-      ref: "x/y@1.0.0",
-    });
+    const bridge = (globalThis as Record<string, { setup: unknown; onReady: unknown; start: unknown }>)[bridgeKey]!;
+    expect(bridge.setup).toEqual(expected);
+    expect(bridge.onReady).toEqual(expected);
+    expect(bridge.start).toEqual(expected);
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
 });
