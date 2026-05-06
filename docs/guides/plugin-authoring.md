@@ -264,6 +264,43 @@ event handshake. Define a vocabulary event in a shared events plugin, have
 the driver emit it during `start()`, and subscribe to it in `setup()` of any
 plugin that needs to react.
 
+### Harness identity {#harness-identity}
+
+Plugins that persist state to disk often need to partition that state by
+harness — otherwise data captured under harness A (with plugins X, Y, Z)
+can be silently loaded under harness B with a different plugin set,
+producing missing tools or mismatched message shapes.
+
+`ctx.harness` exposes raw metadata about the harness the plugin is loaded
+under:
+
+```ts
+ctx.harness.jsonPath  // absolute path to the resolved harness JSON, or undefined
+ctx.harness.ref       // the user's --harness ref / defaults.harness value, or undefined
+```
+
+Both inner fields may be absent — `kaizen` invoked from a directory
+containing `kaizen.json` (no `--harness`) will populate `jsonPath` only;
+programmatic `runHarness()` calls may populate neither. Kaizen does not
+derive a canonical "name" — plugins choose their own namespacing rule.
+
+A typical pattern:
+
+```ts
+async setup(ctx) {
+  const key =
+    ctx.harness.jsonPath ??
+    ctx.harness.ref ??
+    "default";
+  const stateDir = path.join(os.homedir(), ".kaizen", "my-plugin", slugify(key));
+  // …
+}
+```
+
+Decide your own fallback when both fields are absent: a sentinel like
+`"default"`, a refusal to persist, or whatever fits your plugin's
+guarantees.
+
 ## Publishing types {#publishing-types}
 
 When your plugin provides a service, consumers need your types at compile time
