@@ -131,6 +131,7 @@ export interface PluginContext {
 
   // --- Config and logging ---
   config: Record<string, unknown>;                        // merged, non-secret
+  harness: HarnessIdentity;                               // raw harness metadata; inner fields optional
   log(msg: string): void;                                 // prefixed with plugin name
   pluginManager: PluginManagerPublicApi;                  // runtime load/unload
 
@@ -171,6 +172,19 @@ Method semantics:
 - `emit` calls all handlers serially in initialization order, returns every
   handler's return value (including `undefined`), and logs-and-continues on
   handler throw. Emitting an undefined event warns but never blocks.
+- `harness` — raw metadata about the harness this plugin was loaded under.
+  The outer field is always present; both inner fields may be absent.
+  Plugins that need to partition on-disk state by harness derive their own
+  namespacing key from these inputs — kaizen does not pick a canonical name.
+  See [`guides/plugin-authoring.md#harness-identity`](../guides/plugin-authoring.md#harness-identity)
+  for the recommended fallback pattern.
+
+```ts
+export interface HarnessIdentity {
+  jsonPath?: string;  // absolute path to the resolved harness JSON
+  ref?: string;       // user's --harness ref or defaults.harness, if any
+}
+```
 
 ### PluginManagerPublicApi / PluginManagerLifecycleApi
 
