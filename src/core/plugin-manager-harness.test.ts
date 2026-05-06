@@ -70,7 +70,7 @@ describe("PluginContext.harness", () => {
 
     await manager.initialize();
 
-    const bridge = (globalThis as Record<string, { setup: unknown; onReady: unknown }>)[bridgeKey]!;
+    const bridge = (globalThis as unknown as Record<string, { setup: unknown; onReady: unknown }>)[bridgeKey]!;
     expect(bridge.setup).toEqual({
       jsonPath: "/abs/path/kaizen.json",
       ref: "official/openai-compatible@1.2.3",
@@ -94,7 +94,7 @@ describe("PluginContext.harness", () => {
 
     await manager.initialize();
 
-    const bridge = (globalThis as Record<string, { setup: unknown }>)[bridgeKey]!;
+    const bridge = (globalThis as unknown as Record<string, { setup: unknown }>)[bridgeKey]!;
     expect(bridge.setup).toEqual({});
     delete (globalThis as Record<string, unknown>)[bridgeKey];
   });
@@ -118,7 +118,7 @@ describe("PluginContext.harness", () => {
       harness: expected,
     });
 
-    const bridge = (globalThis as Record<string, { setup: unknown; onReady: unknown; start: unknown }>)[bridgeKey]!;
+    const bridge = (globalThis as unknown as Record<string, { setup: unknown; onReady: unknown; start: unknown }>)[bridgeKey]!;
     expect(bridge.setup).toEqual(expected);
     expect(bridge.onReady).toEqual(expected);
     expect(bridge.start).toEqual(expected);
