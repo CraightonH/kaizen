@@ -646,6 +646,9 @@ if (harnessArg === undefined) {
   harnessArg = globalCfgForHarness.defaults?.harness;
 }
 
+// Capture the user-facing ref BEFORE materialization replaces it with a path.
+const harnessRef = harnessArg;
+
 // Materialize a marketplace-ref --harness to a concrete path.
 if (harnessArg !== undefined && looksLikeHarnessRef(harnessArg)) {
   harnessArg = await materializeHarnessRef(harnessArg);
@@ -688,4 +691,8 @@ if (parsed.prompt) {
   }
 }
 
-await bootstrap(kaizenConfig, lockfilePath);
+const harness: import("./types/plugin.js").HarnessIdentity = {};
+if (harnessJsonPath) harness.jsonPath = harnessJsonPath;
+if (harnessRef !== undefined) harness.ref = harnessRef;
+
+await bootstrap(kaizenConfig, lockfilePath, harness);

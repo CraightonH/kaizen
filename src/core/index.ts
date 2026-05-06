@@ -115,8 +115,12 @@ export async function runHarness(opts: RunHarnessOpts): Promise<void> {
   }
 }
 
-export async function bootstrap(kaizenConfig: KaizenConfig, lockfilePath: string): Promise<void> {
-  return runHarness({ kaizenConfig, lockfilePath });
+export async function bootstrap(
+  kaizenConfig: KaizenConfig,
+  lockfilePath: string,
+  harness: HarnessIdentity = {},
+): Promise<void> {
+  return runHarness({ kaizenConfig, lockfilePath, harness });
 }
 
 /**
