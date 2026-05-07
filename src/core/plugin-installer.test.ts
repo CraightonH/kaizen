@@ -254,6 +254,112 @@ describe("installPlugin — bundling", () => {
   }, 60_000);
 });
 
+describe("installPlugin — workspace deps", () => {
+  function writeCatalog(entries: Array<{ name: string; version: string; path: string }>): void {
+    const catDir = join(upstream, ".kaizen");
+    mkdirSync(catDir, { recursive: true });
+    writeFileSync(join(catDir, "marketplace.json"), JSON.stringify({
+      version: "1.0.0",
+      name: "m",
+      url: "https://example.invalid/m.git",
+      entries: entries.map((e) => ({
+        kind: "plugin",
+        name: e.name,
+        versions: [{ version: e.version, source: { type: "file", path: e.path } }],
+      })),
+    }));
+  }
+
+  it("flattens workspace:* deps into file: paths and bundles cleanly", async () => {
+    const leafSrc = join(upstream, "plugins", "leaf");
+    mkdirSync(leafSrc, { recursive: true });
+    writeFileSync(
+      join(leafSrc, "package.json"),
+      JSON.stringify({ name: "leaf", version: "1.0.0", type: "module", main: "index.js" }),
+    );
+    writeFileSync(join(leafSrc, "index.js"), "export const greet = () => 'hi-from-leaf';");
+
+    const consumerSrc = join(upstream, "plugins", "consumer");
+    mkdirSync(consumerSrc, { recursive: true });
+    writeFileSync(
+      join(consumerSrc, "package.json"),
+      JSON.stringify({
+        name: "consumer", version: "1.0.0", type: "module", main: "index.js",
+        dependencies: { leaf: "workspace:*" },
+      }),
+    );
+    writeFileSync(
+      join(consumerSrc, "index.js"),
+      "import { greet } from 'leaf'; export default { name: 'consumer', apiVersion: '2', setup(){ greet(); } };",
+    );
+    writeCatalog([
+      { name: "leaf", version: "1.0.0", path: "plugins/leaf" },
+      { name: "consumer", version: "1.0.0", path: "plugins/consumer" },
+    ]);
+
+    await installPlugin("m", "consumer", "1.0.0", { type: "file", path: "plugins/consumer" });
+
+    const target = pluginInstallDir("m", "consumer", "1.0.0");
+    expect(existsSync(join(target, "dist", "index.js"))).toBe(true);
+    // .kaizen-workspace-deps is scratch; should be cleaned up post-bundle.
+    expect(existsSync(join(target, ".kaizen-workspace-deps"))).toBe(false);
+    // Bundle inlines leaf source.
+    expect(readFileSync(join(target, "dist", "index.js"), "utf8")).toContain("hi-from-leaf");
+  }, 60_000);
+
+  it("flattens transitive workspace chains (a → b → c)", async () => {
+    const cSrc = join(upstream, "plugins", "c");
+    mkdirSync(cSrc, { recursive: true });
+    writeFileSync(join(cSrc, "package.json"),
+      JSON.stringify({ name: "c", version: "1.0.0", type: "module", main: "index.js" }));
+    writeFileSync(join(cSrc, "index.js"), "export const cVal = 'val-from-c';");
+
+    const bSrc = join(upstream, "plugins", "b");
+    mkdirSync(bSrc, { recursive: true });
+    writeFileSync(join(bSrc, "package.json"), JSON.stringify({
+      name: "b", version: "1.0.0", type: "module", main: "index.js",
+      dependencies: { c: "workspace:*" },
+    }));
+    writeFileSync(join(bSrc, "index.js"), "import { cVal } from 'c'; export const bVal = cVal + '-via-b';");
+
+    const aSrc = join(upstream, "plugins", "a");
+    mkdirSync(aSrc, { recursive: true });
+    writeFileSync(join(aSrc, "package.json"), JSON.stringify({
+      name: "a", version: "1.0.0", type: "module", main: "index.js",
+      dependencies: { b: "workspace:*" },
+    }));
+    writeFileSync(join(aSrc, "index.js"),
+      "import { bVal } from 'b'; export default { name: 'a', apiVersion: '2', setup(){ console.log(bVal); } };");
+
+    writeCatalog([
+      { name: "a", version: "1.0.0", path: "plugins/a" },
+      { name: "b", version: "1.0.0", path: "plugins/b" },
+      { name: "c", version: "1.0.0", path: "plugins/c" },
+    ]);
+
+    await installPlugin("m", "a", "1.0.0", { type: "file", path: "plugins/a" });
+
+    const target = pluginInstallDir("m", "a", "1.0.0");
+    const bundled = readFileSync(join(target, "dist", "index.js"), "utf8");
+    expect(bundled).toContain("val-from-c");
+    expect(bundled).toContain("-via-b");
+  }, 60_000);
+
+  it("throws when a workspace dep names a plugin not in the marketplace", async () => {
+    const src = join(upstream, "plugins", "broken");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "package.json"), JSON.stringify({
+      name: "broken", version: "1.0.0", type: "module", main: "index.js",
+      dependencies: { ghost: "workspace:*" },
+    }));
+    writeFileSync(join(src, "index.js"), "export default {};");
+    writeCatalog([{ name: "broken", version: "1.0.0", path: "plugins/broken" }]);
+
+    await expect(installPlugin("m", "broken", "1.0.0", { type: "file", path: "plugins/broken" }))
+      .rejects.toThrow(/workspace dep 'ghost' is not published/);
+  }, 30_000);
+});
+
 describe("bundlePlugin", () => {
   let target: string;
   beforeEach(() => {

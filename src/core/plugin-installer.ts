@@ -3,8 +3,9 @@ import { createHash } from "crypto";
 import { homedir } from "os";
 import { join } from "path";
 import { $ } from "bun";
-import type { PluginSource } from "../types/plugin.js";
+import type { MarketplaceCatalog, PluginSource } from "../types/plugin.js";
 import { marketplaceRepoDir, pluginInstallDir, harnessInstallDir } from "./kaizen-config.js";
+import { readCatalog } from "./marketplace.js";
 
 export async function installPlugin(
   marketplaceId: string, name: string, version: string, source: PluginSource,
@@ -30,8 +31,180 @@ export async function installPlugin(
     }
   }
 
+  const workspaceDepNames = collectWorkspaceDepNames(target);
+  if (workspaceDepNames.length > 0) {
+    await prepareWorkspaceDeps(target, marketplaceId, workspaceDepNames);
+  }
   await installDeps(target, name, version);
+  if (workspaceDepNames.length > 0) {
+    await materializeWorkspaceDeps(target, marketplaceId, workspaceDepNames);
+  }
   await bundlePlugin(target, name, version);
+}
+
+/**
+ * Before bun install: strip `workspace:` deps from the target's package.json
+ * (bun can't resolve them — they're sibling plugins in the same monorepo,
+ * not registry packages) and hoist the transitive non-workspace deps from
+ * every reachable sibling into the target's `dependencies`. That way bun
+ * install fetches the registry packages those siblings need; subsequent
+ * `materializeWorkspaceDeps` drops the sibling source into node_modules
+ * where the bundler resolves it via standard upward lookup.
+ */
+async function prepareWorkspaceDeps(
+  target: string,
+  marketplaceId: string,
+  rootDepNames: string[],
+): Promise<void> {
+  const pkgPath = join(target, "package.json");
+  const catalog = await readCatalog(marketplaceId);
+  const repo = marketplaceRepoDir(marketplaceId);
+
+  // BFS through workspace closure, collecting non-workspace deps.
+  const seen = new Set<string>();
+  const queue: string[] = [...rootDepNames];
+  const hoisted: Record<string, string> = {};
+  while (queue.length > 0) {
+    const name = queue.shift()!;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const srcPath = lookupPluginSourcePath(catalog, name, marketplaceId);
+    const absSrc = join(repo, srcPath);
+    const pkg = readPkgOrNull(join(absSrc, "package.json"));
+    if (!pkg) continue;
+    if (pkg.dependencies) {
+      for (const [n, spec] of Object.entries(pkg.dependencies)) {
+        if (typeof spec !== "string") continue;
+        if (spec.startsWith("workspace:")) { queue.push(n); continue; }
+        // Last writer wins: workspace closure is expected to share versions.
+        hoisted[n] = spec;
+      }
+    }
+  }
+
+  let pkg: {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+  try { pkg = JSON.parse(readFileSync(pkgPath, "utf8")); } catch { return; }
+
+  pkg.dependencies ??= {};
+  for (const field of ["dependencies", "devDependencies"] as const) {
+    const deps = pkg[field];
+    if (!deps) continue;
+    for (const [depName, spec] of Object.entries(deps)) {
+      if (typeof spec === "string" && spec.startsWith("workspace:")) delete deps[depName];
+    }
+  }
+  for (const [n, spec] of Object.entries(hoisted)) {
+    pkg.dependencies[n] ??= spec;
+  }
+  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+}
+
+/**
+ * After bun install, populate `<target>/node_modules/<name>/` for every
+ * transitive workspace dep with a real copy of the sibling source. Each
+ * copy's own workspace deps are also stripped (they're satisfied by peers
+ * hoisted at `<target>/node_modules/`). The bundler resolves through these
+ * normally — no symlinks involved.
+ */
+async function materializeWorkspaceDeps(
+  target: string,
+  marketplaceId: string,
+  rootDepNames: string[],
+): Promise<void> {
+  const catalog = await readCatalog(marketplaceId);
+  const repo = marketplaceRepoDir(marketplaceId);
+  const seen = new Set<string>();
+  const queue: string[] = [...rootDepNames];
+  while (queue.length > 0) {
+    const name = queue.shift()!;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const depSrcPath = lookupPluginSourcePath(catalog, name, marketplaceId);
+    const absSrc = join(repo, depSrcPath);
+    if (!existsSync(absSrc)) {
+      throw new Error(`workspace dep '${name}' source not found at ${absSrc}`);
+    }
+    const destDir = join(target, "node_modules", name);
+    mkdirSync(join(target, "node_modules"), { recursive: true });
+    rmSync(destDir, { recursive: true, force: true });
+    cpSync(absSrc, destDir, { recursive: true });
+    for (const child of collectWorkspaceDepNames(absSrc)) queue.push(child);
+    stripWorkspaceDepsInPlace(join(destDir, "package.json"));
+  }
+}
+
+function collectWorkspaceDepNames(dir: string): string[] {
+  const pkg = readPkgOrNull(join(dir, "package.json"));
+  if (!pkg) return [];
+  const names: string[] = [];
+  for (const field of ["dependencies", "devDependencies"] as const) {
+    const deps = pkg[field];
+    if (!deps) continue;
+    for (const [n, spec] of Object.entries(deps)) {
+      if (typeof spec === "string" && spec.startsWith("workspace:")) names.push(n);
+    }
+  }
+  return names;
+}
+
+function stripWorkspaceDepsInPlace(pkgPath: string): void {
+  const pkg = readPkgOrNull(pkgPath);
+  if (!pkg) return;
+  let mutated = false;
+  for (const field of ["dependencies", "devDependencies"] as const) {
+    const deps = pkg[field];
+    if (!deps) continue;
+    for (const [n, spec] of Object.entries(deps)) {
+      if (typeof spec === "string" && spec.startsWith("workspace:")) {
+        delete deps[n];
+        mutated = true;
+      }
+    }
+  }
+  if (mutated) writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+}
+
+function readPkgOrNull(pkgPath: string): {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+} | null {
+  if (!existsSync(pkgPath)) return null;
+  try { return JSON.parse(readFileSync(pkgPath, "utf8")); } catch { return null; }
+}
+
+function hasWorkspaceSpec(pkgPath: string): boolean {
+  try {
+    return readFileSync(pkgPath, "utf8").includes("workspace:");
+  } catch {
+    return false;
+  }
+}
+
+function lookupPluginSourcePath(
+  cat: MarketplaceCatalog,
+  name: string,
+  marketplaceId: string,
+): string {
+  const entry = cat.entries.find(
+    (e): e is Extract<typeof e, { kind: "plugin" }> => e.kind === "plugin" && e.name === name,
+  );
+  if (!entry) {
+    throw new Error(
+      `workspace dep '${name}' is not published in marketplace '${marketplaceId}'. ` +
+      `A plugin can only declare workspace deps on other plugins in the same marketplace.`,
+    );
+  }
+  const v = entry.versions[0];
+  if (!v || v.source.type !== "file") {
+    throw new Error(
+      `workspace dep '${name}' resolves to a non-file source (${v?.source.type ?? "?"}). ` +
+      `Workspace deps require file-source plugins in the same marketplace repo.`,
+    );
+  }
+  return v.source.path;
 }
 
 /**
